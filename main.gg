@@ -1,0 +1,37 @@
+// main.gg
+
+// Hello comments!
+a_variable := 4;
+a_function() {
+}
+
+int a_function_with_params(int x) {
+	return 10;
+}
+
+void another_function() {
+	a_scoped_variable := 2;
+	another_function();
+	return 4;
+}
+
+
+//i32 := llvm_type i32;		// a primative type
+
+
+//TODO a_struct := struct {
+//TODO }
+
+//TODO struct another_struct {
+//TODO }
+
+//TODO an_enum := enum {
+//TODO }
+
+//TODO enum another_enum {
+//TODO }
+
+//TODO a_function := () {
+//TODO }
+
+// TODO #a_compiler_directive
