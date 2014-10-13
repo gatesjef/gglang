@@ -1,37 +1,72 @@
 // main.gg
-
 // Hello comments!
-a_variable := 4;
-a_function() {
+
+i32 a_variable = 4;
+
+void a_function() {
 }
 
-int a_function_with_params(int x) {
-	return 10;
+i32 a_function_with_params(i32 x) {
+	i32 a_scoped_variable = 2;
+	a_function();						// a function call
+    //i32 an_expression_result = x + 10;
+	//i32 a_unary_operator = -x;
+	//a_type_inferred_variable = 2;
+	//a_float = 3.0; 
+	//a_suffixed_float = 3f; 
+	//a_big_float = 1e32; 
+	//a_scoped_variable := 3;			// reassignment
+	//a_float = f32:a_scoped_variable;	// a cast
+	return 4;							// a return statement
 }
 
-void another_function() {
-	a_scoped_variable := 2;
-	another_function();
-	return 4;
-}
+//string a_string = "Hello World!";
 
+//import "cstdio" "libc.lib"			// a ffi
 
-//i32 := llvm_type i32;		// a primative type
+//void main() {							// an entry point
+//	printf(a_string);					// a ffi call
+//}
 
+//i32[20] an_array;
+//i32[] a_slice = slice(an_array, 10, 4);
+//i32 *a_pointer = 
+//a_pointer := &a_variable;				// an address of
+//a_variable := *a_pointer;				// a dereference
 
-//TODO a_struct := struct {
-//TODO }
+//i32 := llvm_type i32;					// a primative type
 
-//TODO struct another_struct {
-//TODO }
+//i32 operator +{i32 a, i32 b) {		// an operator
+//	llvm {								// inline llvm
+//		%x = add i32 %a %b				// llvm-inparams
+//	}
+//
+//	return x;							// llvm-outparams
+// }
 
-//TODO an_enum := enum {
-//TODO }
+// if statement
+// for statement
+// switch statement
+// pass by ref
+// return by ref
 
-//TODO enum another_enum {
-//TODO }
+//struct a_struct {
+//	i32 a_member;
+//	i32 a_non_non_default_initalized_member = 21;
+//}
 
-//TODO a_function := () {
-//TODO }
+//type a_function_pointer = void(void);
+//a_function_pointer foo = main;		// function pointer assignment;
 
-// TODO #a_compiler_directive
+//a_struct a_constructed_struct = { a_member = 10, ... };
+
+//type v4xi32 = llvm_type { 4, i32 };	// a vector type
+
+//enum an_enum {
+//	AN_ENUM_VALUE,
+//	A_STRUCTURED_ENUM_VALUE(a_struct),
+//	AN_ASSIGNED_ENUM(a_struct) = 7, a_constructed_struct;
+//}
+
+// local functions
+// local types
