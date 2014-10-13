@@ -8,28 +8,30 @@ Inspired by this youtube series: https://www.youtube.com/watch?v=TH9VCN6UkyQ, GG
 
 
 Current features include:
- inline llvm
- any order declaration
+* inline llvm
+* any order declaration
 
 Planned features include:
- c foreign function interface
- incorperated build process
- pass/return by reference
- operator overloading
- algebraic types
- type inference
- default initialization
- named breaks
- support for vector types (ie: 4 x i32)
+* c foreign function interface
+* incorperated build process
+* pass/return by reference
+* operator overloading
+* algebraic types
+* type inference
+* default initialization
+* named breaks
+* support for vector types (ie: 4 x i32)
  
 Possible advanced features include:
- reflection
- generics
+* reflection
+* generics
 
 Notable features not included in the language, 
-  classes / inheritance
-  traits / interfaces / typeclasses
-  
+*  classes / inheritance
+*  traits / interfaces / typeclasses
+
+Comments/criticism about the design of the language is greatly appreciated.
+ 
 The gg_compiler is implented as an LLVM frontend.  The current repository supports a Visual Studio 2012 (11.0) solution and includes the necessary windows compiled LLVM libraries.
 
 twitter: @greysphere
