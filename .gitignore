@@ -35,15 +35,9 @@
 *.exe
 *.out
 *.app
-/gg_compiler/Debug
-/gg_compiler/*.filters
-/gg_compiler/gg_compiler/*.user
-/gg_compiler/*.sdf
-/gg_compiler/*.suo
 /ipch
 /Debug
 /*.sdf
 /*.suo
-/gg_compiler/*.user
 /*.opensdf
 /GGCompiler/Debug
