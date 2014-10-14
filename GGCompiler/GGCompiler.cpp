@@ -449,21 +449,28 @@ struct OperatorDef {
   Associativity associativity;
 };
 
-const OperatorDef OPERATORS[] = {
+const OperatorDef UNARY_OPERATORS[] = {
   //{ "++", 2, LEFT_TO_RIGHT },   // post increment
   //{ "--", 2, LEFT_TO_RIGHT },   // post decrement
+
+  { "++", 3, RIGHT_TO_LEFT},    // pre increment
+  { "--", 3, RIGHT_TO_LEFT},    // pre decrement
+  { "-",  3, RIGHT_TO_LEFT},    // unary minus
+  { "+",  3, RIGHT_TO_LEFT},    // unary plus
+  { "!",  3, RIGHT_TO_LEFT},    // logical NOT
+  { "~",  3, RIGHT_TO_LEFT},    // bitwise NOT
+  { "&",  3, RIGHT_TO_LEFT},    // address of
+  { "*",  3, RIGHT_TO_LEFT},    // dereference
+};
+const int NUM_UNARY_OPERATORS = ARRAYSIZE(UNARY_OPERATORS);
+
+const OperatorDef BINARY_OPERATORS[] = {
   //{ "()", 2, LEFT_TO_RIGHT },   // function call
   //{ "[]", 2, LEFT_TO_RIGHT },   // array subscript
   //{ ".",  2, LEFT_TO_RIGHT },   // field selection
 
   //{ "++", 3, RIGHT_TO_LEFT},    // pre increment
   //{ "--", 3, RIGHT_TO_LEFT},    // pre decrement
-  //{ "-",  3, RIGHT_TO_LEFT},    // unary minus
-  //{ "+",  3, RIGHT_TO_LEFT},    // unary plus
-  //{ "!",  3, RIGHT_TO_LEFT},    // logical NOT
-  //{ "~",  3, RIGHT_TO_LEFT},    // bitwise NOT
-  //{ "&",  3, RIGHT_TO_LEFT},    // address of
-  //{ "*",  3, RIGHT_TO_LEFT},    // dereference
 
   { "*",  5, LEFT_TO_RIGHT},    // multiplication
   { "/",  5, LEFT_TO_RIGHT},    // division
@@ -499,7 +506,7 @@ const OperatorDef OPERATORS[] = {
   //{ "&=", 16, RIGHT_TO_LEFT},   // 
   //{ "^=", 16, RIGHT_TO_LEFT},   // 
 };
-const int NUM_OPERATORS = ARRAYSIZE(OPERATORS);
+const int NUM_BINARY_OPERATORS = ARRAYSIZE(BINARY_OPERATORS);
 
 //string
 //OSString 
@@ -664,14 +671,32 @@ GGToken parse_atomic_expression(const GGParseInput &input) {
   return parse_first_of(expressions, num_expressions, input);
 }
 
-GGToken parse_binary_op_symbol(const GGParseInput &input) {
-  for(int i = 0; i < NUM_OPERATORS; ++i) {
-    const OperatorDef &opdef = OPERATORS[i];
+//GGToken parse_unary_expression(const GGParseInput &input) {
+//  // uexpr : uop aexpr
+//  GGToken uop = parse_unary_operator(cur_input);
+//
+//  // whitespace
+//
+//  if (ParseOutputIsFalse(uop)) {
+//	  GGToken aexp = parse_unary_expression(input);
+//	  // whitespace
+//	  return aexp
+//  } 
+//
+//}
+//
+//parse_primary_expression() {
+//	ParseFirstOf(parse_unary_expression, parse_atomic_expression)
+//}
+
+GGToken parse_op_symbol(const GGParseInput &input, GGTokenType token, const OperatorDef *ops, int num_ops) {
+  for(int i = 0; i < num_ops; ++i) {
+    const OperatorDef &opdef = ops[i];
     int len = strlen(opdef.symbol);
     if (strncmp(opdef.symbol, input.data, len) == 0) {
       GGToken retval = {};
       retval.info = input.info;
-      retval.token = TOKEN_BINARY_OPERATOR;
+      retval.token = token;
       retval.num_subtokens = i;
       retval.substring.start = input.data;
       retval.substring.length = len;
@@ -684,6 +709,14 @@ GGToken parse_binary_op_symbol(const GGParseInput &input) {
   //return parse_one_or_more_pred(isBinaryOperator, TOKEN_BINARY_OPERATOR, input);
 };
 
+GGToken parse_binary_op_symbol(const GGParseInput &input) {
+	return parse_op_symbol(input, TOKEN_BINARY_OPERATOR, BINARY_OPERATORS, NUM_BINARY_OPERATORS);
+}
+
+GGToken parse_unary_op_symbol(const GGParseInput &input) {
+	return parse_op_symbol(input, TOKEN_UNARY_OPERATOR, UNARY_OPERATORS, NUM_UNARY_OPERATORS);
+}
+
 //bool isBinaryOperator(char c) {
 //  //const char *operator_symbols =  "+-*/%"   // arithmatic
 //  //  "&|"      // boolean
@@ -692,8 +725,8 @@ GGToken parse_binary_op_symbol(const GGParseInput &input) {
 //  //return strchr(operator_symbols, c) != NULL;
 //}
 
-int operator_get_precedence(const GGToken &op) {
-  return OPERATORS[op.num_subtokens].precidence;
+int binary_operator_get_precedence(const GGToken &op) {
+  return BINARY_OPERATORS[op.num_subtokens].precidence;
 }
 
 bool consume_whitespace(GGParseInput &cur_input)
@@ -718,6 +751,8 @@ bool consume_whitespace(GGParseInput &cur_input)
   }
 }
 
+GGToken parse_unary_expression(const GGParseInput &input);
+
 GGToken parse_binary_operation(int minimum_precidence, const GGToken &lhs_input, const GGParseInput &input) {
   GGParseInput cur_input = input;
   GGToken LHS = lhs_input;
@@ -728,7 +763,7 @@ GGToken parse_binary_operation(int minimum_precidence, const GGToken &lhs_input,
       return LHS;
     }
 
-    int op_precedence = operator_get_precedence(op);
+    int op_precedence = binary_operator_get_precedence(op);
     if (op_precedence < minimum_precidence) {
       return LHS;
     }
@@ -739,7 +774,7 @@ GGToken parse_binary_operation(int minimum_precidence, const GGToken &lhs_input,
     // whitespace
     if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-    GGToken rhs = parse_atomic_expression(cur_input);
+    GGToken rhs = parse_unary_expression(cur_input);
     if (ParseOuputIsFalse(rhs)) {
       return PARSE_FALSE;
     }
@@ -751,8 +786,8 @@ GGToken parse_binary_operation(int minimum_precidence, const GGToken &lhs_input,
     if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
     GGToken next_op = parse_binary_op_symbol(cur_input);
-    if (!ParseOuputIsFalse(op)) {
-      int next_op_precedence = operator_get_precedence(next_op);
+    if (!ParseOuputIsFalse(next_op)) {
+      int next_op_precedence = binary_operator_get_precedence(next_op);
 
       if (op_precedence < next_op_precedence) {
         GGToken rhs = parse_binary_operation(op_precedence + 1, rhs, cur_input);
@@ -772,14 +807,125 @@ GGToken parse_binary_operation(int minimum_precidence, const GGToken &lhs_input,
     newLHS.subtokens[0] = LHS;
     newLHS.subtokens[1] = op;
     newLHS.subtokens[2] = rhs;
+	newLHS.num_subtokens = 3;
     newLHS.next = cur_input.data;
     newLHS.info = cur_input.info;
     LHS = newLHS;
   }
 }
 
+GGToken parse_unary_expression(const GGParseInput &input) {
+  GGParseInput cur_input = input;
+  GGToken op = parse_unary_op_symbol(cur_input);
+  if (ParseOuputIsFalse(op)) {
+	GGToken expr = parse_atomic_expression(cur_input);
+    if (ParseOuputIsFalse(expr)) {
+	  return PARSE_FALSE;
+	}
+
+	return expr;
+  }
+
+  // whitespace
+  cur_input.data = op.next;
+  cur_input.info = op.info;
+  if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+
+  GGToken sub_expression = parse_unary_expression(cur_input);
+  if (ParseOuputIsFalse(sub_expression)) {
+    return PARSE_FALSE;
+  }
+
+  GGToken retval = ParseOutputAlloc(TOKEN_COMPOUND_UNARY_OPERATION, 2);
+  retval.subtokens[0] = op;
+  retval.subtokens[1] = sub_expression;
+  retval.num_subtokens = 2;
+  retval.next = sub_expression.next;
+  retval.info = sub_expression.info;
+  return retval;
+}
+
+//GGToken parse_unary_expression(const GGParseInput &input) {
+//  GGParseInput cur_input = input;
+//  GGToken op = parse_unary_op_symbol(cur_input);
+//  if (ParseOuputIsFalse(op)) {
+//      return PARSE_FALSE;
+//  }
+//
+//
+//  while(1) {
+//	GGToken next_op = parse_unary_op_symbol(cur_input);
+//	if (ParseOuputIsFalse(next_op)) {
+//		GGToken expr = parse_atomic_expression(cur_input);
+//		if (ParseOuputIsFalse(expr)) {
+//			return PARSE_FALSE;
+//		}
+//
+//		GGToken newLHS = ParseOutputAlloc(TOKEN_COMPOUND_BINARY_OPERATION, 2);
+//		newLHS.subtokens[0] = op;
+//		newLHS.subtokens[1] = expr;
+//		newLHS.next = cur_input.data;
+//		newLHS.info = cur_input.info;
+//		return newLHS;
+//	} else {
+//      int op_precedence = operator_get_precedence(op);
+//	  int next_op_precedence = operator_get_precedence(next_op);
+//      if (op_precedence < next_op_precedence) {
+//        //GGToken rhs = parse_binary_operation(op_precedence + 1, rhs, cur_input);
+//        //if (ParseOuputIsFalse(rhs)) {
+//	  }	else {
+//		GGToken newLHS = ParseOutputAlloc(TOKEN_COMPOUND_BINARY_OPERATION, 2);
+//		newLHS.subtokens[0] = op;
+//		newLHS.subtokens[1] = expr;
+//		newLHS.next = cur_input.data;
+//		newLHS.info = cur_input.info;
+//		return newLHS;
+//	  }
+//	}
+//
+//
+//
+//
+//    GGToken rhs = parse_atomic_expression(cur_input);
+//    if (ParseOuputIsFalse(rhs)) {
+//      return PARSE_FALSE;
+//    }
+//
+//    cur_input.data = rhs.next;
+//    cur_input.info = rhs.info;
+//
+//    // whitespace
+//    if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+//
+//    if (!ParseOuputIsFalse(op)) {
+//
+//          return PARSE_FALSE;
+//        }
+//
+//        cur_input.data = rhs.next;
+//        cur_input.info = rhs.info;
+//
+//        // whitespace
+//        if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+//      }
+//    }
+//
+//    GGToken newLHS = ParseOutputAlloc(TOKEN_COMPOUND_BINARY_OPERATION, 3);
+//    newLHS.subtokens[0] = LHS;
+//    newLHS.subtokens[1] = op;
+//    newLHS.subtokens[2] = rhs;
+//    newLHS.next = cur_input.data;
+//    newLHS.info = cur_input.info;
+//    LHS = newLHS;
+//  }
+//}
+
+
 GGToken parse_expression(const GGParseInput &input) {
-  GGToken lhs = parse_atomic_expression(input);
+  //static const ParseFn parse_aexrps[] = {parse_atomic_expression, parse_unary_expression};
+  //static const int numFns = ARRAYSIZE(parse_aexrps);
+  //GGToken lhs = parse_first_of(parse_aexrps, numFns, input);
+  GGToken lhs = parse_unary_expression(input);
   if (ParseOuputIsFalse(lhs)) 
   {
     return PARSE_FALSE;

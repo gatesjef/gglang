@@ -12,6 +12,7 @@ Current features include:
 * any order declaration
 
 Planned features include:
+* any order identifier declaraion
 * c foreign function interface
 * incorperated build process
 * pass/return by reference
