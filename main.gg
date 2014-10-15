@@ -2,6 +2,8 @@
 // Hello comments!
 
 i32 a_variable = 2;
+i32 a_simple_postfix = a_variable++;
+
 i32 a_unary_expr = -3;
 i32 a_binary_expr = a_variable + 10;
 i32 a_complex_expr = +a_variable + -10;

@@ -140,7 +140,7 @@ llvm::Value *emit_expression(LLVM &llvm, const GGToken &expression) {
 }
 
 void emit_local_return(LLVM &llvm, GGToken &return_statement) {
-  assert(return_statement.token == TOKEN_COMPOUND_RETURN);
+  assert(return_statement.token == TOKEN_COMPOUND_RETURN_STATEMENT);
   assert(return_statement.num_subtokens == 1);
   GGToken &return_expression = return_statement.subtokens[0];
 
@@ -191,7 +191,7 @@ void llvm_emit_function_body(LLVM &llvm, llvm::Function *function, const GGToken
     case TOKEN_COMPOUND_FUNCTION_CALL:
       emit_local_function_call(llvm, subtoken);
       break;
-    case TOKEN_COMPOUND_RETURN:
+    case TOKEN_COMPOUND_RETURN_STATEMENT:
       emit_local_return(llvm, subtoken);
       break;
     default: 
