@@ -7,20 +7,21 @@ i32 a_simple_postfix = a_variable++;
 i32 a_unary_expr = -3;
 i32 a_binary_expr = a_variable + 10;
 i32 a_complex_expr = +a_variable + -10;
-//i32 --a_variable;						// a stand alone prefix operator
-//i32 a_variable++;						// a postfix operator
-//i32 a_variable += a_variable;			// a compound assignment
-//i32 a_more_complex_expr = ++a_variable + -10 - --a_variable + +-+-+-+12;
-//int a_complex_postfix_operator = a_variable++ + ++a_variable;
+i32 a_more_complex_expr = ++a_variable + -10 - a_variable-- + +-+-+-+12;
 
 void a_function() {
 }
 
 i32 a_function_with_params(i32 x) {
   i32 a_scoped_variable = 2;
-  a_function();                         // a function call
   i32 an_expression_result = x + 10;
   i32 a_unary_operator = -x;
+
+  a_function();								// a function call
+  --a_scoped_variable;						// a prefix operator expression statement
+  a_scoped_variable++;						// a postfix operator expression statement
+  a_variable += a_variable;					// a compound assignment
+
   //a_type_inferred_variable = 2;
   //a_float = 3.0; 
   //a_suffixed_float = 3f; 
