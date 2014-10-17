@@ -461,8 +461,8 @@ struct OperatorDef {
 };
 
 const OperatorDef POSTFIX_OPERATORS[] = {
-  { "[]", 2, LEFT_TO_RIGHT },   // array subscript
-  { "()", 2, LEFT_TO_RIGHT },   // function call
+  { "[", 2, LEFT_TO_RIGHT },   // array subscript []
+  { "(", 2, LEFT_TO_RIGHT },   // function call   ()
   { ".",  2, LEFT_TO_RIGHT },   // field selection
   { "++", 2, LEFT_TO_RIGHT },   // post increment
   { "--", 2, LEFT_TO_RIGHT },   // post decrement
@@ -655,7 +655,7 @@ GGToken parse_zero_or_more_separated(ParseFn fn, char separator, GGTokenType tok
 }
 
 GGToken parse_function_call_params(const GGParseInput &input) {
-  return parse_zero_or_more_separated(parse_expression, ';', TOKEN_COMPOUND_FUNCTION_CALL_PARAMS, input);
+  return parse_zero_or_more_separated(parse_expression, ',', TOKEN_COMPOUND_FUNCTION_CALL_PARAMS, input);
 }
 
 GGToken parse_for_exact(const GGParseInput &input) {
@@ -960,6 +960,7 @@ GGToken parse_postfix_expression(const GGParseInput &input) {
         cur_input.data = function_params.next;
         cur_input.info = function_params.info;
         if (!consume_whitespace_and_terminator(')', cur_input)) return PARSE_FALSE;
+
       } break;
       case MEMBER_OP: {
         GGToken member = parse_member_identifier(cur_input);
@@ -985,12 +986,14 @@ GGToken parse_postfix_expression(const GGParseInput &input) {
         halt();
     }
 
+	newLHS.info = cur_input.info;
+	newLHS.next = cur_input.data;
     lhs = newLHS;
 
-    // whitespace
-    cur_input.data = op.next;
-    cur_input.info = op.info;
-    if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+    //// whitespace
+    //cur_input.data = op.next;
+    //cur_input.info = op.info;
+    //if (!consume_whitespace(cur_input)) return PARSE_FALSE;
   }
 }
 
@@ -1498,7 +1501,7 @@ GGToken parse_if_statement(const GGParseInput &input) {
 GGToken parse_assignment_statement(const GGParseInput &input) {
   static const ParseFn sequence[] = {parse_unary_expression, parse_assignment_op_symbol, parse_expression, parse_semicolon};
   static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_IF_STATEMENT, input);
+  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_ASSIGNMENT_STATEMENT, input);
 }
 
 GGToken parse_function_definition(const GGParseInput &input);
