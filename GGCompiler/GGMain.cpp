@@ -34,13 +34,13 @@ int main(int argc, char* argv[])
     error("cannon read %s", input_filename);
   }
 
-  GGToken compile_results = GGCompile(file_data);
+  GGToken output = GGCompile(file_data);
 
   //if (GGParseOutput.!= COMPILE_ERROR_NONE) {
   //	error(compile_results.error.error_string);
   //}
 
-  GGLLVMEmitProgram(compile_results);
+  GGLLVMEmitProgram(output);
 
   return 0;
 }

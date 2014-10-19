@@ -1,6 +1,19 @@
 // main.gg
 // Hello comments!
 
+llvm_type void { 
+  void 
+}
+
+llvm_type i32 { 
+  i32 
+}
+
+struct a_struct {
+  i32 x;
+  i32 y = -1;
+}
+
 i32 a_variable = 2;
 i32 a_simple_postfix = a_variable++;
 
@@ -17,13 +30,13 @@ i32 a_function_with_params(i32 x) {
   i32 an_expression_result = x + 10;
   i32 a_unary_operator = -x;
 
-  a_function();								// a function call
-  --a_scoped_variable;						// a prefix operator expression statement
-  a_scoped_variable++;						// a postfix operator expression statement
-  a_variable += a_variable;					// a compound assignment
+  a_function();				// a function call
+  --a_scoped_variable;			// a prefix operator expression statement
+  a_scoped_variable++;			// a postfix operator expression statement
+  //a_variable += a_variable;		// a compound assignment
 
-  //{											// a statement block
-  //  if (a_scoped_variable < 4)              // an if statement, a comparison expression
+  //{					// a statement block
+  //  if (a_scoped_variable < 4)        // an if statement, a comparison expression
   //    a_scoped_variable = 1;
   //  else
   //    a_scoped_variable = 2;
