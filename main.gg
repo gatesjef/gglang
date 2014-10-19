@@ -31,7 +31,7 @@ i32 a_function_with_params(i32 x) {
   --a_variable;			// a prefix operator expression statement
   a_variable++;			// a postfix operator expression statement
 
-  //a_variable += a_variable;		// a compound assignment
+  a_variable += a_variable;		// a compound assignment
 
   //{					// a statement block
   //  if (a_scoped_variable < 4)        // an if statement, a comparison expression
