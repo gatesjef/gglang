@@ -311,8 +311,10 @@ llvm::Value *field_index(LLVM &llvm, const GGToken &token) {
 llvm::Value *emit_lvalue_identifier(LLVM &llvm, const GGToken &token) {
 	assert(token.num_subtokens == 0);
 	// TODO
+
+	llvm::Value *value = (llvm::Value *)(token.subtokens);
 	//return IdentifierDBLookup(token.substring);
-	return NULL;
+	return value;
 }
 
 llvm::Value *emit_rvalue_identifier(LLVM &llvm, const GGToken &identifier) {
@@ -533,6 +535,106 @@ void llvm_emit_function(LLVM &llvm, const GGToken &function_definition) {
   //llvm::Function *function = lookup_function(function_definition);
   llvm_emit_function_body(llvm, function, function_body);
 }
+
+llvm::Value *eval_constexpr(LLVM &llvm, const GGToken &constexpr) {
+	switch(constexpr.token) {
+	case TOKEN_LITERAL_INTEGER:
+		return emit_rvalue_integer_literal(llvm, constexpr);
+	//case TOKEN_UNARY_OP:
+	//case TOKEN_BINARY_OP:
+	//case TOKEN_IDENTIFIER:
+	default:
+		halt();
+	}
+}
+
+//llvm::Type *emit_function_type(const GGToken &type_declaration) {
+//	assert(type_declaration.token == TOKEN_COMPOUND_FUNCTION_TYPE);
+//	assert(type_declaration.num_subtokens == 2);
+//	const GGToken &retval = type_declaration.subtokens[0];
+//	const GGToken &param_list = type_declaration.subtokens[1];
+//
+//	llvm::Type *retval_type= get_type(base);
+//	assert(param_list.num_subtokens < 1024);
+//	llvm::Type *param_types[1024];
+//	for(int i = 0; i < param_list.num_subtokens; ++i) {
+//
+//	llvm::Type *retval = llvm::ArrayType::create(....);
+//	return retval;
+//}
+
+//llvm::Type *emit_array_type(const GGToken &type_declaration) {
+//	assert(type_declaration.token == TOKEN_COMPOUND_ARRAY_DECLARATION);
+//	assert(type_declaration.num_subtokens == 2);
+//	const GGToken &base = type_declaration.subtokens[0];
+//	const GGToken &size = type_declaration.subtokens[1];
+//
+//	llvm::Type *type = get_type(base);
+//	int size = eval_constexpr(size);
+//	llvm::Type *retval = llvm::ArrayType::create(....);
+//	return retval;
+//}
+//
+//llvm::Type *emit_pointer_type(const GGToken &type_declaration) {
+//	assert(type_declaration.token == TOKEN_COMPOUND_POINTER_DECLARATION);
+//	assert(type_declaration.num_subtokens == 1);
+//	const GGToken &base = type_declaration.subtokens[0];
+//
+//	llvm::Type *type = get_type(base);
+//	llvm::Type *retval = llvm::PointerType::create(....);
+//	return retval;
+//}
+//
+//llvm::Type *get_type(const GGToken &type_declaration) {
+//	switch(type_declaration.token) {
+//	case TOKEN_COMPOUND_TYPE_DECLARATION:
+//		return IdentifierDBTypeLookup(type_declaration);
+//	case TOKEN_COMPOUND_FUNCTION_TYPE_DECLARATION:
+//		return emit_function_type(type_declaration);
+//	case TOKEN_COMPOUND_ARRAY_DECLARATION:
+//		return emit_array_type(type_declaration);
+//	case TOKEN_COMPOUND_POINTER_DECLARATION:
+//		return emit_pointer_type(type_declaration);
+//	default:
+//		halt();
+//	}
+//}
+//
+//llvm::Type *IdentifierDBTypeLookup(const GGToken &type_declaration) {
+//	//u32 hash = hash_non_whitespace(type_declaration.substring);
+//	llvm::Type *retval = hash_table_lookup(type_declaration.substring);
+//	if (retval != NULL) {
+//		return retval;
+//	}
+//
+//	llvm::Type *type = emit_type(type_declaration);
+//	hash_table_add(type_declaration.substring, type);
+//	return type;
+//}
+//
+//void IdentifierDBAddVariable(const GGToken &identifier, llvm::Value *value) {
+//}
+
+//void llvm_emit_global_variable(LLVM &llvm, const GGToken &variable) {
+//  assert(variable.token == TOKEN_COMPOUND_VARIABLE);
+//  const GGToken &type_declaration = variable.subtokens[0];
+//  const GGToken &identifier = variable.subtokens[1];
+//  //const GGToken &expression = function_definition.subtokens[2];
+//
+//  //llvm.builder->CreateGlobalString
+//  llvm::Type *type = get_type(type_declaration);
+//  llvm::Value *value = new llvm::GlobalVariable(type, false, llvm::GlobalValue::CommonLinkage);
+//  IdentifierDBAddVariable(identifier, value);
+//
+//  //new GlobalVariable(Module &M, Type *Ty, bool isConstant, LinkageTypes Linkage, Constant *Initializer, const Twine &Name="", GlobalVariable *InsertBefore=nullptr, ThreadLocalMode=NotThreadLocal, unsigned AddressSpace=0, bool isExternallyInitialized=false)
+//  //for(int i = 0; i < program.num_subtokens; ++i) {
+//  //  const GGToken &subtoken = program.subtokens[i];
+//  //  if (subtoken.token == TOKEN_COMPOUND_FUNCTION) {
+//  //    llvm_emit_function_prototype(llvm, subtoken);
+//  //  }
+//  //}
+//}
+
 
 void emit_global_functions_declarations(LLVM &llvm, const GGToken &program) {
   for(int i = 0; i < program.num_subtokens; ++i) {
