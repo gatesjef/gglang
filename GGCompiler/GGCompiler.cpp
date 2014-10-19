@@ -189,7 +189,7 @@ typedef GGToken (*ParseFn)(const GGParseInput &);
 void ParseOutputFree(GGToken &total_output)
 {
   assert(total_output.token >= TOKEN_COMPOUND);
-  printf("free: %d\n", total_output.subtokens);
+  //printf("free: %d\n", total_output.subtokens);
   free(total_output.subtokens);
 }
 
@@ -198,7 +198,7 @@ GGToken ParseOutputAlloc(GGTokenType token_type, int num_sequence) {
   GGToken retval = {};
   retval.token = token_type;
   retval.subtokens = (GGToken *)malloc(sizeof(GGToken) * num_sequence);
-  printf("alloc: %d\n", retval.subtokens);
+  //printf("alloc: %d\n", retval.subtokens);
   return retval;
 }
 
@@ -214,7 +214,8 @@ void ParseOutputAppend(GGToken &output, const GGToken &newOutput) {
     assert(output.num_subtokens < MAX_SUBTOKENS);
     output.subtokens[output.num_subtokens++] = newOutput;
   } else {
-    output.subtokens = new GGToken[MAX_SUBTOKENS];
+    //printf("alloc append: %d\n", output.subtokens);
+    output.subtokens = (GGToken *)malloc(sizeof(GGToken) * MAX_SUBTOKENS);
     output.subtokens[0] = output;
     output.subtokens[1] = newOutput;
     output.num_subtokens = 2;

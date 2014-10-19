@@ -560,14 +560,15 @@ void llvm_emit_local_return(LLVM &llvm, GGToken &return_statement) {
 
 llvm::Type* get_type(LLVM &llvm, const GGToken &type);
 
-static llvm::AllocaInst *CreateEntryBlockAlloca(LLVM &llvm, llvm::Function *TheFunction, const GGToken &identifier, const GGToken &type) {
-  llvm::IRBuilder<> TmpB(&TheFunction->getEntryBlock(), TheFunction->getEntryBlock().begin());
-
+static llvm::AllocaInst *CreateAlloca(LLVM &llvm, llvm::Function *TheFunction, const GGToken &identifier, const GGToken &type) {
+//  llvm::IRBuilder<> TmpB(&TheFunction->getEntryBlock(), TheFunction->getEntryBlock().begin());
+//
   llvm::StringRef name = to_string_ref(identifier.substring);
-
+//
   llvm::Type *llvm_type = get_type(llvm, type);
-
-  return TmpB.CreateAlloca(llvm_type, 0, name);
+//
+//  return TmpB.CreateAlloca(llvm_type, 0, name);
+  return llvm.builder->CreateAlloca(llvm_type, 0, name);
 }
 
 void llvm_emit_local_variable(LLVM &llvm, llvm::Function *function, const GGToken &local_variable) {
@@ -579,7 +580,7 @@ void llvm_emit_local_variable(LLVM &llvm, llvm::Function *function, const GGToke
 
   llvm::Value *value = emit_rvalue_expression(llvm, value_expression);
 
-  llvm::AllocaInst *alloca = CreateEntryBlockAlloca(llvm, function, identifier, type);
+  llvm::AllocaInst *alloca = CreateAlloca(llvm, function, identifier, type);
   llvm.builder->CreateStore(value, alloca);
 
   db_add_variable(llvm, identifier, alloca);
@@ -710,7 +711,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
   llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, llvm.module);
   assert(function);
 
-  llvm::BasicBlock *entry = llvm::BasicBlock::Create(*llvm.context, "entrypoint", function);
+  llvm::BasicBlock *entry = llvm::BasicBlock::Create(*llvm.context, "", function);
   llvm.builder->SetInsertPoint(entry);
 
   int i = 0;
@@ -721,7 +722,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
 
     llvm::StringRef name = to_string_ref(param_identifier.substring);
 
-    llvm::AllocaInst *alloca = CreateEntryBlockAlloca(llvm, function, param_identifier, param_type);
+    llvm::AllocaInst *alloca = CreateAlloca(llvm, function, param_identifier, param_type);
     llvm.builder->CreateStore(AI, alloca);
 
     db_add_variable(llvm, param_identifier, alloca);
@@ -933,7 +934,12 @@ void llvm_emit_global_variable(LLVM &llvm, const GGToken &variable_declaraion) {
   const GGToken &expression = variable_declaraion.subtokens[2];
   
   llvm::Type *type = get_type(llvm, type_token);
-  llvm::Value *value = new llvm::GlobalVariable(type, false, llvm::GlobalValue::CommonLinkage);
+  llvm::StringRef name = to_string_ref(identifier.substring);
+  llvm::Value *value = new llvm::GlobalVariable(*llvm.module, type, false, llvm::GlobalVariable::CommonLinkage, NULL, name);
+
+  //llvm.module->getOrInsertGlobal(
+  //  
+  //  ) GlobalList.push_back(value);
   db_add_variable(llvm, identifier, value);
 }
 

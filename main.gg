@@ -14,25 +14,23 @@ struct a_struct {
   i32 y = -1;
 }
 
-i32 a_variable = 2;
-i32 a_simple_postfix = a_variable++;
-
-i32 a_unary_expr = -3;
-i32 a_binary_expr = a_variable + 10;
-i32 a_complex_expr = +a_variable + -10;
-i32 a_more_complex_expr = ++a_variable + -10 - a_variable-- + +-+-+-+12;
+i32 a_global_variable = 2;
 
 void a_function() {
 }
 
 i32 a_function_with_params(i32 x) {
-  i32 a_scoped_variable = 2;
-  i32 an_expression_result = x + 10;
-  i32 a_unary_operator = -x;
+  i32 a_variable = 2;
+  i32 a_unary_expr = -3;
+  i32 a_postfix_expression = a_variable++;
+  i32 a_binary_expr = a_variable + 10;
+  i32 a_complex_expr = +a_variable + -10;
+  i32 a_more_complex_expr = ++a_variable + -10 - a_variable-- + +-+-+-+12;
 
-  a_function();				// a function call
-  --a_scoped_variable;			// a prefix operator expression statement
-  a_scoped_variable++;			// a postfix operator expression statement
+  a_function();			// a function call
+  --a_variable;			// a prefix operator expression statement
+  a_variable++;			// a postfix operator expression statement
+
   //a_variable += a_variable;		// a compound assignment
 
   //{					// a statement block
