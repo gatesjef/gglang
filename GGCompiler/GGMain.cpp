@@ -37,6 +37,9 @@ int main(int argc, char* argv[])
 	GGToken output = GGCompile(file_data);
 	GGLLVMEmitProgram(output);
 
+	GGLLVMEmitProgram(output);
+
+	//system("..\\me.exe");
+
 	return 0;
 }
-
