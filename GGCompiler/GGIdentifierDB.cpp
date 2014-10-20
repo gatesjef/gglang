@@ -72,7 +72,6 @@ GGIdentifier *IdentifierDBLookupFunction(GGIdentifierDB &db, const GGSubString &
   return NULL;
 }
 
-
 GGIdentifier *IdentifierDBLookup(GGIdentifierDB &db, const GGSubString &name)
 {
   uint32 hash_name = substring_hash(name);

@@ -5,12 +5,12 @@
 //#include "gg_llvm.h"
 
 void halt() {
-  assert(0);
+	assert(0);
 }
 
 struct GGParseInput {
-  const char *data;
-  GGParseInfo info;
+	const char *data;
+	GGParseInfo info;
 };
 
 ///////////////////////////////////
@@ -84,455 +84,443 @@ _cast                 = _type_identifer : _expression
 ///////////////////////////////////
 
 const char *next_end_of_line(const char *data) {
-  while (1) {
-    if (*data == '\0') {
-      return data;
-    }
+	while (1) {
+		if (*data == '\0') {
+			return data;
+		}
 
-    if (*data == '\n') {
-      return data;
-    }
+		if (*data == '\n') {
+			return data;
+		}
 
-    if (*data == '\r') {
-      return data;
-    }
+		if (*data == '\r') {
+			return data;
+		}
 
-    data++;
-  }
+		data++;
+	}
 
-  return data;
+	return data;
 }
 
 const GGToken PARSE_FALSE = {};
 GGToken parse_comment(const GGParseInput &input) {
-  if (input.data[0] == '/' &&
-    input.data[1] == '/') {
-      const char *eol = next_end_of_line(input.data);
+	if (input.data[0] == '/' &&	input.data[1] == '/') {
+		const char *eol = next_end_of_line(input.data);
 
-      GGToken result = {};
-      result.token = TOKEN_COMMENT;
-      result.info = input.info;
-      result.substring.start = input.data;
-      result.substring.length = eol - input.data;
-      result.next = eol;
-      return result;
-  } else {
-    return PARSE_FALSE;
-  }
+		GGToken result = {};
+		result.token = TOKEN_COMMENT;
+		result.info = input.info;
+		result.substring.start = input.data;
+		result.substring.length = eol - input.data;
+		result.next = eol;
+		return result;
+	} else {
+		return PARSE_FALSE;
+	}
 }
 
 bool iswhitespace(char data) {
-  if (data == ' ' ||
-    data == '\t') {
-      return true;
-  }
+	if (data == ' ' || data == '\t') {
+		return true;
+	}
 
-  return false;
+	return false;
 }
 
-GGToken parse_whitespace_chars(const GGParseInput &input) 
-{
-  const char* data = input.data;
-  while(iswhitespace(*data)) {
-    data++;
-  }
+GGToken parse_whitespace_chars(const GGParseInput &input) {
+	const char* data = input.data;
+	while(iswhitespace(*data)) {
+		data++;
+	}
 
-  if (data == input.data) {
-    return PARSE_FALSE;
-  }
-  else {
-    GGToken result = {};
-    result.token = TOKEN_WHITESPACE;
-    result.info = input.info;
-    result.substring.start = input.data;
-    result.substring.length = data - input.data;
-    result.next = data;
-    return result;
-  }
+	if (data == input.data) {
+		return PARSE_FALSE;
+	}
+	else {
+		GGToken result = {};
+		result.token = TOKEN_WHITESPACE;
+		result.info = input.info;
+		result.substring.start = input.data;
+		result.substring.length = data - input.data;
+		result.next = data;
+		return result;
+	}
 }
 
-GGToken parse_endoffile(const GGParseInput &input) 
-{
-  if (input.data[0] == 0) {
-    GGToken result = {};
-    result.token = TOKEN_EOF;
-    return result;
-  } else {
-    return PARSE_FALSE;
-  }
+GGToken parse_endoffile(const GGParseInput &input) {
+	if (input.data[0] == 0) {
+		GGToken result = {};
+		result.token = TOKEN_EOF;
+		return result;
+	} else {
+		return PARSE_FALSE;
+	}
 }
 
-GGToken parse_endofline(const GGParseInput &input) 
-{
-  if (input.data[0] == '\n' || input.data[0] == '\r') {
-    int eol_length = 1;
-    if ((input.data[1] == '\n' ||
-      input.data[1] == '\r') && 
-      input.data[0] != input.data[1]) {
-        eol_length = 2;
-    }
+GGToken parse_endofline(const GGParseInput &input) {
+	if (input.data[0] == '\n' || input.data[0] == '\r') {
+		int eol_length = 1;
+		if ((input.data[1] == '\n' || input.data[1] == '\r') && input.data[0] != input.data[1]) {
+			eol_length = 2;
+		}
 
-    GGToken result = {};
-    result.token = TOKEN_END_OF_LINE;
-    result.info = input.info;
-    result.substring.start = input.data;
-    result.substring.length = eol_length;
-    result.next = result.substring.start + result.substring.length;
-    return result;
-  } else {
-    return PARSE_FALSE;
-  }
+		GGToken result = {};
+		result.token = TOKEN_END_OF_LINE;
+		result.info = input.info;
+		result.substring.start = input.data;
+		result.substring.length = eol_length;
+		result.next = result.substring.start + result.substring.length;
+		return result;
+	} else {
+		return PARSE_FALSE;
+	}
 }
 
 typedef GGToken (*ParseFn)(const GGParseInput &);
 
-void ParseOutputFree(GGToken &total_output)
-{
-  assert(total_output.token >= TOKEN_COMPOUND);
-  delete[] total_output.subtokens;
+void ParseOutputFree(GGToken &total_output) {
+	assert(total_output.token >= TOKEN_COMPOUND);
+	//printf("free: %d (%d)\n", total_output.subtokens, total_output.num_subtokens);
+	free(total_output.subtokens);
+	total_output.subtokens = NULL;
 }
 
 GGToken ParseOutputAlloc(GGTokenType token_type, int num_sequence) {
-  assert(token_type >= TOKEN_COMPOUND);
-  GGToken retval = {};
-  retval.token = token_type;
-  retval.subtokens = new GGToken[num_sequence];
-  return retval;
+	assert(token_type >= TOKEN_COMPOUND);
+	GGToken retval = {};
+	retval.token = token_type;
+	retval.subtokens = (GGToken *)malloc(sizeof(GGToken) * num_sequence);
+	//printf("alloc: %d (%d)\n", retval.subtokens, num_sequence);
+	return retval;
 }
 
 bool ParseOuputIsFalse(const GGToken &output) {
-  return output.token == TOKEN_NONE;
+	return output.token == TOKEN_NONE;
 }
 
 void ParseOutputAppend(GGToken &output, const GGToken &newOutput) {
-  const int MAX_SUBTOKENS = 1024;
-  if (output.token == TOKEN_NONE) {
-    output = newOutput;
-  }	else if (output.token >= TOKEN_COMPOUND) {
-    assert(output.num_subtokens < MAX_SUBTOKENS);
-    output.subtokens[output.num_subtokens++] = newOutput;
-  } else {
-    output.subtokens = new GGToken[MAX_SUBTOKENS];
-    output.subtokens[0] = output;
-    output.subtokens[1] = newOutput;
-    output.num_subtokens = 2;
-    output.token = TOKEN_COMPOUND;
-  }
+	const int MAX_SUBTOKENS = 1024;
+	if (output.token == TOKEN_NONE) {
+		output = newOutput;
+	} else if (output.token >= TOKEN_COMPOUND) {
+		assert(output.num_subtokens < MAX_SUBTOKENS);
+		output.subtokens[output.num_subtokens++] = newOutput;
+	} else {
+		//printf("alloc append: %d\n", output.subtokens);
+		output.subtokens = (GGToken *)malloc(sizeof(GGToken) * MAX_SUBTOKENS);
+		output.subtokens[0] = output;
+		output.subtokens[1] = newOutput;
+		output.num_subtokens = 2;
+		output.token = TOKEN_COMPOUND;
+	}
 }
 
 #define ARRAYSIZE(ar) (sizeof((ar))/sizeof((ar)[0]))
 
 GGToken parse_first_of(const ParseFn fn[], int numFns, const GGParseInput &input) {
-  for(int i = 0; i < numFns; ++i) {
-    GGToken output = fn[i](input);
-    if (!ParseOuputIsFalse(output)) {
-      return output;
-    } 
-  }
+	for(int i = 0; i < numFns; ++i) {
+		GGToken output = fn[i](input);
+		if (!ParseOuputIsFalse(output)) {
+			return output;
+		} 
+	}
 
-  return PARSE_FALSE;
+	return PARSE_FALSE;
 }
 
 GGToken parse_nonsyntax_tokens(const GGParseInput &input) {
+	static const ParseFn fns[] = { parse_whitespace_chars, parse_endofline, parse_comment, parse_endoffile };
+	static const int num_fns = ARRAYSIZE(fns);
 
-  static const ParseFn fns[] = { parse_whitespace_chars, parse_endofline, parse_comment, parse_endoffile };
-  static const int num_fns = ARRAYSIZE(fns);
-
-  return parse_first_of(fns, num_fns, input);
+	return parse_first_of(fns, num_fns, input);
 }
 
-GGToken parse_whitespace_separated_sequence(const ParseFn sequence[], int num_sequence, GGTokenType token_type, const GGParseInput &input) 
-{
-  assert(num_sequence > 1);
+void continue_parse_whitespace_separated_sequence(GGToken &total_output, const ParseFn sequence[], int num_sequence, const GGParseInput &input) {
+	assert(num_sequence > 1);
 
-  GGParseInput cur_input = input;
-  GGToken total_output = ParseOutputAlloc(token_type, num_sequence);
+	GGParseInput cur_input = input;
 
-  int i = 0;
-  for(; i < num_sequence; ++i) {
+	int i = 0;
+	for(; i < num_sequence; ++i) {
 
-    {
-      GGToken output = sequence[i](cur_input);
-      if (ParseOuputIsFalse(output)) {
-        break;
-      } else if (output.token == TOKEN_DISCARD) {
-        cur_input.data = output.next;
-        cur_input.info = output.info;
-      } else {
-        ParseOutputAppend(total_output, output);
-        cur_input.data = output.next;
-        cur_input.info = output.info;
-      }
-    }
+		{
+			GGToken output = sequence[i](cur_input);
+			if (ParseOuputIsFalse(output)) {
+			break;
+			} else if (output.token == TOKEN_DISCARD) {
+			cur_input.data = output.next;
+			cur_input.info = output.info;
+			} else {
+			assert(total_output.num_subtokens < num_sequence);
+			ParseOutputAppend(total_output, output);
+			cur_input.data = output.next;
+			cur_input.info = output.info;
+			}
+		}
 
-    if (i != num_sequence-1) {
-      while(1) {
-        GGToken discard = parse_nonsyntax_tokens(cur_input);
-        if (ParseOuputIsFalse(discard)) {
-          break;
-        } else if (discard.token == TOKEN_EOF) {
-          //ParseOutputAppend(total_output, output);
-          break;
-        } else if (discard.token == TOKEN_END_OF_LINE) {
-          //ParseOutputAppend(total_output, output);
-          cur_input.data = discard.next;
-          cur_input.info.line_number = discard.info.line_number + 1;
-          cur_input.info.col_number = 0;
-        } else {
-          // discard
-          cur_input.data = discard.next;
-          cur_input.info = discard.info;
-        }
-      }
-    }
-  }
+		if (i != num_sequence-1) {
+			while(1) {
+				GGToken discard = parse_nonsyntax_tokens(cur_input);
+				if (ParseOuputIsFalse(discard)) {
+					break;
+				} else if (discard.token == TOKEN_EOF) {
+					//ParseOutputAppend(total_output, output);
+					break;
+				} else if (discard.token == TOKEN_END_OF_LINE) {
+					//ParseOutputAppend(total_output, output);
+					cur_input.data = discard.next;
+					cur_input.info.line_number = discard.info.line_number + 1;
+					cur_input.info.col_number = 0;
+				} else {
+					// discard
+					cur_input.data = discard.next;
+					cur_input.info = discard.info;
+				}
+			}
+		}
+	}
 
-  if (i != num_sequence) {
-    ParseOutputFree(total_output);
-    return PARSE_FALSE;
-  }
-  else {
-    total_output.info = cur_input.info;
-    total_output.next = cur_input.data;
-    return total_output;
-  }
+	if (i != num_sequence) {
+		ParseOutputFree(total_output);
+		total_output = PARSE_FALSE;
+	} else {
+		total_output.info = cur_input.info;
+		total_output.next = cur_input.data;
+	}
+}
+
+GGToken parse_whitespace_separated_sequence(const ParseFn sequence[], int num_sequence, GGTokenType token_type, const GGParseInput &input) {
+	GGToken retval = ParseOutputAlloc(token_type, num_sequence);
+	continue_parse_whitespace_separated_sequence(retval, sequence, num_sequence, input);
+	return retval;
 }
 
 bool ischar(char c0, char c1)
 {
-  return c0 == c1;
+	return c0 == c1;
 };
 
 GGToken parse_identifier(const GGParseInput &input) {
-  const char* data = input.data;
+	const char* data = input.data;
 
-  if (isalpha(data[0]) ||
-    ischar('_', data[0])) 
-  {
-    data++;
-  }
-  else 
-  {
-    return PARSE_FALSE;
-  }
+	if (isalpha(data[0]) || ischar('_', data[0])) {
+		data++;
+	} else {
+		return PARSE_FALSE;
+	}
 
-  while(isalpha(data[0]) ||
-    ischar('_', data[0]) ||
-    isdigit(data[0])) 
-  {
-    data++;
-  }
+	while(isalpha(data[0]) || ischar('_', data[0]) || isdigit(data[0])) {
+		data++;
+	}
 
-  GGToken result = {};
-  result.token = TOKEN_IDENTIFIER;
-  result.info = input.info;
-  result.substring.start = input.data;
-  result.substring.length = data - input.data;
-  result.next = data;
-  return result;
+	GGToken result = {};
+	result.token = TOKEN_IDENTIFIER;
+	result.info = input.info;
+	result.substring.start = input.data;
+	result.substring.length = data - input.data;
+	result.next = data;
+	return result;
 }
 
 GGToken parse_type_identifier(const GGParseInput &input) {
-  return parse_identifier(input);
+	GGToken retval = parse_identifier(input);
+	if (ParseOuputIsFalse(retval)) return PARSE_FALSE;
+
+	retval.token = TOKEN_TYPE_IDENTIFIER;
+	return retval;
 }
 
 GGToken parse_variable_identifier(const GGParseInput &input) {
-  return parse_identifier(input);
+	return parse_identifier(input);
 }
 
 GGToken parse_function_identifier(const GGParseInput &input) {
-  return parse_identifier(input);
+	return parse_identifier(input);
 }
 
 GGToken parse_member_identifier(const GGParseInput &input) {
-  return parse_identifier(input);
+	return parse_identifier(input);
 }
 
 typedef bool (*CharPredicate)(char c0);
 
-GGToken parse_zero_or_more_until_pred(CharPredicate pred, GGTokenType tokenType, const GGParseInput &input)
-{
-  const char *data = input.data;
-  while(data) {
-    if (pred(*data) == true) break;
-    data++;
-  }
+GGToken parse_zero_or_more_until_pred(CharPredicate pred, GGTokenType tokenType, const GGParseInput &input) {
+	const char *data = input.data;
+	while(data) {
+		if (pred(*data) == true) break;
+		data++;
+	}
 
-  GGToken result = {};
-  result.token = tokenType;
-  result.info = input.info;
-  result.substring.start = input.data;
-  result.substring.length = data - input.data;
-  result.next = data;
-  return result;
+	GGToken result = {};
+	result.token = tokenType;
+	result.info = input.info;
+	result.substring.start = input.data;
+	result.substring.length = data - input.data;
+	result.next = data;
+	return result;
 }
 
-GGToken parse_one_or_more_pred(CharPredicate pred, GGTokenType tokenType, const GGParseInput &input)
-{
-  const char *data = input.data;
-  while(data) {
-    if (pred(*data) == false) break;
-    data++;
-  }
+GGToken parse_one_or_more_pred(CharPredicate pred, GGTokenType tokenType, const GGParseInput &input) {
+	const char *data = input.data;
+	while(data) {
+		if (pred(*data) == false) break;
+		data++;
+	}
 
-  if (data == input.data) return PARSE_FALSE;
+	if (data == input.data) return PARSE_FALSE;
 
-  GGToken result = {};
-  result.token = tokenType;
-  result.info = input.info;
-  result.substring.start = input.data;
-  result.substring.length = data - input.data;
-  result.next = data;
-  return result;
+	GGToken result = {};
+	result.token = tokenType;
+	result.info = input.info;
+	result.substring.start = input.data;
+	result.substring.length = data - input.data;
+	result.next = data;
+	return result;
 }
 
 bool isDigit(char c) {
-  return isdigit(c) != 0;
+	return isdigit(c) != 0;
 }
 
 GGToken parse_integer_literal(const GGParseInput &input) {
-  return parse_one_or_more_pred(isDigit, TOKEN_LITERAL_INTEGER, input);
+	return parse_one_or_more_pred(isDigit, TOKEN_LITERAL_INTEGER, input);
 };
 
-GGToken parse_numeric_literal(const GGParseInput &input)
-{
-  static const ParseFn numeric_literals[] = { 
-    parse_integer_literal, 
-    //TODO parse_float_literal, 
-    //TODO parse_hex_literal,
-    //parse_octal_literal,
-    //parse_binary_literal,
-  };
-  static const int num_literals = ARRAYSIZE(numeric_literals);
+GGToken parse_numeric_literal(const GGParseInput &input) {
+	static const ParseFn numeric_literals[] = { 
+		parse_integer_literal, 
+		//TODO parse_float_literal, 
+		//TODO parse_hex_literal,
+		//parse_octal_literal,
+		//parse_binary_literal,
+	};
+	static const int num_literals = ARRAYSIZE(numeric_literals);
 
-  return parse_first_of(numeric_literals, num_literals, input);
+	return parse_first_of(numeric_literals, num_literals, input);
 }
 
-GGToken parse_literal(const GGParseInput &input)
-{
-  static const ParseFn literals[] = { 
-    parse_numeric_literal, 
-    //TODO parse_string_literal, 
-    //TODO parse_char_literal, 
-  };
-  static const int num_literals = ARRAYSIZE(literals);
+GGToken parse_literal(const GGParseInput &input) {
+	static const ParseFn literals[] = { 
+		parse_numeric_literal, 
+		//TODO parse_string_literal, 
+		//TODO parse_char_literal, 
+	};
+	static const int num_literals = ARRAYSIZE(literals);
 
-  return parse_first_of(literals, num_literals, input);
+	return parse_first_of(literals, num_literals, input);
 }
 
+GGToken parse_exact(const char *str, GGTokenType tokenType, const GGParseInput &input) {
+	const char *c = str;
+	const char *data = input.data;
+	while(*c) {
+	if (*c != *data) return PARSE_FALSE;
+		c++;
+		data++;
+	}
 
-GGToken parse_exact(const char *str, GGTokenType tokenType, const GGParseInput &input)
-{
-  const char *c = str;
-  const char *data = input.data;
-  while(*c) {
-    if (*c != *data) return PARSE_FALSE;
-    c++;
-    data++;
-  }
-
-  GGToken result = {};
-  result.token = tokenType;
-  result.info = input.info;
-  result.substring.start = input.data;
-  result.substring.length = data - input.data;
-  result.next = data;
-  return result;
+	GGToken result = {};
+	result.token = tokenType;
+	result.info = input.info;
+	result.substring.start = input.data;
+	result.substring.length = data - input.data;
+	result.next = data;
+	return result;
 }
 
 GGToken parse_semicolon(const GGParseInput &input) {
-  return parse_exact(";", TOKEN_DISCARD, input);
+	return parse_exact(";", TOKEN_DISCARD, input);
 }
 
 GGToken parse_declaration_assignment_operator(const GGParseInput &input) {
-  return parse_exact("=", TOKEN_DISCARD, input);
+	return parse_exact("=", TOKEN_DISCARD, input);
 }
 
 
 enum Associativity {
-  LEFT_TO_RIGHT,
-  RIGHT_TO_LEFT,
+	LEFT_TO_RIGHT,
+	RIGHT_TO_LEFT,
 };
 
 struct OperatorDef {
-  const char *symbol;
-  int precidence;
-  Associativity associativity;
+	const char *symbol;
+	int precidence;
+	Associativity associativity;
 };
 
 const OperatorDef POSTFIX_OPERATORS[] = {
-  { "[", 2, LEFT_TO_RIGHT },   // array subscript []
-  { "(", 2, LEFT_TO_RIGHT },   // function call   ()
-  { ".",  2, LEFT_TO_RIGHT },   // field selection
-  { "++", 2, LEFT_TO_RIGHT },   // post increment
-  { "--", 2, LEFT_TO_RIGHT },   // post decrement
+	{ "[", 2, LEFT_TO_RIGHT },   // array subscript []
+	{ "(", 2, LEFT_TO_RIGHT },   // function call   ()
+	{ ".",  2, LEFT_TO_RIGHT },   // field selection
+	{ "++", 2, LEFT_TO_RIGHT },   // post increment
+	{ "--", 2, LEFT_TO_RIGHT },   // post decrement
 };
 
 enum POSTFIX_OPERATOR_TYPE {
-  ARRAY_INDEX_OP = 0,
-  FUNCTION_CALL_OP = 1,
-  MEMBER_OP = 2,
-  POST_INC_OP = 3,
-  POST_DEC_OP = 4,
+	ARRAY_INDEX_OP = 0,
+	FUNCTION_CALL_OP = 1,
+	MEMBER_OP = 2,
+	POST_INC_OP = 3,
+	POST_DEC_OP = 4,
 
-  NUM_POSTFIX_OPERATORS,
+	NUM_POSTFIX_OPERATORS,
 };
 
 const OperatorDef UNARY_OPERATORS[] = {
-
-  { "++", 3, RIGHT_TO_LEFT},    // pre increment
-  { "--", 3, RIGHT_TO_LEFT},    // pre decrement
-  { "-",  3, RIGHT_TO_LEFT},    // unary minus
-  { "+",  3, RIGHT_TO_LEFT},    // unary plus
-  { "!",  3, RIGHT_TO_LEFT},    // logical NOT
-  { "~",  3, RIGHT_TO_LEFT},    // bitwise NOT
-  { "&",  3, RIGHT_TO_LEFT},    // address of
-  { "*",  3, RIGHT_TO_LEFT},    // dereference
+	{ "++", 3, RIGHT_TO_LEFT},    // pre increment
+	{ "--", 3, RIGHT_TO_LEFT},    // pre decrement
+	{ "-",  3, RIGHT_TO_LEFT},    // unary minus
+	{ "+",  3, RIGHT_TO_LEFT},    // unary plus
+	{ "!",  3, RIGHT_TO_LEFT},    // logical NOT
+	{ "~",  3, RIGHT_TO_LEFT},    // bitwise NOT
+	{ "&",  3, RIGHT_TO_LEFT},    // address of
+	{ "*",  3, RIGHT_TO_LEFT},    // dereference
 };
 const int NUM_UNARY_OPERATORS = ARRAYSIZE(UNARY_OPERATORS);
 
 const OperatorDef BINARY_OPERATORS[] = {
-  //{ "()", 2, LEFT_TO_RIGHT },   // function call
-  //{ "[]", 2, LEFT_TO_RIGHT },   // array subscript
-  //{ ".",  2, LEFT_TO_RIGHT },   // field selection
+	//{ "()", 2, LEFT_TO_RIGHT },   // function call
+	//{ "[]", 2, LEFT_TO_RIGHT },   // array subscript
+	//{ ".",  2, LEFT_TO_RIGHT },   // field selection
 
-  { "*",  5, LEFT_TO_RIGHT},    // multiplication
-  { "/",  5, LEFT_TO_RIGHT},    // division
-  { "%",  5, LEFT_TO_RIGHT},    // remainder
+	{ "*",  5, LEFT_TO_RIGHT},    // multiplication
+	{ "/",  5, LEFT_TO_RIGHT},    // division
+	{ "%",  5, LEFT_TO_RIGHT},    // remainder
 
-  { "+",  6, LEFT_TO_RIGHT},    // addition
-  { "-",  6, LEFT_TO_RIGHT},    // subtraction
+	{ "+",  6, LEFT_TO_RIGHT},    // addition
+	{ "-",  6, LEFT_TO_RIGHT},    // subtraction
 
-  { "<<", 7, LEFT_TO_RIGHT},    // bitwise left shift
-  { ">>", 7, LEFT_TO_RIGHT},    // bitwise right shift
+	{ "<<", 7, LEFT_TO_RIGHT},    // bitwise left shift
+	{ ">>", 7, LEFT_TO_RIGHT},    // bitwise right shift
 
-  { ">=", 8, LEFT_TO_RIGHT},    // gte comparison
-  { "<=", 8, LEFT_TO_RIGHT},    // lte comparison
-  { ">",  8, LEFT_TO_RIGHT},    // gt comparison
-  { "<",  8, LEFT_TO_RIGHT},    // lt comparison
+	{ ">=", 8, LEFT_TO_RIGHT},    // gte comparison
+	{ "<=", 8, LEFT_TO_RIGHT},    // lte comparison
+	{ ">",  8, LEFT_TO_RIGHT},    // gt comparison
+	{ "<",  8, LEFT_TO_RIGHT},    // lt comparison
 
-  { "==", 9, LEFT_TO_RIGHT},    // eq comparison
-  { "!=", 9, LEFT_TO_RIGHT},    // neq comparison
+	{ "==", 9, LEFT_TO_RIGHT},    // eq comparison
+	{ "!=", 9, LEFT_TO_RIGHT},    // neq comparison
 
-  { "&",  10, LEFT_TO_RIGHT},   // bitwise and
-  { "^",  11, LEFT_TO_RIGHT},   // bitwise xor
-  { "|",  12, LEFT_TO_RIGHT},   // bitwise or
-  { "&&", 13, LEFT_TO_RIGHT},   // boolean and
-  { "||", 14, LEFT_TO_RIGHT},   // boolean or
+	{ "&",  10, LEFT_TO_RIGHT},   // bitwise and
+	{ "^",  11, LEFT_TO_RIGHT},   // bitwise xor
+	{ "|",  12, LEFT_TO_RIGHT},   // bitwise or
+	{ "&&", 13, LEFT_TO_RIGHT},   // boolean and
+	{ "||", 14, LEFT_TO_RIGHT},   // boolean or
 };
 const int NUM_BINARY_OPERATORS = ARRAYSIZE(BINARY_OPERATORS);
 
 
 const OperatorDef ASSIGNMENT_OPERATORS[] = {
-  { "=",  16, RIGHT_TO_LEFT},   // assignment
-  { "+=", 16, RIGHT_TO_LEFT},   // compound assignment
-  { "-=", 16, RIGHT_TO_LEFT},   // 
-  { "*=", 16, RIGHT_TO_LEFT},   // 
-  { "/=", 16, RIGHT_TO_LEFT},   // 
-  { "%=", 16, RIGHT_TO_LEFT},   // 
-  { "|=", 16, RIGHT_TO_LEFT},   // 
-  { "&=", 16, RIGHT_TO_LEFT},   // 
-  { "^=", 16, RIGHT_TO_LEFT},   // 
+	{ "=",  16, RIGHT_TO_LEFT},   // assignment
+	{ "+=", 16, RIGHT_TO_LEFT},   // compound assignment
+	{ "-=", 16, RIGHT_TO_LEFT},   // 
+	{ "*=", 16, RIGHT_TO_LEFT},   // 
+	{ "/=", 16, RIGHT_TO_LEFT},   // 
+	{ "%=", 16, RIGHT_TO_LEFT},   // 
+	{ "|=", 16, RIGHT_TO_LEFT},   // 
+	{ "&=", 16, RIGHT_TO_LEFT},   // 
+	{ "^=", 16, RIGHT_TO_LEFT},   // 
 };
 const int NUM_ASSIGNMENT_OPERATORS = ARRAYSIZE(ASSIGNMENT_OPERATORS);
 
@@ -565,141 +553,140 @@ GGToken parse_expression(const GGParseInput &input);
 GGToken parse_type_declaration(const GGParseInput &input);
 
 GGToken parse_function_param(const GGParseInput &input) {
-  static const ParseFn sequence[] = { parse_type_declaration, parse_variable_identifier };
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_FUNCTION_PARAM, input);
+	static const ParseFn sequence[] = { parse_type_declaration, parse_variable_identifier };
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_FUNCTION_PARAM, input);
 }
 
 GGToken parse_zero_or_more_separated(ParseFn fn, char separator, GGTokenType token_type, const GGParseInput &input) {
-  GGParseInput cur_input = input;
-  GGToken total_output = ParseOutputAlloc(token_type, 1024);
+	GGParseInput cur_input = input;
+	GGToken total_output = ParseOutputAlloc(token_type, 1024);
 
-  while(1) {
-    {
-      GGToken output = fn(cur_input);
-      if (ParseOuputIsFalse(output)) {
-        break;
-      } else {
-        ParseOutputAppend(total_output, output);
-        cur_input.data = output.next;
-        cur_input.info = output.info;
-      }
-    }
+	while(1) {
+		{
+			GGToken output = fn(cur_input);
+			if (ParseOuputIsFalse(output)) {
+				break;
+			} else {
+				ParseOutputAppend(total_output, output);
+				cur_input.data = output.next;
+				cur_input.info = output.info;
+			}
+		}
 
-    {
-      while(1) {
-        GGToken discard = parse_nonsyntax_tokens(cur_input);
-        if (ParseOuputIsFalse(discard)) {
-          break;
-        } else if (discard.token == TOKEN_EOF) {
-          //ParseOutputAppend(total_output, output);
-          break;
-        } else if (discard.token == TOKEN_END_OF_LINE) {
-          //ParseOutputAppend(total_output, output);
-          cur_input.data = discard.next;
-          cur_input.info.line_number = discard.info.line_number + 1;
-          cur_input.info.col_number = 0;
-        } else {
-          // discard
-          cur_input.data = discard.next;
-          cur_input.info = discard.info;
-        }
-      }
-    }
+		{
+			while(1) {
+				GGToken discard = parse_nonsyntax_tokens(cur_input);
+				if (ParseOuputIsFalse(discard)) {
+					break;
+				} else if (discard.token == TOKEN_EOF) {
+					//ParseOutputAppend(total_output, output);
+					break;
+				} else if (discard.token == TOKEN_END_OF_LINE) {
+					//ParseOutputAppend(total_output, output);
+					cur_input.data = discard.next;
+					cur_input.info.line_number = discard.info.line_number + 1;
+					cur_input.info.col_number = 0;
+				} else {
+					// discard
+					cur_input.data = discard.next;
+					cur_input.info = discard.info;
+				}
+			}
+		}
 
-    {
-      const char str[2] = {separator, 0};
-      GGToken discard = parse_exact(str, TOKEN_DISCARD, cur_input);
-      if (ParseOuputIsFalse(discard)) {
-        break;
-      } else if (discard.token == TOKEN_EOF) {
-        break;
-      } else if (discard.token == TOKEN_END_OF_LINE) {
-        //ParseOutputAppend(total_output, output);
-        cur_input.data = discard.next;
-        cur_input.info.line_number = discard.info.line_number + 1;
-        cur_input.info.col_number = 0;
-      } else {
-        // discard
-        cur_input.data = discard.next;
-        cur_input.info = discard.info;
-      }
-    }
+		{
+			const char str[2] = {separator, 0};
+			GGToken discard = parse_exact(str, TOKEN_DISCARD, cur_input);
+			if (ParseOuputIsFalse(discard)) {
+				break;
+			} else if (discard.token == TOKEN_EOF) {
+				break;
+			} else if (discard.token == TOKEN_END_OF_LINE) {
+				//ParseOutputAppend(total_output, output);
+				cur_input.data = discard.next;
+				cur_input.info.line_number = discard.info.line_number + 1;
+				cur_input.info.col_number = 0;
+			} else {
+			// discard
+				cur_input.data = discard.next;
+				cur_input.info = discard.info;
+			}
+		}
 
-    {
-      while(1) {
-        GGToken discard = parse_nonsyntax_tokens(cur_input);
-        if (ParseOuputIsFalse(discard)) {
-          break;
-        } else if (discard.token == TOKEN_EOF) {
-          //ParseOutputAppend(total_output, output);
-          break;
-        } else if (discard.token == TOKEN_END_OF_LINE) {
-          //ParseOutputAppend(total_output, output);
-          cur_input.data = discard.next;
-          cur_input.info.line_number = discard.info.line_number + 1;
-          cur_input.info.col_number = 0;
-        } else {
-          // discard
-          cur_input.data = discard.next;
-          cur_input.info = discard.info;
-        }
-      }
-    }
+		{
+			while(1) {
+				GGToken discard = parse_nonsyntax_tokens(cur_input);
+				if (ParseOuputIsFalse(discard)) {
+					break;
+				} else if (discard.token == TOKEN_EOF) {
+					//ParseOutputAppend(total_output, output);
+					break;
+				} else if (discard.token == TOKEN_END_OF_LINE) {
+					//ParseOutputAppend(total_output, output);
+					cur_input.data = discard.next;
+					cur_input.info.line_number = discard.info.line_number + 1;
+					cur_input.info.col_number = 0;
+				} else {
+					// discard
+					cur_input.data = discard.next;
+					cur_input.info = discard.info;
+				}
+			}
+		}
+	}
 
-  }
-
-  total_output.info = cur_input.info;
-  total_output.next = cur_input.data;
-  return total_output;
+	total_output.info = cur_input.info;
+	total_output.next = cur_input.data;
+	return total_output;
 }
 
 GGToken parse_function_call_params(const GGParseInput &input) {
-  return parse_zero_or_more_separated(parse_expression, ',', TOKEN_COMPOUND_FUNCTION_CALL_PARAMS, input);
+	return parse_zero_or_more_separated(parse_expression, ',', TOKEN_COMPOUND_FUNCTION_CALL_PARAMS, input);
 }
 
 GGToken parse_for_exact(const GGParseInput &input) {
-  return parse_exact("for", TOKEN_DISCARD, input);
+	return parse_exact("for", TOKEN_DISCARD, input);
 }
 
 GGToken parse_in_exact(const GGParseInput &input) {
-  return parse_exact("in", TOKEN_DISCARD, input);
+	return parse_exact("in", TOKEN_DISCARD, input);
 }
 
 GGToken parse_if_exact(const GGParseInput &input) {
-  return parse_exact("if", TOKEN_DISCARD, input);
+	return parse_exact("if", TOKEN_DISCARD, input);
 }
 
 GGToken parse_else_exact(const GGParseInput &input) {
-  return parse_exact("else", TOKEN_DISCARD, input);
+	return parse_exact("else", TOKEN_DISCARD, input);
 }
 
 GGToken parse_left_bracket(const GGParseInput &input) {
-  return parse_exact("[", TOKEN_DISCARD, input);
+	return parse_exact("[", TOKEN_DISCARD, input);
 }
 
 GGToken parse_right_bracket(const GGParseInput &input) {
-  return parse_exact("]", TOKEN_DISCARD, input);
+	return parse_exact("]", TOKEN_DISCARD, input);
 }
 
 GGToken parse_left_paren(const GGParseInput &input) {
-  return parse_exact("(", TOKEN_DISCARD, input);
+	return parse_exact("(", TOKEN_DISCARD, input);
 }
 
 GGToken parse_right_paren(const GGParseInput &input) {
-  return parse_exact(")", TOKEN_DISCARD, input);
+	return parse_exact(")", TOKEN_DISCARD, input);
 }
 
 GGToken parse_left_brace(const GGParseInput &input) {
-  return parse_exact("{", TOKEN_DISCARD, input);
+	return parse_exact("{", TOKEN_DISCARD, input);
 }
 
 GGToken parse_right_brace(const GGParseInput &input) {
-  return parse_exact("}", TOKEN_DISCARD, input);
+	return parse_exact("}", TOKEN_DISCARD, input);
 }
 
 GGToken parse_llvm_exact(const GGParseInput &input) {
-  return parse_exact("llvm", TOKEN_DISCARD, input);
+	return parse_exact("llvm", TOKEN_DISCARD, input);
 }
 
 //GGToken parse_function_call(const GGParseInput &input) {
@@ -710,18 +697,18 @@ GGToken parse_llvm_exact(const GGParseInput &input) {
 //}
 
 GGToken parse_atomic_expression(const GGParseInput &input) {
-  // aexpr :
-  //    literal
-  //	variable_identifier
-  static const ParseFn expressions[] = {
-    parse_literal, 
-    parse_variable_identifier,
-    //parse_function_call,
-    //parse_paren_expression,
-  };
-  static const int num_expressions = ARRAYSIZE(expressions);
+	// aexpr :
+	//    literal
+	//	variable_identifier
+	static const ParseFn expressions[] = {
+		parse_literal, 
+		parse_variable_identifier,
+		//parse_function_call,
+		//parse_paren_expression,
+	};
+	static const int num_expressions = ARRAYSIZE(expressions);
 
-  return parse_first_of(expressions, num_expressions, input);
+	return parse_first_of(expressions, num_expressions, input);
 }
 
 //GGToken parse_unary_expression(const GGParseInput &input) {
@@ -743,27 +730,27 @@ GGToken parse_atomic_expression(const GGParseInput &input) {
 //}
 
 GGToken parse_op_symbol(const GGParseInput &input, GGTokenType token, const OperatorDef *ops, int num_ops) {
-  for(int i = 0; i < num_ops; ++i) {
-    const OperatorDef &opdef = ops[i];
-    int len = strlen(opdef.symbol);
-    if (strncmp(opdef.symbol, input.data, len) == 0) {
-      GGToken retval = {};
-      retval.info = input.info;
-      retval.token = token;
-      retval.num_subtokens = i;
-      retval.substring.start = input.data;
-      retval.substring.length = len;
-      retval.next = input.data + len;
-      return retval;
-    }
-  }
+	for(int i = 0; i < num_ops; ++i) {
+		const OperatorDef &opdef = ops[i];
+		int len = strlen(opdef.symbol);
+		if (strncmp(opdef.symbol, input.data, len) == 0) {
+			GGToken retval = {};
+			retval.info = input.info;
+			retval.token = token;
+			retval.num_subtokens = i;
+			retval.substring.start = input.data;
+			retval.substring.length = len;
+			retval.next = input.data + len;
+			return retval;
+		}
+	}
 
-  return PARSE_FALSE;
-  //return parse_one_or_more_pred(isBinaryOperator, TOKEN_BINARY_OPERATOR, input);
+	return PARSE_FALSE;
+	//return parse_one_or_more_pred(isBinaryOperator, TOKEN_BINARY_OPERATOR, input);
 };
 
 GGToken parse_postfix_op_symbol(const GGParseInput &input) {
-  return parse_op_symbol(input, TOKEN_POSTFIX_OPERATOR, POSTFIX_OPERATORS, NUM_POSTFIX_OPERATORS);
+	return parse_op_symbol(input, TOKEN_POSTFIX_OPERATOR, POSTFIX_OPERATORS, NUM_POSTFIX_OPERATORS);
 }
 
 
@@ -790,241 +777,239 @@ GGToken parse_assignment_op_symbol(const GGParseInput &input) {
 //}
 
 int binary_operator_get_precedence(const GGToken &op) {
-  return BINARY_OPERATORS[op.num_subtokens].precidence;
+	return BINARY_OPERATORS[op.num_subtokens].precidence;
 }
 
-bool consume_whitespace(GGParseInput &cur_input)
-{
-  while(1) {
-    GGToken discard = parse_nonsyntax_tokens(cur_input);
-    if (ParseOuputIsFalse(discard)) {
-      return true;
-    } else if (discard.token == TOKEN_EOF) {
-      //ParseOutputAppend(total_output, output);
-      return false;
-    } else if (discard.token == TOKEN_END_OF_LINE) {
-      //ParseOutputAppend(total_output, output);
-      cur_input.data = discard.next;
-      cur_input.info.line_number = discard.info.line_number + 1;
-      cur_input.info.col_number = 0;
-    } else {
-      // discard
-      cur_input.data = discard.next;
-      cur_input.info = discard.info;
-    }
-  }
+bool consume_whitespace(GGParseInput &cur_input) {
+	while(1) {
+		GGToken discard = parse_nonsyntax_tokens(cur_input);
+		if (ParseOuputIsFalse(discard)) {
+			return true;
+		} else if (discard.token == TOKEN_EOF) {
+			//ParseOutputAppend(total_output, output);
+			return false;
+		} else if (discard.token == TOKEN_END_OF_LINE) {
+			//ParseOutputAppend(total_output, output);
+			cur_input.data = discard.next;
+			cur_input.info.line_number = discard.info.line_number + 1;
+			cur_input.info.col_number = 0;
+		} else {
+			// discard
+			cur_input.data = discard.next;
+			cur_input.info = discard.info;
+		}
+	}
 }
 
 GGToken parse_unary_expression(const GGParseInput &input);
 
 GGToken parse_binary_operation(int minimum_precidence, const GGToken &lhs_input, const GGParseInput &input) {
-  GGParseInput cur_input = input;
-  GGToken LHS = lhs_input;
+	GGParseInput cur_input = input;
+	GGToken LHS = lhs_input;
 
-  while(1) {
-    GGToken op = parse_binary_op_symbol(cur_input);
-    if (ParseOuputIsFalse(op)) {
-      return LHS;
-    }
+	while(1) {
+		GGToken op = parse_binary_op_symbol(cur_input);
+		if (ParseOuputIsFalse(op)) {
+			return LHS;
+		}
 
-    int op_precedence = binary_operator_get_precedence(op);
-    if (op_precedence < minimum_precidence) {
-      return LHS;
-    }
+		int op_precedence = binary_operator_get_precedence(op);
+		if (op_precedence < minimum_precidence) {
+			return LHS;
+		}
 
-    cur_input.data = op.next;
-    cur_input.info = op.info;
+		cur_input.data = op.next;
+		cur_input.info = op.info;
 
-    // whitespace
-    if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+		// whitespace
+		if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-    GGToken rhs = parse_unary_expression(cur_input);
-    if (ParseOuputIsFalse(rhs)) {
-      return PARSE_FALSE;
-    }
+		GGToken rhs = parse_unary_expression(cur_input);
+		if (ParseOuputIsFalse(rhs)) {
+			return PARSE_FALSE;
+		}
 
-    cur_input.data = rhs.next;
-    cur_input.info = rhs.info;
+		cur_input.data = rhs.next;
+		cur_input.info = rhs.info;
 
-    // whitespace
-    if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+		// whitespace
+		if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-    GGToken next_op = parse_binary_op_symbol(cur_input);
-    if (!ParseOuputIsFalse(next_op)) {
-      int next_op_precedence = binary_operator_get_precedence(next_op);
+		GGToken next_op = parse_binary_op_symbol(cur_input);
+		if (!ParseOuputIsFalse(next_op)) {
+			int next_op_precedence = binary_operator_get_precedence(next_op);
 
-      if (op_precedence < next_op_precedence) {
-        GGToken rhs = parse_binary_operation(op_precedence + 1, rhs, cur_input);
-        if (ParseOuputIsFalse(rhs)) {
-          return PARSE_FALSE;
-        }
+			if (op_precedence < next_op_precedence) {
+			GGToken rhs = parse_binary_operation(op_precedence + 1, rhs, cur_input);
+			if (ParseOuputIsFalse(rhs)) {
+				return PARSE_FALSE;
+			}
 
-        cur_input.data = rhs.next;
-        cur_input.info = rhs.info;
+			cur_input.data = rhs.next;
+			cur_input.info = rhs.info;
 
-        // whitespace
-        if (!consume_whitespace(cur_input)) return PARSE_FALSE;
-      }
-    }
+			// whitespace
+			if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+			}
+		}
 
-    GGToken newLHS = ParseOutputAlloc(TOKEN_COMPOUND_BINARY_OPERATION, 3);
-    newLHS.subtokens[0] = LHS;
-    newLHS.subtokens[1] = op;
-    newLHS.subtokens[2] = rhs;
-	newLHS.num_subtokens = 3;
-    newLHS.next = cur_input.data;
-    newLHS.info = cur_input.info;
-    LHS = newLHS;
-  }
+		GGToken newLHS = ParseOutputAlloc(TOKEN_COMPOUND_BINARY_OPERATION, 3);
+		newLHS.subtokens[0] = LHS;
+		newLHS.subtokens[1] = op;
+		newLHS.subtokens[2] = rhs;
+		newLHS.num_subtokens = 3;
+		newLHS.next = cur_input.data;
+		newLHS.info = cur_input.info;
+		LHS = newLHS;
+	}
 }
 
 bool consume_whitespace_and_terminator(char c, GGParseInput &cur_input) {
-  while(1) {
-    if (*cur_input.data == c) {
-      cur_input.data++;
-      return true;
-    }
+	while(1) {
+		if (*cur_input.data == c) {
+			cur_input.data++;
+			return true;
+		}
 
-    GGToken discard = parse_nonsyntax_tokens(cur_input);
-    if (ParseOuputIsFalse(discard)) {
-      return false;
-    } else if (discard.token == TOKEN_EOF) {
-      //ParseOutputAppend(total_output, output);
-      return false;
-    } else if (discard.token == TOKEN_END_OF_LINE) {
-      //ParseOutputAppend(total_output, output);
-      cur_input.data = discard.next;
-      cur_input.info.line_number = discard.info.line_number + 1;
-      cur_input.info.col_number = 0;
-    } else {
-      // discard
-      cur_input.data = discard.next;
-      cur_input.info = discard.info;
-    }
-  }
+		GGToken discard = parse_nonsyntax_tokens(cur_input);
+		if (ParseOuputIsFalse(discard)) {
+			return false;
+		} else if (discard.token == TOKEN_EOF) {
+			//ParseOutputAppend(total_output, output);
+			return false;
+		} else if (discard.token == TOKEN_END_OF_LINE) {
+			//ParseOutputAppend(total_output, output);
+			cur_input.data = discard.next;
+			cur_input.info.line_number = discard.info.line_number + 1;
+			cur_input.info.col_number = 0;
+		} else {
+			// discard
+			cur_input.data = discard.next;
+			cur_input.info = discard.info;
+		}
+	}
 }
 
 GGToken parse_postfix_expression(const GGParseInput &input) {
-  GGParseInput cur_input = input;
-  GGToken lhs = parse_atomic_expression(cur_input);
-  if (ParseOuputIsFalse(lhs)) {
-    return PARSE_FALSE;
-  }
+	GGParseInput cur_input = input;
+	GGToken lhs = parse_atomic_expression(cur_input);
+	if (ParseOuputIsFalse(lhs)) {
+		return PARSE_FALSE;
+	}
 
-  // whitespace
-  cur_input.data = lhs.next;
-  cur_input.info = lhs.info;
-  if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+	// whitespace
+	cur_input.data = lhs.next;
+	cur_input.info = lhs.info;
+	if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-  while(1) {
-    GGToken op = parse_postfix_op_symbol(cur_input);
-    if (ParseOuputIsFalse(op)) {
-      return lhs;
-    } 
+	while(1) {
+	GGToken op = parse_postfix_op_symbol(cur_input);
+	if (ParseOuputIsFalse(op)) {
+		return lhs;
+	} 
 
-    // whitespace
-    cur_input.data = op.next;
-    cur_input.info = op.info;
-    if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+	// whitespace
+	cur_input.data = op.next;
+	cur_input.info = op.info;
+	if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-    GGToken newLHS = ParseOutputAlloc(TOKEN_COMPOUND, 2);
-    newLHS.info = op.info;
-    newLHS.next = op.next;
+	GGToken newLHS = ParseOutputAlloc(TOKEN_COMPOUND, 2);
+	newLHS.info = op.info;
+	newLHS.next = op.next;
 
-    switch(op.num_subtokens) {
-      case ARRAY_INDEX_OP: {
-        GGToken array_expression = parse_expression(cur_input);
-        if (ParseOuputIsFalse(op)) {
-          return PARSE_FALSE;
-        } 
+	switch(op.num_subtokens) {
+	case ARRAY_INDEX_OP: {
+		GGToken array_expression = parse_expression(cur_input);
+		if (ParseOuputIsFalse(op)) {
+			return PARSE_FALSE;
+		} 
 
-        newLHS.token = TOKEN_COMPOUND_ARRAY_INDEX;
-        newLHS.subtokens[0] = lhs;
-        newLHS.subtokens[1] = array_expression;
-        newLHS.num_subtokens = 2;
+		newLHS.token = TOKEN_COMPOUND_ARRAY_INDEX;
+		newLHS.subtokens[0] = lhs;
+		newLHS.subtokens[1] = array_expression;
+		newLHS.num_subtokens = 2;
 
-        cur_input.data = array_expression.next;
-        cur_input.info = array_expression.info;
-        if (!consume_whitespace_and_terminator(']', cur_input)) return PARSE_FALSE;
-      } break;
-      case FUNCTION_CALL_OP: {
-        GGToken function_params = parse_function_call_params(cur_input);
-        if (ParseOuputIsFalse(op)) {
-          return PARSE_FALSE;
-        } 
-        newLHS.token = TOKEN_COMPOUND_FUNCTION_CALL;
-        newLHS.subtokens[0] = lhs;
-        newLHS.subtokens[1] = function_params;
-        newLHS.num_subtokens = 2;
+		cur_input.data = array_expression.next;
+		cur_input.info = array_expression.info;
+		if (!consume_whitespace_and_terminator(']', cur_input)) return PARSE_FALSE;
+	} break;
+	case FUNCTION_CALL_OP: {
+		GGToken function_params = parse_function_call_params(cur_input);
+		if (ParseOuputIsFalse(op)) {
+			return PARSE_FALSE;
+		} 
+		newLHS.token = TOKEN_COMPOUND_FUNCTION_CALL;
+		newLHS.subtokens[0] = lhs;
+		newLHS.subtokens[1] = function_params;
+		newLHS.num_subtokens = 2;
 
-        cur_input.data = function_params.next;
-        cur_input.info = function_params.info;
-        if (!consume_whitespace_and_terminator(')', cur_input)) return PARSE_FALSE;
+		cur_input.data = function_params.next;
+		cur_input.info = function_params.info;
+		if (!consume_whitespace_and_terminator(')', cur_input)) return PARSE_FALSE;
+	} break;
+	case MEMBER_OP: {
+		GGToken member = parse_member_identifier(cur_input);
+		if (ParseOuputIsFalse(op)) {
+			return PARSE_FALSE;
+		} 
+		newLHS.token = TOKEN_COMPOUND_MEMBER_IDENTIFIER;
+		newLHS.subtokens[0] = lhs;  // fn identifier
+		newLHS.subtokens[1] = member;
+		newLHS.num_subtokens = 2;
 
-      } break;
-      case MEMBER_OP: {
-        GGToken member = parse_member_identifier(cur_input);
-        if (ParseOuputIsFalse(op)) {
-          return PARSE_FALSE;
-        } 
-        newLHS.token = TOKEN_COMPOUND_MEMBER_IDENTIFIER;
-        newLHS.subtokens[0] = lhs;  // fn identifier
-        newLHS.subtokens[1] = member;
-        newLHS.num_subtokens = 2;
-
-        cur_input.data = member.next;
-        cur_input.info = member.info;
-      } break;
-      case POST_INC_OP:
-      case POST_DEC_OP: {
-        newLHS.token = TOKEN_COMPOUND_UNARY_POST_OPERATION;
-        newLHS.subtokens[0] = lhs;
-        newLHS.subtokens[1] = op;
-        newLHS.num_subtokens = 2;
-      } break;
-      default:
-        halt();
-    }
+		cur_input.data = member.next;
+		cur_input.info = member.info;
+	} break;
+	case POST_INC_OP:
+	case POST_DEC_OP: {
+		newLHS.token = TOKEN_COMPOUND_UNARY_POST_OPERATION;
+		newLHS.subtokens[0] = lhs;
+		newLHS.subtokens[1] = op;
+		newLHS.num_subtokens = 2;
+	} break;
+	default:
+		halt();
+	}
 
 	newLHS.info = cur_input.info;
 	newLHS.next = cur_input.data;
-    lhs = newLHS;
+	lhs = newLHS;
 
-    //// whitespace
-    //cur_input.data = op.next;
-    //cur_input.info = op.info;
-    //if (!consume_whitespace(cur_input)) return PARSE_FALSE;
-  }
+	//// whitespace
+	//cur_input.data = op.next;
+	//cur_input.info = op.info;
+	//if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+	}
 }
 
 GGToken parse_unary_expression(const GGParseInput &input) {
-  GGParseInput cur_input = input;
-  GGToken op = parse_unary_op_symbol(cur_input);
-  if (ParseOuputIsFalse(op)) {
-    GGToken expr = parse_postfix_expression(cur_input);
-    if (ParseOuputIsFalse(expr)) {
-      return PARSE_FALSE;
-    }
-    return expr;
-  }
+	GGParseInput cur_input = input;
+	GGToken op = parse_unary_op_symbol(cur_input);
+	if (ParseOuputIsFalse(op)) {
+		GGToken expr = parse_postfix_expression(cur_input);
+		if (ParseOuputIsFalse(expr)) {
+			return PARSE_FALSE;
+		}
+		return expr;
+	}
 
-  // whitespace
-  cur_input.data = op.next;
-  cur_input.info = op.info;
-  if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+	// whitespace
+	cur_input.data = op.next;
+	cur_input.info = op.info;
+	if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-  GGToken sub_expression = parse_unary_expression(cur_input);
-  if (ParseOuputIsFalse(sub_expression)) {
-    return PARSE_FALSE;
-  }
+	GGToken sub_expression = parse_unary_expression(cur_input);
+	if (ParseOuputIsFalse(sub_expression)) {
+		return PARSE_FALSE;
+	}
 
-  GGToken retval = ParseOutputAlloc(TOKEN_COMPOUND_UNARY_OPERATION, 2);
-  retval.subtokens[0] = op;
-  retval.subtokens[1] = sub_expression;
-  retval.num_subtokens = 2;
-  retval.next = sub_expression.next;
-  retval.info = sub_expression.info;
-  return retval;
+	GGToken retval = ParseOutputAlloc(TOKEN_COMPOUND_UNARY_OPERATION, 2);
+	retval.subtokens[0] = op;
+	retval.subtokens[1] = sub_expression;
+	retval.num_subtokens = 2;
+	retval.next = sub_expression.next;
+	retval.info = sub_expression.info;
+	return retval;
 }
 
 //GGToken parse_unary_expression(const GGParseInput &input) {
@@ -1105,22 +1090,22 @@ GGToken parse_unary_expression(const GGParseInput &input) {
 
 
 GGToken parse_expression(const GGParseInput &input) {
-  //static const ParseFn parse_aexrps[] = {parse_atomic_expression, parse_unary_expression};
-  //static const int numFns = ARRAYSIZE(parse_aexrps);
-  //GGToken lhs = parse_first_of(parse_aexrps, numFns, input);
-  GGToken lhs = parse_unary_expression(input);
-  if (ParseOuputIsFalse(lhs)) 
-  {
-    return PARSE_FALSE;
-  }
+	//static const ParseFn parse_aexrps[] = {parse_atomic_expression, parse_unary_expression};
+	//static const int numFns = ARRAYSIZE(parse_aexrps);
+	//GGToken lhs = parse_first_of(parse_aexrps, numFns, input);
+	GGToken lhs = parse_unary_expression(input);
+	if (ParseOuputIsFalse(lhs)) 
+	{
+		return PARSE_FALSE;
+	}
 
-  // whitespace
-  GGParseInput cur_input;
-  cur_input.data = lhs.next;
-  cur_input.info = lhs.info;
-  if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+	// whitespace
+	GGParseInput cur_input;
+	cur_input.data = lhs.next;
+	cur_input.info = lhs.info;
+	if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-  return parse_binary_operation(0, lhs, cur_input);
+	return parse_binary_operation(0, lhs, cur_input);
 }
 
 //GGToken parse_expression(lhs, int min_precedence) {
@@ -1171,53 +1156,53 @@ GGToken parse_expression(const GGParseInput &input) {
 //}
 
 GGToken parse_zero_or_more(ParseFn fn, GGTokenType token_type, const GGParseInput &input) {
-  GGParseInput cur_input = input;
-  //GGToken total_output = {};
-  GGToken total_output = ParseOutputAlloc(token_type, 1024);
+	GGParseInput cur_input = input;
+	//GGToken total_output = {};
+	GGToken total_output = ParseOutputAlloc(token_type, 1024);
 
-  while(1) {
-    GGToken output = fn(cur_input);
-    if (ParseOuputIsFalse(output)) {
-      break;
-    } else if (output.token == TOKEN_EOF) {
-      //ParseOutputAppend(total_output, output);
-      break;
-    } else if (output.token == TOKEN_END_OF_LINE) {
-      //ParseOutputAppend(total_output, output);
-      cur_input.data = output.next;
-      cur_input.info.line_number = output.info.line_number + 1;
-      cur_input.info.col_number = 0;
-    } else {
-      ParseOutputAppend(total_output, output);
-      cur_input.data = output.next;
-      cur_input.info = output.info;
-    }
+	while(1) {
+		GGToken output = fn(cur_input);
+		if (ParseOuputIsFalse(output)) {
+			break;
+		} else if (output.token == TOKEN_EOF) {
+			//ParseOutputAppend(total_output, output);
+			break;
+		} else if (output.token == TOKEN_END_OF_LINE) {
+			//ParseOutputAppend(total_output, output);
+			cur_input.data = output.next;
+			cur_input.info.line_number = output.info.line_number + 1;
+			cur_input.info.col_number = 0;
+		} else {
+			ParseOutputAppend(total_output, output);
+			cur_input.data = output.next;
+			cur_input.info = output.info;
+		}
 
-    {
-      while(1) {
-        GGToken discard = parse_nonsyntax_tokens(cur_input);
-        if (ParseOuputIsFalse(discard)) {
-          break;
-        } else if (discard.token == TOKEN_EOF) {
-          //ParseOutputAppend(total_output, output);
-          break;
-        } else if (discard.token == TOKEN_END_OF_LINE) {
-          //ParseOutputAppend(total_output, output);
-          cur_input.data = discard.next;
-          cur_input.info.line_number = discard.info.line_number + 1;
-          cur_input.info.col_number = 0;
-        } else {
-          // discard
-          cur_input.data = discard.next;
-          cur_input.info = discard.info;
-        }
-      }
-    }
-  }
+		{
+			while(1) {
+				GGToken discard = parse_nonsyntax_tokens(cur_input);
+				if (ParseOuputIsFalse(discard)) {
+					break;
+				} else if (discard.token == TOKEN_EOF) {
+					//ParseOutputAppend(total_output, output);
+					break;
+				} else if (discard.token == TOKEN_END_OF_LINE) {
+					//ParseOutputAppend(total_output, output);
+					cur_input.data = discard.next;
+					cur_input.info.line_number = discard.info.line_number + 1;
+					cur_input.info.col_number = 0;
+				} else {
+					// discard
+					cur_input.data = discard.next;
+					cur_input.info = discard.info;
+				}
+			}
+		}
+	}
 
-  total_output.info = cur_input.info;
-  total_output.next = cur_input.data;
-  return total_output;
+	total_output.info = cur_input.info;
+	total_output.next = cur_input.data;
+	return total_output;
 }
 
 GGToken parse_function_params(const GGParseInput &input) {
@@ -1234,21 +1219,21 @@ GGToken parse_function_params(const GGParseInput &input) {
 //}
 
 bool isRightBrace(char c) {
-  return c == '}';
+	return c == '}';
 }
 
 GGToken parse_anything_until_right_brace(const GGParseInput &input, GGTokenType token_type) {
-  return parse_zero_or_more_until_pred(isRightBrace, token_type, input);
+	return parse_zero_or_more_until_pred(isRightBrace, token_type, input);
 }
 
 GGToken parse_llvm_content(const GGParseInput &input)  {
-  return parse_anything_until_right_brace(input, TOKEN_LLVM_CONTENT);
+	return parse_anything_until_right_brace(input, TOKEN_LLVM_CONTENT);
 };
 
 GGToken parse_inline_llvm(const GGParseInput &input) {
-  static const ParseFn sequence[] = { parse_llvm_exact, parse_left_brace, parse_llvm_content, parse_right_brace, };
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_INLINE_LLVM, input);
+	static const ParseFn sequence[] = { parse_llvm_exact, parse_left_brace, parse_llvm_content, parse_right_brace, };
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_INLINE_LLVM, input);
 }
 
 //GGToken parse_variable(const GGParseInput &input) {
@@ -1259,16 +1244,20 @@ GGToken parse_inline_llvm(const GGParseInput &input) {
 //  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_VARIABLE, input);
 //};
 
-GGToken parse_type_exact(const GGParseInput &input) {
-  return parse_exact("type", TOKEN_DISCARD, input);
+GGToken parse_typedef_exact(const GGParseInput &input) {
+	return parse_exact("typedef", TOKEN_DISCARD, input);
+}
+
+GGToken parse_llvm_type_exact(const GGParseInput &input) {
+	return parse_exact("llvm_type", TOKEN_DISCARD, input);
 }
 
 GGToken parse_struct_exact(const GGParseInput &input) {
-  return parse_exact("type", TOKEN_DISCARD, input);
+	return parse_exact("struct", TOKEN_DISCARD, input);
 }
 
 GGToken parse_enum_exact(const GGParseInput &input) {
-  return parse_exact("type", TOKEN_DISCARD, input);
+	return parse_exact("enum", TOKEN_DISCARD, input);
 }
 
 
@@ -1290,193 +1279,217 @@ GGToken parse_param_type_list(const GGParseInput &input) {
 	return parse_zero_or_more_separated(parse_type_declaration, ',', TOKEN_COMPOUND_PARAM_TYPE_LIST, input); 
 }
 
+//GGToken parse_base_type_declaration(const GGParseInput &input) {
+//}
+
+//GGToken parse_anonymous_struct(const GGParseInput &input) {}
+//GGToken parse_anonymous_enum(const GGParseInput &input) {}
+//GGToken parse_anonymous_llvm(const GGParseInput &input) {}
+
 GGToken parse_type_declaration(const GGParseInput &input) {
-  // type_declaration
-  //  : type_identifier
-  //  | type_identifier abstract_declarator
+	// struct
+	// enum
+	// llvm_type
+	// identifier
 
-  // abstract_declarator
-  //  : *
-  //  : []
-  //  : [constexpr]
-  //  : ()
-  //  : (param_type_list)
+	const static ParseFn fns[] = { 
+		//parse_anonymous_struct, 
+		//parse_anonymous_enum, 
+		//parse_anonymous_llvm_type, 
+		parse_type_identifier 
+	};
+	const static int num_fns = ARRAYSIZE(fns);
 
-  // direct_abstract_declarator
+	GGParseInput cur_input = input;
+	GGToken lhs = parse_first_of(fns, num_fns, cur_input);
+	if (ParseOuputIsFalse(lhs)) {
+		return PARSE_FALSE;
+	} 
 
-  //(foo(bar))(bar(foo))(baz)
+	//lhs.token = TOKEN_TYPE_IDENTIFIER;
+	cur_input.data = lhs.next;
+	cur_input.info = lhs.info;
+	if (!consume_whitespace(cur_input)) return PARSE_FALSE;
 
-
-  
-//  (foo(bar))x; // function_call or type_declaration
-  
-  // type_declaration(param_type_list)
-
-
-  //typedecl = type_identifier -> zero or more * -> zero or more [constexrp] -> one or zero []
-  //         | function_type_identifier -> zero or more * -> zero or more [constexrp] -> one or zero []
-
-  //typedecl = "*"*[constexpr]*
-
-  //function_type_identifier = type_identifier ( param_type_list ) 
-
-  // type_identifier          [*] [[constexpr]] []
-  // function_type_identifier [*] [[constexpr]] []
-
- // type_declaration =
-	//type_identifier				"*"* ("[" constexpr "]")* ([])*1
-	//function_type_identifier	"*"* ("[" constexpr "]")* ([])*1
-
- // function_type_identifier = type_declaration ( param_type_list )
-
-  GGParseInput cur_input = input;
-  GGToken lhs = parse_type_identifier(cur_input);
-  if (ParseOuputIsFalse(lhs)) {
-	  return PARSE_FALSE;
-  }
-
-  lhs.token = TOKEN_COMPOUND_TYPE_DECLARATION;
-  cur_input.data = lhs.next;
-  cur_input.info = lhs.info;
-  if (!consume_whitespace(cur_input)) return PARSE_FALSE;
-
-  bool hadALeftParen = false;
-  while(1)
-  {
+	bool hadALeftParen = false;
+	while(1)
+	{
 	//const static ParseFn fns[] = { parse_asterix, parse_left_bracket, parse_left_paren };
- //   const static int num_fns = ARRAYSIZE(fns);
- //   GGOutput op = parse_one_of(fns, num_fns);
- //   if (op is false) {
+	//   const static int num_fns = ARRAYSIZE(fns);
+	//   GGOutput op = parse_one_of(fns, num_fns);
+	//   if (op is false) {
 	//  return lhs;
- //   }
+	//   }
 
-	  char c = *cur_input.data;
-	  switch(c) {
-	  case '*': {
-		  //GGOutput pointer_symbol = parse_pointer_symbol();
-		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_POINTER_DECLARATION, 1);
-		  newLhs.subtokens[0] = lhs;
-		  cur_input.data++;
-		  lhs = newLhs;
-	  } break;
-	  case '[': {
-		  static const ParseFn sequence[] = { parse_left_bracket, parse_constexpr, parse_right_bracket };
-		  static const int num_sequence = ARRAYSIZE(sequence);
-		  GGToken array_subscript = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_ARRAY_SUBSCRIPT, cur_input);
-		  if (ParseOuputIsFalse(array_subscript )) return PARSE_FALSE;
-		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_ARRAY_DECLARATION, 2);
-		  newLhs.subtokens[0] = lhs;
-		  newLhs.subtokens[1] = array_subscript;
-		  cur_input.data = array_subscript.next;
-		  cur_input.info = array_subscript.info;
-		  lhs = newLhs;
-	  } break;
-	  case '(': {
-		  if (hadALeftParen == true) {
-			  return PARSE_FALSE;
-		  }
-		  hadALeftParen = true;
-		  static const ParseFn sequence[] = { parse_left_paren, parse_param_type_list, parse_right_paren };
-		  static const int num_sequence = ARRAYSIZE(sequence);
-		  GGToken param_type_list = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND, cur_input);
-		  if (ParseOuputIsFalse(param_type_list)) return PARSE_FALSE;
-		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_FUNCTION_TYPE_DECLARATION, 2);
-		  newLhs.info = lhs.info;
-		  newLhs.next = lhs.next;
-		  newLhs.subtokens[0] = lhs;
-		  newLhs.subtokens[1] = param_type_list.subtokens[0];
-		  cur_input.data = param_type_list.next;
-		  cur_input.info = param_type_list.info;
-		  lhs = newLhs;
-	  } break;
-	  default:
-		  return lhs;
-	  }
+		char c = *cur_input.data;
+		switch(c) {
+		case '*': {
+			//GGOutput pointer_symbol = parse_pointer_symbol();
+			GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_POINTER_TYPE, 1);
+			newLhs.subtokens[0] = lhs;
+			cur_input.data++;
+			lhs = newLhs;
+		} break;
+		case '[': {
+			static const ParseFn sequence[] = { parse_left_bracket, parse_constexpr, parse_right_bracket };
+			static const int num_sequence = ARRAYSIZE(sequence);
+			GGToken array_subscript = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_ARRAY_SUBSCRIPT, cur_input);
+			if (ParseOuputIsFalse(array_subscript )) return PARSE_FALSE;
+			GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_ARRAY_TYPE, 2);
+			newLhs.subtokens[0] = lhs;
+			newLhs.subtokens[1] = array_subscript;
+			cur_input.data = array_subscript.next;
+			cur_input.info = array_subscript.info;
+			lhs = newLhs;
+		} break;
+		case '(': {
+			if (hadALeftParen == true) {
+				return PARSE_FALSE;
+			}
+			hadALeftParen = true;
+			static const ParseFn sequence[] = { parse_left_paren, parse_param_type_list, parse_right_paren };
+			static const int num_sequence = ARRAYSIZE(sequence);
+			GGToken param_type_list = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND, cur_input);
+			if (ParseOuputIsFalse(param_type_list)) return PARSE_FALSE;
+			GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_FUNCTION_TYPE, 2);
+			newLhs.info = lhs.info;
+			newLhs.next = lhs.next;
+			newLhs.subtokens[0] = lhs;
+			newLhs.subtokens[1] = param_type_list.subtokens[0];
+			cur_input.data = param_type_list.next;
+			cur_input.info = param_type_list.info;
+			lhs = newLhs;
+		} break;
+		default:
+			return lhs;
+		}
 
-	  if (!consume_whitespace(cur_input)) return PARSE_FALSE;
-  }
-
+		if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+	}
 }
 
 //() x = 10;
 
 GGToken parse_typedef_definition(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_type_exact, parse_type_identifier, parse_declaration_assignment_operator, parse_type_declaration};
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_VARIABLE, input);
+	static const ParseFn sequence[] = {parse_typedef_exact, parse_type_identifier, parse_declaration_assignment_operator, parse_type_declaration};
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_TYPEDEF_DEFINITION, input);
 }
 
 GGToken parse_variable_definition(const GGParseInput &input) {
-  // identifier := expression;
-  static const ParseFn sequence[] = {parse_type_declaration, parse_variable_identifier, parse_declaration_assignment_operator, parse_expression, parse_semicolon};
-  static const int num_sequence = ARRAYSIZE(sequence);
+	// identifier := expression;
+	static const ParseFn sequence[] = {parse_type_declaration, parse_variable_identifier, parse_declaration_assignment_operator, parse_expression, parse_semicolon};
+	static const int num_sequence = ARRAYSIZE(sequence);
 
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_VARIABLE, input);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_VARIABLE_DEFINITION, input);
 };
 
 GGToken parse_struct_field(const GGParseInput &input) {
-  return parse_variable_definition(input);
+	static const ParseFn declaration_part_sequence[] = { parse_type_declaration, parse_variable_identifier };
+	static const int num_declaration_part = ARRAYSIZE(declaration_part_sequence);
+
+	GGToken declaration_token = ParseOutputAlloc(TOKEN_COMPOUND_VARIABLE_DEFINITION, 3);
+	continue_parse_whitespace_separated_sequence(declaration_token, declaration_part_sequence, num_declaration_part, input);
+
+	if (ParseOuputIsFalse(declaration_token)) {
+		return PARSE_FALSE;
+	}
+
+	GGParseInput cur_input;
+	cur_input.data = declaration_token.next;
+	cur_input.info = declaration_token.info;
+	consume_whitespace(cur_input);
+
+	if (*cur_input.data == ';') {
+		declaration_token.next = cur_input.data + 1;
+	} else {
+		static const ParseFn assigment_part_sequence[] = { parse_declaration_assignment_operator, parse_expression, parse_semicolon };
+		static const int num_assigment_part = ARRAYSIZE(assigment_part_sequence);
+		continue_parse_whitespace_separated_sequence(declaration_token, assigment_part_sequence, num_assigment_part, cur_input);
+		if (ParseOuputIsFalse(declaration_token)) {
+			return PARSE_FALSE;
+		}
+	}
+
+	cur_input.data = declaration_token.next;
+	cur_input.info = declaration_token.info;
+	consume_whitespace(cur_input);
+
+	declaration_token.next = cur_input.data;
+	return declaration_token;
 }
 
 GGToken parse_struct_fields(const GGParseInput &input) {
-  return parse_zero_or_more(parse_struct_field, TOKEN_COMPOUND_STRUCT_FIELDS, input);
+	return parse_zero_or_more(parse_struct_field, TOKEN_COMPOUND_STRUCT_FIELDS, input);
 }
 
 GGToken parse_enum_field(const GGParseInput &input) {
-  return parse_variable_definition(input);
+	return parse_variable_definition(input);
 }
 
 GGToken parse_enum_fields(const GGParseInput &input) {
-  return parse_zero_or_more(parse_enum_field, TOKEN_COMPOUND_ENUM_FIELDS, input);
+	return parse_zero_or_more(parse_enum_field, TOKEN_COMPOUND_ENUM_FIELDS, input);
+}
+
+//GGToken parse_raw_llvm(const GGParseInput &input) {
+//  parse_until
+//};
+
+GGToken parse_llvm_type_definition(const GGParseInput &input) {
+	static const ParseFn sequence[] = {parse_llvm_type_exact, parse_type_identifier, parse_left_brace, parse_llvm_content, parse_right_brace};
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_LLVM_TYPE_DEFINITION, input);
 }
 
 GGToken parse_struct_definition(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_struct_exact, parse_type_identifier, parse_left_brace, parse_struct_fields, parse_right_brace};
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_STRUCT_DEFINITION, input);
+	static const ParseFn sequence[] = {parse_struct_exact, parse_type_identifier, parse_left_brace, parse_struct_fields, parse_right_brace};
+	static const int num_sequence = ARRAYSIZE(sequence);
+	GGToken retval = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_STRUCT_DEFINITION, input);
+	return retval;
 }
 
 GGToken parse_enum_definition(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_enum_exact, parse_type_identifier, parse_left_brace, parse_enum_fields, parse_right_brace};
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_ENUM_DEFINITION, input);
+	static const ParseFn sequence[] = {parse_enum_exact, parse_type_identifier, parse_left_brace, parse_enum_fields, parse_right_brace};
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_ENUM_DEFINITION, input);
 }
 
 GGToken parse_type_definition(const GGParseInput &input) {
-  // identifier := expression;
-  static const ParseFn statements[] = {
-    parse_typedef_definition,
-    parse_struct_definition,
-    parse_enum_definition,
-  };
-  static const int num_statements = ARRAYSIZE(statements);
-  return parse_first_of(statements, num_statements, input);
+	// identifier := expression;
+	static const ParseFn statements[] = {
+		parse_typedef_definition,
+		parse_struct_definition,
+		parse_enum_definition,
+		parse_llvm_type_definition,
+	};
+	static const int num_statements = ARRAYSIZE(statements);
+	return parse_first_of(statements, num_statements, input);
 };
 
 GGToken parse_return_exact(const GGParseInput &input) {
-  return parse_exact("return", TOKEN_DISCARD, input);
+	return parse_exact("return", TOKEN_DISCARD, input);
 }
 
 GGToken parse_return_statement(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_return_exact, parse_expression, parse_semicolon};
-  static const int num_sequence = ARRAYSIZE(sequence);
+	static const ParseFn sequence[] = {parse_return_exact, parse_expression, parse_semicolon};
+	static const int num_sequence = ARRAYSIZE(sequence);
 
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_RETURN_STATEMENT, input);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_RETURN_STATEMENT, input);
 }
 
 GGToken parse_expression_statement(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_expression, parse_semicolon};
-  static const int num_sequence = ARRAYSIZE(sequence);
+	static const ParseFn sequence[] = {parse_expression, parse_semicolon};
+	static const int num_sequence = ARRAYSIZE(sequence);
 
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_EXPRESSION_STATEMENT, input);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_EXPRESSION_STATEMENT, input);
 }
 
 GGToken parse_statement(const GGParseInput &input);
 GGToken parse_block_statement (const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_left_brace, parse_statement, parse_right_brace};
-  static const int num_sequence = ARRAYSIZE(sequence);
+	static const ParseFn sequence[] = {parse_left_brace, parse_statement, parse_right_brace};
+	static const int num_sequence = ARRAYSIZE(sequence);
 
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_BLOCK_STATEMENT, input);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_BLOCK_STATEMENT, input);
 }
 
 //GGToken parse_function_call_statement(const GGParseInput &input) {
@@ -1487,55 +1500,56 @@ GGToken parse_block_statement (const GGParseInput &input) {
 //}
 
 GGToken parse_for_statement(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_for_exact, parse_left_paren, parse_variable_identifier, parse_in_exact, parse_expression, parse_right_paren, parse_right_paren, parse_statement};
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_FOR_STATEMENT, input);
+	static const ParseFn sequence[] = {parse_for_exact, parse_left_paren, parse_variable_identifier, parse_in_exact, parse_expression, parse_right_paren, parse_right_paren, parse_statement};
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_FOR_STATEMENT, input);
 }
 
 GGToken parse_if_statement(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_if_exact, parse_left_paren, parse_expression, parse_right_paren, parse_statement};
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_IF_STATEMENT, input);
+	static const ParseFn sequence[] = {parse_if_exact, parse_left_paren, parse_expression, parse_right_paren, parse_statement};
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_IF_STATEMENT, input);
 }
 
 GGToken parse_assignment_statement(const GGParseInput &input) {
-  static const ParseFn sequence[] = {parse_unary_expression, parse_assignment_op_symbol, parse_expression, parse_semicolon};
-  static const int num_sequence = ARRAYSIZE(sequence);
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_ASSIGNMENT_STATEMENT, input);
+	static const ParseFn sequence[] = {parse_unary_expression, parse_assignment_op_symbol, parse_expression, parse_semicolon};
+	static const int num_sequence = ARRAYSIZE(sequence);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_ASSIGNMENT_STATEMENT, input);
 }
 
 GGToken parse_function_definition(const GGParseInput &input);
 
 GGToken parse_statement(const GGParseInput &input) {
-  static const ParseFn statements[] = {
-    parse_block_statement,
-    parse_return_statement,
-    parse_for_statement,
-    parse_if_statement,
-    // parse_switch_statement,
-    parse_inline_llvm,
+	static const ParseFn statements[] = {
+		parse_block_statement,
+		parse_return_statement,
+		parse_for_statement,
+		parse_if_statement,
+		// parse_switch_statement,
+		parse_inline_llvm,
 
-    parse_expression_statement,
-    parse_assignment_statement,
+		parse_expression_statement,
+		parse_assignment_statement,
 
-    //parse_type_definition,
-    parse_variable_definition,
-    parse_function_definition,
-  };
-  static const int num_statements = ARRAYSIZE(statements);
-  return parse_first_of(statements, num_statements, input);
+		//parse_type_definition,
+		parse_variable_definition,
+		parse_function_definition,
+	};
+
+	static const int num_statements = ARRAYSIZE(statements);
+	return parse_first_of(statements, num_statements, input);
 }
 
 GGToken parse_function_body(const GGParseInput &input) {
-  return parse_zero_or_more(parse_statement, TOKEN_COMPOUND_FUNCTION_BODY,  input);
+	return parse_zero_or_more(parse_statement, TOKEN_COMPOUND_FUNCTION_BODY,  input);
 }
 
 GGToken parse_function_definition(const GGParseInput &input) {
-  // identifier := expression;
-  static const ParseFn sequence[] = {parse_type_declaration, parse_function_identifier, parse_left_paren, parse_function_params, parse_right_paren, parse_left_brace, parse_function_body, parse_right_brace};
-  static const int num_sequence = ARRAYSIZE(sequence);
+	// identifier := expression;
+	static const ParseFn sequence[] = {parse_type_declaration, parse_function_identifier, parse_left_paren, parse_function_params, parse_right_paren, parse_left_brace, parse_function_body, parse_right_brace};
+	static const int num_sequence = ARRAYSIZE(sequence);
 
-  return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_FUNCTION, input);
+	return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_FUNCTION_DEFINITION, input);
 };
 
 
@@ -1596,38 +1610,31 @@ GGToken parse_function_definition(const GGParseInput &input) {
 //}
 
 GGToken parse_program_statement(const GGParseInput &input) {
+	static const ParseFn fns[] = { 
+		parse_type_definition, 
+		parse_variable_definition, 
+		parse_function_definition, 
+	};
+	static const int num_fns = ARRAYSIZE(fns);
 
-  static const ParseFn fns[] = { 
-    //parse_nonsyntax_tokens,
-
-    //parse_type_definition, 
-    parse_variable_definition, 
-    parse_function_definition, 
-  };
-  static const int num_fns = ARRAYSIZE(fns);
-
-  return parse_first_of(fns, num_fns, input);
+	return parse_first_of(fns, num_fns, input);
 }
-
-
 
 GGToken parse_program(const GGParseInput &input) {
-  GGParseInput cur_input = input;
-  consume_whitespace(cur_input);
-  return parse_zero_or_more(parse_program_statement, TOKEN_COMPOUND_PROGRAM, cur_input);
+	GGParseInput cur_input = input;
+	consume_whitespace(cur_input);
+	return parse_zero_or_more(parse_program_statement, TOKEN_COMPOUND_PROGRAM, cur_input);
 }
 
-GGToken GGCompile(const char *file_data) 
-{
-  GGParseInput input = {};
-  input.data = file_data;
-  GGToken output = parse_program(input);
-  return output;
+GGToken GGCompile(const char *file_data) {
+	GGParseInput input = {};
+	input.data = file_data;
+	GGToken output = parse_program(input);
+	return output;
 }
 
-void substring_printf(const char *format, ...) {
-
-};
+//void substring_printf(const char *format, ...) {
+//};
 
 //void emit_global_variable(const GGParseOutput &tree) {
 //	assert(tree.token == TOKEN_COMPOUND_GLOBAL_VARIABLE);

@@ -85,7 +85,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GGCompiler.cpp" />
-    <ClCompile Include="GGIdentifierDB.cpp" />
     <ClCompile Include="GGLLVMEmitter.cpp" />
     <ClCompile Include="GGMain.cpp" />
     <ClCompile Include="precompile.cpp">
