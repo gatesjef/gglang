@@ -9,16 +9,28 @@ llvm_type i8 {
   i8
 }
 
-extern i32 putchar(i32 c);
 extern i32 puts(i8* s);
 
+
 i32 main() {
-	i8* y = "Hello world!";
-	puts(y);
-	//putchar(72);	// H
-	//putchar(69);	// E
-	//putchar(76);	// L
-	//putchar(76);	// L
-	//putchar(79);	// O
+	i8* s = "Hello world!";
+	puts(s);
+
 	return 1;
 }
+
+//i8* z = "B";		// todo: array indexing
+//s[0] = z[0];
+//i8 n[10];			// todo: array delcaration;
+//i8 m[10] = {};	// todo: array initialization;
+//i8 *y = "Hi!";	// todo: global variables
+// todo other integer types
+// todo other integer literals
+// todo char literals
+// todo casts/conversions
+// todo structs/members
+// todo prelude
+// todo float types
+
+
+

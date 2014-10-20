@@ -20,6 +20,7 @@ enum GGIdentifierType {
 struct DBItem {
 	GGIdentifierType itemType;
 	GGSubString identifier;
+	int scope;
 	union {
 	llvm::Type *type;
 	llvm::Function *function;
@@ -36,6 +37,7 @@ struct LLVM {
 
 	DBItem db_items[MAX_DB_ITEMS];
 	int num_db_items;
+	int db_scope;
 };
 
 llvm::StringRef to_string_ref(const GGSubString &substring) {
@@ -106,11 +108,11 @@ llvm::Type *db_lookup_type(LLVM &llvm, const GGToken &token)
 llvm::Function *db_lookup_function(LLVM &llvm, const GGToken &token)
 {
 	for(int i = 0; i < llvm.num_db_items; ++i) {
-	DBItem &item = llvm.db_items[i];
-	if (substring_cmp(item.identifier, token.substring)) {
-		assert(item.itemType == IDENTIFIER_FUNCTION);
-		return item.function;
-	}
+		DBItem &item = llvm.db_items[i];
+		if (substring_cmp(item.identifier, token.substring)) {
+			assert(item.itemType == IDENTIFIER_FUNCTION);
+			return item.function;
+		}
 	}
 	halt();
 	return NULL;
@@ -118,12 +120,21 @@ llvm::Function *db_lookup_function(LLVM &llvm, const GGToken &token)
 
 void db_push_scope(LLVM &llvm)
 {
-	// TODO
+	llvm.db_scope++;
 }
 
 void db_pop_scope(LLVM &llvm)
 {
-	// TODO
+	llvm.db_scope--;
+
+	for(int i = 0; i < llvm.num_db_items; ++i) {
+		DBItem &item = llvm.db_items[i];
+		if (item.scope > llvm.db_scope)
+		{
+			item = llvm.db_items[--llvm.num_db_items];
+			--i;
+		}
+	}
 }
 
 void db_add_type(LLVM &llvm, const GGToken &identifier, llvm::Type *type) {
@@ -134,6 +145,7 @@ void db_add_type(LLVM &llvm, const GGToken &identifier, llvm::Type *type) {
 	item.itemType = IDENTIFIER_TYPE;
 	item.identifier = identifier.substring;
 	item.type = type;
+	item.scope = llvm.db_scope;
 }
 
 //void db_add_global_variable(LLVM &llvm, const GGToken &identifier, llvm::Value *) {
@@ -148,6 +160,7 @@ void db_add_variable(LLVM &llvm, const GGToken &identifier, llvm::Value *value) 
 	item.itemType = IDENTIFIER_VARIABLE;
 	item.identifier = identifier.substring;
 	item.value = value;
+	item.scope = llvm.db_scope;
 }
 
 void db_add_function(LLVM &llvm, const GGToken &identifier, llvm::Function *function) {
@@ -158,6 +171,7 @@ void db_add_function(LLVM &llvm, const GGToken &identifier, llvm::Function *func
 	item.itemType = IDENTIFIER_FUNCTION;
 	item.identifier = identifier.substring;
 	item.function = function;
+	item.scope = llvm.db_scope;
 }
 
 //llvm::Value *emit_expression(LLVM &llvm, const GGToken &expression);
@@ -290,13 +304,9 @@ int string_literal_to_char_data(char *data, const GGSubString &substring) {
 				data[n++] = '\a';
 				break;
 			default:
+			//case 'x': {
 				// TODO, octal and hex values
 				halt();
-			//case 'x': {
-			//	const char *end = first_non_hex()
-			//} break;
-			//default:
-			//	if ('isdigit(')
 			}
 			++i;
 		} else {
@@ -520,12 +530,13 @@ llvm::Value *emit_lvalue_array_dereference(LLVM &llvm, const GGToken &token) {
 
 	llvm::Value *indexVal = emit_rvalue_expression(llvm, index_expr);
 	assert(indexVal);
+	llvm::Value *zero = llvm::ConstantInt::get(llvm::IntegerType::get(*llvm.context, 32), 0, SIGNED);
 
-	//Value *idxs[] = { &indexValue, 1 };
-	//int num_idxs = ARRAYSIZE(idxs);
-	//llvm::ArrayRef<Value *> array_ref = to_array_ref(idxs, num_idxs);
+	llvm::Value *idxs[] = { indexVal };
+	int num_idxs = 1; //ARRAYSIZE(idxs);
+	llvm::ArrayRef<llvm::Value *> array_ref = to_array_ref(idxs, num_idxs);
 
-	return llvm.builder->CreateGEP(lhsVal, indexVal);
+	return llvm.builder->CreateGEP(lhsVal, array_ref);
 }
 
 llvm::Value *emit_rvalue_array_dereference(LLVM &llvm, const GGToken &array_dereference) {
@@ -879,6 +890,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
 	const GGToken &function_params      = function_definition.subtokens[2];
 	const GGToken &function_body        = function_definition.subtokens[3];
 
+
 	llvm::Type *retval_type = get_type(llvm, function_return_type);
 	llvm::FunctionType *functionType;
 	if (function_params.num_subtokens == 0) 
@@ -902,6 +914,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, llvm.module);
 	assert(function);
 
+	db_push_scope(llvm);
 	llvm::BasicBlock *entry = llvm::BasicBlock::Create(*llvm.context, "", function);
 	llvm.builder->SetInsertPoint(entry);
 
@@ -942,6 +955,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
 			halt();
 		}
 	}
+	db_pop_scope(llvm);
 
 	//verifyFunction(*function);
 

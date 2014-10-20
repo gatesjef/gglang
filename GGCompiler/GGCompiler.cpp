@@ -1399,16 +1399,16 @@ GGToken parse_type_declaration(const GGParseInput &input) {
 	  case '[': {
 		  static const ParseFn sequence[] = { parse_left_bracket, parse_constexpr, parse_right_bracket };
 		  static const int num_sequence = ARRAYSIZE(sequence);
-		  GGToken array_subscript = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_ARRAY_SUBSCRIPT, cur_input);
+		  GGToken array_subscript = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND, cur_input);
 		  if (ParseOuputIsFalse(array_subscript )) return PARSE_FALSE;
 		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_ARRAY_TYPE, 2);
-		  newLhs.info = lhs.info;
-		  newLhs.next = lhs.next;
 		  newLhs.subtokens[0] = lhs;
-		  newLhs.subtokens[1] = array_subscript;
+		  newLhs.subtokens[1] = array_subscript.subtokens[0];
 		  newLhs.num_subtokens = 2;
 		  cur_input.data = array_subscript.next;
 		  cur_input.info = array_subscript.info;
+		  newLhs.info = lhs.info;
+		  newLhs.next = lhs.next;
 		  lhs = newLhs;
 	  } break;
 	  case '(': {
@@ -1421,13 +1421,13 @@ GGToken parse_type_declaration(const GGParseInput &input) {
 		  GGToken param_type_list = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND, cur_input);
 		  if (ParseOuputIsFalse(param_type_list)) return PARSE_FALSE;
 		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_FUNCTION_TYPE, 2);
-		  newLhs.info = lhs.info;
-		  newLhs.next = lhs.next;
 		  newLhs.subtokens[0] = lhs;
 		  newLhs.subtokens[1] = param_type_list.subtokens[0];
 		  newLhs.num_subtokens = 2;
 		  cur_input.data = param_type_list.next;
 		  cur_input.info = param_type_list.info;
+		  newLhs.info = lhs.info;
+		  newLhs.next = lhs.next;
 		  lhs = newLhs;
 	  } break;
 	  default:
