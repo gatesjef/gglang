@@ -5,13 +5,20 @@ llvm_type i32 {
   i32 
 }
 
+llvm_type i8 { 
+  i8
+}
+
 extern i32 putchar(i32 c);
+extern i32 puts(i8* s);
 
 i32 main() {
-	putchar(72);	// H
-	putchar(69);	// E
-	putchar(76);	// L
-	putchar(76);	// L
-	putchar(79);	// O
+	i8* y = "Hello world!";
+	puts(y);
+	//putchar(72);	// H
+	//putchar(69);	// E
+	//putchar(76);	// L
+	//putchar(76);	// L
+	//putchar(79);	// O
 	return 1;
 }

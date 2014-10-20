@@ -420,11 +420,44 @@ GGToken parse_numeric_literal(const GGParseInput &input)
   return parse_first_of(numeric_literals, num_literals, input);
 }
 
+GGToken parse_string_literal(const GGParseInput &input) {
+	GGParseInput cur_input = input;
+	if (*cur_input.data != '\"') return PARSE_FALSE;
+	cur_input.data++;
+
+	while(1){
+		char c = *cur_input.data;
+		if (c == 0) {
+			return PARSE_FALSE;
+		} else if (c == '\"') {
+			GGToken retval = {};
+			retval.token = TOKEN_LITERAL_STRING;
+			retval.substring.start = input.data + 1;
+			retval.substring.length = cur_input.data - (retval.substring.start);
+			retval.next = cur_input.data + 1;
+			retval.info = cur_input.info;
+			return retval;
+		} else if (c == '\\') {
+			if (isDigit(cur_input.data[1])) {
+				cur_input.data += 2;
+				while (isDigit(*cur_input.data)) {
+					cur_input.data++;
+				}
+			} else {
+				cur_input.data++;
+			}
+		} else {
+			cur_input.data++;
+		}
+	}
+	
+}
+
 GGToken parse_literal(const GGParseInput &input)
 {
   static const ParseFn literals[] = { 
     parse_numeric_literal, 
-    //TODO parse_string_literal, 
+    parse_string_literal, 
     //TODO parse_char_literal, 
   };
   static const int num_literals = ARRAYSIZE(literals);
@@ -1356,10 +1389,11 @@ GGToken parse_type_declaration(const GGParseInput &input) {
 	  case '*': {
 		  //GGOutput pointer_symbol = parse_pointer_symbol();
 		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_POINTER_TYPE, 1);
-		  newLhs.subtokens[0] = lhs;
-		  newLhs.info = lhs.info;
-		  newLhs.next = lhs.next;
 		  cur_input.data++;
+		  newLhs.subtokens[0] = lhs;
+		  newLhs.num_subtokens = 1;
+		  newLhs.info = lhs.info;
+		  newLhs.next = cur_input.data;
 		  lhs = newLhs;
 	  } break;
 	  case '[': {
@@ -1372,6 +1406,7 @@ GGToken parse_type_declaration(const GGParseInput &input) {
 		  newLhs.next = lhs.next;
 		  newLhs.subtokens[0] = lhs;
 		  newLhs.subtokens[1] = array_subscript;
+		  newLhs.num_subtokens = 2;
 		  cur_input.data = array_subscript.next;
 		  cur_input.info = array_subscript.info;
 		  lhs = newLhs;
@@ -1390,6 +1425,7 @@ GGToken parse_type_declaration(const GGParseInput &input) {
 		  newLhs.next = lhs.next;
 		  newLhs.subtokens[0] = lhs;
 		  newLhs.subtokens[1] = param_type_list.subtokens[0];
+		  newLhs.num_subtokens = 2;
 		  cur_input.data = param_type_list.next;
 		  cur_input.info = param_type_list.info;
 		  lhs = newLhs;

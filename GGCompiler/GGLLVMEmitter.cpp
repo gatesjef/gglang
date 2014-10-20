@@ -50,6 +50,10 @@ llvm::ArrayRef<llvm::Type *> to_array_ref(llvm::Type **values, int num_values) {
 	return llvm::ArrayRef<llvm::Type *>(values, num_values);
 }
 
+llvm::ArrayRef<char> to_array_ref(char *values, int num_values) {
+	return llvm::ArrayRef<char>(values, num_values);
+}
+
 
 //llvm::Value *IdentifierDBLookup(LLVM &llvm, const GGToken &token) {
 //}
@@ -253,6 +257,110 @@ int get_integer_type_num_bits(const GGToken &integer_type) {
 //	return retval;
 //}
 
+int string_literal_to_char_data(char *data, const GGSubString &substring) {
+	int n = 0;
+	for(int i = 0; i < substring.length; ++i) {
+		if (substring.start[i] == '\\') {
+			++i;
+			switch(substring.start[i]) {
+			case '0':	
+				data[n++] = '\0';
+				break;
+			case '\\':	
+			case '\"':
+			case '\'':
+				data[n++] = substring.start[i];
+				break;
+			case 'n':
+				data[n++] = '\n';
+				break;
+			case 'r':
+				data[n++] = '\r';
+				break;
+			case 'b':
+				data[n++] = '\b';
+				break;
+			case 't':
+				data[n++] = '\t';
+				break;
+			case 'f':
+				data[n++] = '\f';
+				break;
+			case 'a':
+				data[n++] = '\a';
+				break;
+			default:
+				// TODO, octal and hex values
+				halt();
+			//case 'x': {
+			//	const char *end = first_non_hex()
+			//} break;
+			//default:
+			//	if ('isdigit(')
+			}
+			++i;
+		} else {
+			data[n++] = substring.start[i];
+		}
+	}
+
+	data[n++] = 0;
+	return n;
+}
+
+static const bool SIGNED = true;
+
+llvm::Value *emit_rvalue_string_literal(LLVM &llvm, const GGToken &string_literal) {
+	assert(string_literal.token == TOKEN_LITERAL_STRING);
+
+	//llvm::Type *type = get_type(llvm, type_token);
+	//llvm::StringRef name = to_string_ref(identifier.substring);
+
+	const int MAX_STRING_LENGTH = 1024;
+	assert(MAX_STRING_LENGTH - 1 > string_literal.substring.length);
+	char data[MAX_STRING_LENGTH];
+	int lenWithNull = string_literal_to_char_data(data, string_literal.substring);
+
+	//llvm::Type *i8Type = llvm::IntegerType::get(*llvm.context, 8);
+	//llvm::ArrayType *i8ArrayType = llvm::ArrayType::get(i8Type, string_literal.substring.length + 1);
+
+	GGSubString str_data;
+	str_data.start = data;
+	str_data.length = lenWithNull - 1;
+	//llvm::ArrayRef<uint8_t> elts = to_array_ref(data, lenWithNull);
+	//llvm::Constant *initializer = llvm::ConstantDataArray::getString(*llvm.context, to_string_ref(str_data), false);
+	
+	//llvm::Value *global_string = llvm.builder->CreateGlobalString(to_string_ref(str_data));
+	//llvm::Value *
+
+	llvm::Value *array_value = llvm.builder->CreateGlobalString(to_string_ref(str_data));
+	llvm::Value *zero = llvm::ConstantInt::get(llvm::IntegerType::get(*llvm.context, 32), 0, SIGNED);
+	llvm::Value *zeros[] = {zero, zero};
+	llvm::Value *i8pointer = llvm.builder->CreateGEP(array_value, to_array_ref(zeros, 2));
+
+	//llvm::Value *lvalue = emit_lvalue_identifier(llvm, identifier);
+	//llvm::Value *rvalue = llvm.builder->CreateLoad(i8pointer);
+	return i8pointer;
+
+	//llvm::ConstantArray::get(i8ArrayType, data);
+	//llvm::Value *value = new llvm::GlobalVariable(*llvm.module, i8ArrayType, true, llvm::GlobalVariable::LinkOnceAnyLinkage, initializer);
+
+	//llvm.module->getOrInsertGlobal(
+	//  
+	//  ) GlobalList.push_back(value);
+	//db_add_variable(llvm, identifier, value);
+
+	//int num_bits = get_integer_type_num_bits(integer_literal);
+
+	//llvm::IntegerType *type = llvm::IntegerType::get(*llvm.context, num_bits);
+	//llvm::StringRef str = to_string_ref(integer_literal.substring);
+
+	//const int RADIX = 10;
+	//llvm::Value *retval = llvm::ConstantInt::get(type, str, RADIX);
+	//return retval;
+	//return value;
+}
+
 llvm::Value *emit_rvalue_integer_literal(LLVM &llvm, const GGToken &integer_literal) {
 	assert(integer_literal.token == TOKEN_LITERAL_INTEGER);
 	int num_bits = get_integer_type_num_bits(integer_literal);
@@ -298,8 +406,6 @@ llvm::Value *emit_lvalue_unary_op(LLVM &llvm, const GGToken &token) {
 
 	return NULL;
 }
-
-static const bool SIGNED = true;
 
 llvm::Value *emit_rvalue_unary_op(LLVM &llvm, const GGToken &token) {
 	assert(token.num_subtokens == 2);
@@ -506,13 +612,13 @@ llvm::Value *emit_rvalue_member_identifier(LLVM &llvm, const GGToken &member_ide
 llvm::Value *emit_lvalue_expression(LLVM &llvm, const GGToken &expression) {
 	switch(expression.token) {
 	case TOKEN_COMPOUND_UNARY_OPERATION:
-	return emit_lvalue_unary_op(llvm, expression);
+		return emit_lvalue_unary_op(llvm, expression);
 	case TOKEN_COMPOUND_ARRAY_INDEX:
-	return emit_lvalue_array_dereference(llvm, expression);
+		return emit_lvalue_array_dereference(llvm, expression);
 	case TOKEN_COMPOUND_MEMBER_IDENTIFIER:
-	return emit_lvalue_member_identifier(llvm, expression);
+		return emit_lvalue_member_identifier(llvm, expression);
 	case TOKEN_IDENTIFIER:
-	return emit_lvalue_identifier(llvm, expression);
+		return emit_lvalue_identifier(llvm, expression);
 	case TOKEN_COMPOUND_BINARY_OPERATION:
 	//return emit_expression_binary_op(llvm, expression);
 	case TOKEN_COMPOUND_UNARY_POST_OPERATION:
@@ -522,7 +628,7 @@ llvm::Value *emit_lvalue_expression(LLVM &llvm, const GGToken &expression) {
 	case TOKEN_LITERAL_INTEGER:
 	//return emit_integer_literal(llvm, expression);
 	default:
-	halt();
+		halt();
 	}
 
 	return NULL;
@@ -531,21 +637,23 @@ llvm::Value *emit_lvalue_expression(LLVM &llvm, const GGToken &expression) {
 llvm::Value *emit_rvalue_expression(LLVM &llvm, const GGToken &expression) {
 	switch(expression.token) {
 	case TOKEN_COMPOUND_UNARY_OPERATION:
-	return emit_rvalue_unary_op(llvm, expression);
+		return emit_rvalue_unary_op(llvm, expression);
 	case TOKEN_COMPOUND_BINARY_OPERATION:
-	return emit_rvalue_binary_op(llvm, expression);
+		return emit_rvalue_binary_op(llvm, expression);
 	case TOKEN_COMPOUND_ARRAY_INDEX:
-	return emit_rvalue_array_dereference(llvm, expression);
+		return emit_rvalue_array_dereference(llvm, expression);
 	case TOKEN_COMPOUND_UNARY_POST_OPERATION:
-	return emit_rvalue_unary_post_op(llvm, expression);
+		return emit_rvalue_unary_post_op(llvm, expression);
 	case TOKEN_COMPOUND_MEMBER_IDENTIFIER:
-	return emit_rvalue_member_identifier(llvm, expression);
+		return emit_rvalue_member_identifier(llvm, expression);
 	case TOKEN_COMPOUND_FUNCTION_CALL:
-	return emit_rvalue_function_call(llvm, expression);
+		return emit_rvalue_function_call(llvm, expression);
 	case TOKEN_LITERAL_INTEGER:
-	return emit_rvalue_integer_literal(llvm, expression);
+		return emit_rvalue_integer_literal(llvm, expression);
+	case TOKEN_LITERAL_STRING:
+		return emit_rvalue_string_literal(llvm, expression);
 	case TOKEN_IDENTIFIER:
-	return emit_rvalue_identifier(llvm, expression);
+		return emit_rvalue_identifier(llvm, expression);
 
 	//case EXPRESSION_BINARY_OP;
 	//case EXPRESSION_UNARY_OP;
@@ -556,7 +664,7 @@ llvm::Value *emit_rvalue_expression(LLVM &llvm, const GGToken &expression) {
 	//case EXPRESSION_STRING_LITERAL;
 	//case EXPRESSION_FLOAT_LITERAL;
 	default:
-	halt();
+		halt();
 	}
 
 	return NULL;
@@ -648,7 +756,7 @@ int get_param_types(LLVM &llvm, const GGToken &params, llvm::Type **types, int m
 {
 	assert(params.num_subtokens < maxParams);
 	for(int i = 0; i< params.num_subtokens; ++i) {
-	types[i] = emit_param_type(llvm, params.subtokens[i]);
+		types[i] = emit_param_type(llvm, params.subtokens[i]);
 	}
 
 	return params.num_subtokens;
@@ -701,30 +809,30 @@ void llvm_emit_assignment_statement(LLVM &llvm, const GGToken &assigment) {
 
 	switch(assigment_op.substring.start[0]) {
 	case '=': {
-	llvm.builder->CreateStore(rhs, lhs);
+		llvm.builder->CreateStore(rhs, lhs);
 	} break;
 	case '+': {
-	llvm::Value *newVal = llvm.builder->CreateAdd(r_lhs, rhs);
-	llvm.builder->CreateStore(newVal, lhs);
+		llvm::Value *newVal = llvm.builder->CreateAdd(r_lhs, rhs);
+		llvm.builder->CreateStore(newVal, lhs);
 	} break;
 	case '-': {
-	llvm::Value *newVal = llvm.builder->CreateSub(r_lhs, rhs);
-	llvm.builder->CreateStore(newVal, lhs);
+		llvm::Value *newVal = llvm.builder->CreateSub(r_lhs, rhs);
+		llvm.builder->CreateStore(newVal, lhs);
 	} break;
 	case '*': {
-	llvm::Value *newVal = llvm.builder->CreateMul(r_lhs, rhs);
-	llvm.builder->CreateStore(newVal, lhs);
+		llvm::Value *newVal = llvm.builder->CreateMul(r_lhs, rhs);
+		llvm.builder->CreateStore(newVal, lhs);
 	} break;
 	case '/': {
-	llvm::Value *newVal = llvm.builder->CreateSDiv(r_lhs, rhs);
-	llvm.builder->CreateStore(newVal, lhs);
+		llvm::Value *newVal = llvm.builder->CreateSDiv(r_lhs, rhs);
+		llvm.builder->CreateStore(newVal, lhs);
 	} break;
 	case '%': {
-	llvm::Value *newVal = llvm.builder->CreateSRem(r_lhs, rhs);
-	llvm.builder->CreateStore(newVal, lhs);
+		llvm::Value *newVal = llvm.builder->CreateSRem(r_lhs, rhs);
+		llvm.builder->CreateStore(newVal, lhs);
 	} break;
 	default:
-	halt();
+		halt();
 	}
 }
 
@@ -758,7 +866,7 @@ void llvm_emit_external_function_declaration(LLVM &llvm, const GGToken &function
 	llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, llvm.module);
 	assert(function);
 
-	function->addFnAttr("nounwind");
+	//function->addFnAttr("nounwind");
 
 	db_add_function(llvm, function_identifier, function);
 }
@@ -839,7 +947,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
 
 	//llvm::Function *function = lookup_function(function_definition);
 	//llvm_emit_function_body(llvm, function, function_body);
-	function->addFnAttr("nounwind");
+	//function->addFnAttr("nounwind");
 
 	db_add_function(llvm, function_identifier, function);
 }
