@@ -1287,6 +1287,10 @@ GGToken parse_enum_exact(const GGParseInput &input) {
   return parse_exact("enum", TOKEN_DISCARD, input);
 }
 
+GGToken parse_extern_exact(const GGParseInput &input) {
+	return parse_exact("extern", TOKEN_DISCARD, input);
+}
+
 
 //T[,,] = tuple(T*, int size1, int stride1, int size2, int stride2, int size3)
 //  T[,5] = tuple(T*, int size1) // stride = 5*sizeof(T)
@@ -1353,6 +1357,8 @@ GGToken parse_type_declaration(const GGParseInput &input) {
 		  //GGOutput pointer_symbol = parse_pointer_symbol();
 		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_POINTER_TYPE, 1);
 		  newLhs.subtokens[0] = lhs;
+		  newLhs.info = lhs.info;
+		  newLhs.next = lhs.next;
 		  cur_input.data++;
 		  lhs = newLhs;
 	  } break;
@@ -1362,6 +1368,8 @@ GGToken parse_type_declaration(const GGParseInput &input) {
 		  GGToken array_subscript = parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_ARRAY_SUBSCRIPT, cur_input);
 		  if (ParseOuputIsFalse(array_subscript )) return PARSE_FALSE;
 		  GGToken newLhs = ParseOutputAlloc(TOKEN_COMPOUND_ARRAY_TYPE, 2);
+		  newLhs.info = lhs.info;
+		  newLhs.next = lhs.next;
 		  newLhs.subtokens[0] = lhs;
 		  newLhs.subtokens[1] = array_subscript;
 		  cur_input.data = array_subscript.next;
@@ -1415,7 +1423,8 @@ GGToken parse_struct_field(const GGParseInput &input) {
   static const ParseFn declaration_part_sequence[] = { parse_type_declaration, parse_variable_identifier };
   static const int num_declaration_part = ARRAYSIZE(declaration_part_sequence);
 
-  GGToken declaration_token = parse_whitespace_separated_sequence(declaration_part_sequence, num_declaration_part, TOKEN_COMPOUND_VARIABLE_DEFINITION, input);
+  GGToken declaration_token = ParseOutputAlloc(TOKEN_COMPOUND_VARIABLE_DEFINITION, 3);
+  continue_parse_whitespace_separated_sequence(declaration_token, declaration_part_sequence, num_declaration_part, input);
   if (ParseOuputIsFalse(declaration_token)) {
     return PARSE_FALSE;
   }
@@ -1478,6 +1487,22 @@ GGToken parse_enum_definition(const GGParseInput &input) {
   static const int num_sequence = ARRAYSIZE(sequence);
   return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_ENUM_DEFINITION, input);
 }
+
+GGToken parse_extern_function_declaration(const GGParseInput &input) {
+	// identifier := expression;
+	static const ParseFn statements[] = {
+		parse_extern_exact,
+		parse_type_declaration,
+		parse_function_identifier,
+		parse_left_paren,
+		parse_function_params,
+		parse_right_paren,
+		parse_semicolon,
+	};
+	static const int num_statements = ARRAYSIZE(statements);
+	GGToken retval = parse_whitespace_separated_sequence(statements, num_statements, TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION, input);
+	return retval;
+};
 
 GGToken parse_type_definition(const GGParseInput &input) {
   // identifier := expression;
@@ -1638,6 +1663,7 @@ GGToken parse_program_statement(const GGParseInput &input) {
   static const ParseFn fns[] = { 
     //parse_nonsyntax_tokens,
 
+	parse_extern_function_declaration, 
     parse_type_definition, 
     parse_variable_definition, 
     parse_function_definition, 

@@ -1,110 +1,17 @@
 // main.gg
 // Hello comments!
 
-llvm_type void { 
-  void 
-}
-
 llvm_type i32 { 
   i32 
 }
 
-struct a_struct {
-  i32 x;
-  i32 y = -1;
+extern i32 putchar(i32 c);
+
+i32 main() {
+	putchar(72);	// H
+	putchar(69);	// E
+	putchar(76);	// L
+	putchar(76);	// L
+	putchar(79);	// O
+	return 1;
 }
-
-i32 a_global_variable = 2;
-
-void a_function() {
-}
-
-i32 a_function_with_params(i32 x) {
-  i32 a_variable = 2;
-  i32 a_unary_expr = -3;
-  i32 a_postfix_expression = a_variable++;
-  i32 a_binary_expr = a_variable + 10;
-  i32 a_complex_expr = +a_variable + -10;
-  i32 a_more_complex_expr = ++a_variable + -10 - a_variable-- + +-+-+-+12;
-
-  a_function();			// a function call
-  --a_variable;			// a prefix operator expression statement
-  a_variable++;			// a postfix operator expression statement
-
-  a_variable += a_variable;		// a compound assignment
-
-  //{					// a statement block
-  //  if (a_scoped_variable < 4)        // an if statement, a comparison expression
-  //    a_scoped_variable = 1;
-  //  else
-  //    a_scoped_variable = 2;
-  //}
-
-  // for (i32 i = 0; i < 10; ++i) {			// a for statement
-  // }
-
-  //a_type_inferred_variable = 2;
-  //a_float = 3.0; 
-  //a_suffixed_float = 3f; 
-  //a_big_float = 1e32; 
-  //a_scoped_variable := 3;             // reassignment
-  //a_float = f32:a_scoped_variable;    // a cast
-
-  return 4;                             // a return statement
-}
-
-
-//string a_string = "Hello World!";
-
-//import "cstdio" "libc.lib"            // a ffi
-
-//void main() {                         // an entry point
-//  printf(a_string);                   // a ffi call
-//}
-
-//i32[20] an_array;
-//i32[] a_slice = slice(an_array, 10, 4);
-//i32 *a_pointer = 
-//a_pointer := &a_variable;             // an address of
-//a_variable := *a_pointer;             // a dereference
-
-//i32 := llvm_type i32;                 // a primative type
-
-//i32 operator +{i32 a, i32 b) {        // an operator
-//  llvm {                              // inline llvm
-//  %x = add i32 %a %b                  // llvm-inparams
-//  }
-//
-//  return x;                           // llvm-outparams
-// }
-
-// /*
-// a
-// multi-line   /* a nested comment */
-// comment
-// */
-
-// switch statement
-// pass by ref
-// return by ref
-
-//struct a_struct {
-//  i32 a_member;
-//  i32 a_non_non_default_initalized_member = 21;
-//}
-
-//type a_function_pointer = void(void);
-//a_function_pointer foo = main;        // function pointer assignment;
-
-//a_struct a_constructed_struct = { a_member = 10, ... };
-
-//type v4xi32 = llvm_type { 4, i32 };   // a vector type
-
-//enum an_enum {
-//  AN_ENUM_VALUE,
-//  A_STRUCTURED_ENUM_VALUE(a_struct),
-//  AN_ASSIGNED_ENUM(a_struct) = 7, a_constructed_struct;
-//}
-
-// local functions
-// local types

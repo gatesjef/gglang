@@ -39,9 +39,9 @@ int main(int argc, char* argv[])
   //if (GGParseOutput.!= COMPILE_ERROR_NONE) {
   //	error(compile_results.error.error_string);
   //}
-
   GGLLVMEmitProgram(output);
+
+  //system("..\\me.exe");
 
   return 0;
 }
-
