@@ -9,14 +9,18 @@ llvm_type i8 {
   i8
 }
 
+extern i32 putchar(i32 c);
 extern i32 puts(i8* s);
 
-
 i32 main() {
-	i8* s = "Hello world!";
-	puts(s);
-
-	return 1;
+  i32[10] r;
+  //r[0] = 1;
+  //r[1] = r[0] + 1;
+  //putchar(r[0] + 64);
+  //putchar(r[1] + 64);
+  i8 *str = "Hello";
+  puts(str);
+  return 1;
 }
 
 //i8* z = "B";		// todo: array indexing
