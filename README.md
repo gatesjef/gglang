@@ -10,10 +10,9 @@ Inspired by this youtube series: https://www.youtube.com/watch?v=TH9VCN6UkyQ, GG
 Current features include:
 * inline llvm
 * any order declaration
+* c foreign function interface
 
 Planned features include:
-* any order identifier declaraion
-* c foreign function interface
 * incorperated build process
 * pass/return by reference
 * operator overloading
