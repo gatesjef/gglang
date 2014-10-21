@@ -612,6 +612,182 @@ llvm::Value *emit_rvalue_expression(LLVM &llvm, const GGToken &expression) {
   return NULL;
 }
 
+
+//Instruction *ParseInstruction(tokens);
+//
+int lines_to_instructions(const GGSubString *lines, int num_lines, llvm::Instruction **instructions) {
+  //TODO
+  return 0;
+}
+
+const int MAX_LLVM_LINES = 1024;
+
+int lines_to_llvm(LLVM &llvm, const GGSubString *lines, int num_lines) {
+  llvm::Instruction *instructions[MAX_LLVM_LINES];
+  int num_instructions = lines_to_instructions(lines, num_lines, instructions);
+  for(int i = 0; i < num_instructions; ++i) {
+    llvm.builder->Insert(instructions[i]); //.instruction, instruction.name);
+  }
+  // TODO
+  return 0;
+}
+
+enum LLVMReplacement {
+  LLVM_REPLACEMENT_NONE,
+  LLVM_REPLACEMENT_ASSIGNMENT,
+  LLVM_REPLACEMENT_EXPRESSION,
+};
+
+const char *find_char(const char *start, const char *end, char c) {
+  const char *result = (const char *)memchr(start, c, end-start);
+  return result;
+}
+
+const char *find_any_of(const char *start, const char *end, char *chars) {
+  for(const char *cur = start; cur != end; ++cur) {
+    for(const char *a_char = chars; *a_char != 0; ++a_char) {
+      if (*cur == *a_char) return cur;
+    }
+  }
+
+  return NULL;
+}
+
+LLVMReplacement matches_replacement(const GGSubString &line, GGSubString &token_str, GGSubString &old_lhs, GGSubString &old_rhs) {
+  const char *end = line.start + line.length;
+  const char *replacement = find_char(line.start, end, '$');
+  if (replacement == NULL) return LLVM_REPLACEMENT_NONE;
+
+  const char *space = find_any_of(replacement, end, " \t\r\n\0");
+  assert(space);
+
+  const char *equals = find_char(space, end, '=');
+
+  old_lhs.start = line.start;
+  old_lhs.length = replacement - old_lhs.start;
+
+  token_str.start = replacement + 1;
+  token_str.length = space - token_str.start;
+
+  old_rhs.start = space;
+  old_rhs.length = end - space;
+
+  if (equals == NULL) {
+    return LLVM_REPLACEMENT_EXPRESSION;
+  } else {
+    return LLVM_REPLACEMENT_ASSIGNMENT;
+  }
+}
+
+GGSubString format_substring(const char *, ...) {
+  //TODO
+  return GGSubString();
+}
+
+GGSubString to_type_str(llvm::Type *type) {
+  //TODO
+  return GGSubString();
+}
+
+llvm::Type *get_type(LLVM &llvm, const GGSubString &type) {
+  //TODO
+  return 0;
+}
+
+int substring_to_lines(const GGSubString &source, GGSubString *lines, int max_lines) {
+  //TODO
+  return 0;
+}
+
+int lines_replace_tokens(LLVM &llvm, GGSubString *lines, int num_lines, int max_lines) {
+  int temp_n = 0;
+  for(int i = 0; i < num_lines;) {
+    GGSubString &line = lines[i];
+
+    GGSubString old_lhs;
+    GGSubString token_str;
+    GGSubString old_rhs;
+    switch(matches_replacement(line, token_str, old_lhs, old_rhs)) {
+    case LLVM_REPLACEMENT_ASSIGNMENT: {
+      llvm::Type *type = get_type(llvm, token_str);
+      GGSubString type_str = to_type_str(type);
+      GGSubString new_line  = format_substring("%%%s.%d %s", old_lhs, token_str, temp_n, old_rhs);
+      GGSubString new_store = format_substring("store %s %%%s.%d %s* %%%s", type_str, token_str, temp_n, type_str, token_str);
+      //lines.remove(line);
+      //lines.insert(new_line);
+      //lines.insert(new_store);
+      //next = new_line;
+    } break;
+    case LLVM_REPLACEMENT_EXPRESSION: {
+      llvm::Type *type = get_type(llvm, token_str);
+      GGSubString type_str = to_type_str(type);
+      GGSubString new_load  = format_substring("%%%s.%d = load %s %%%s", token_str, temp_n, type_str, token_str);
+      GGSubString new_line  = format_substring("%s %s %%%s.%d %s", old_lhs, type_str, token_str, temp_n, old_rhs);
+      //lines.remove(line);
+      //lines.insert(new_load);
+      //lines.insert(new_line);
+      //next = new_line;
+    } break;
+    case LLVM_REPLACEMENT_NONE:
+      ++i;
+      break;
+    default:
+      halt();
+    }
+
+    ++temp_n;
+  }
+
+  //return lines.count
+  // TODO
+  return 0;
+}
+
+void emit_inline_llvm(LLVM &llvm, GGToken &inline_llvm) {
+  assert(inline_llvm.token == TOKEN_COMPOUND_INLINE_LLVM);
+  assert(inline_llvm.num_subtokens == 0);
+
+  // $token = *    --> %token.N = * 
+  //                   store type %token.N type* %token
+  // * $token *    --> %token.N = load %token.N
+  //                   * %token.N *
+
+  GGSubString lines[MAX_LLVM_LINES];
+
+  int temp_n = 0;
+  int num_lines = substring_to_lines(inline_llvm.substring, lines, MAX_LLVM_LINES);
+  num_lines = lines_replace_tokens(llvm, lines, num_lines, MAX_LLVM_LINES);
+  lines_to_llvm(llvm, lines, num_lines);
+
+  //char max_llvm[1024];
+  //int output_spot = 0;
+  //for(int i = 0; i < inline_llvm.substring.length; ++i) {
+  //  if (inline_llvm.substring.start[i] == '%') {
+  //    GGSubString token;
+  //    token.start = &inline_llvm.substring.start[i+1];
+  //    const char *end = find_first_non_token(token.start);
+  //    token.length = end - token.start;
+  //    const char *next_token = find_first_non_whitespace(end+1);
+  //    const char *end_of_line = find_first_end_of_line(end+1);
+
+  //    if (*next_token == '=') {
+
+  //    } else {            
+  //                                        
+  //    }
+
+  //    // 
+
+  //  } else {
+  //    max_llvm[output_spot++] = inline_llvm.substring.start[i]
+  //  }
+  //}
+
+  
+  
+}
+
+
 void llvm_emit_local_return(LLVM &llvm, GGToken &return_statement) {
   assert(return_statement.token == TOKEN_COMPOUND_RETURN_STATEMENT);
   assert(return_statement.num_subtokens == 1);
@@ -823,6 +999,9 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
     case TOKEN_COMPOUND_EXPRESSION_STATEMENT:
       assert(subtoken.num_subtokens == 1);
       emit_rvalue_expression(llvm, subtoken.subtokens[0]);
+      break;
+    case TOKEN_COMPOUND_INLINE_LLVM:
+      emit_inline_llvm(llvm, subtoken);
       break;
     default: 
       halt();

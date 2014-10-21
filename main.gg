@@ -9,6 +9,16 @@ llvm_type i8 {
   i8
 }
 
+
+//i8 add_i8(i8 a, i8 b) {
+//	i8 x;
+//	llvm {
+//		$x = add $a $b
+//	}
+//  return x;
+//}
+
+
 extern i32 putchar(i32 c);
 extern i32 puts(i8* s);
 
@@ -23,12 +33,11 @@ i32 main() {
   return 1;
 }
 
-//i8* z = "B";		// todo: array indexing
 //s[0] = z[0];
-//i8 n[10];			// todo: array delcaration;
 //i8 m[10] = {};	// todo: array initialization;
 //i8 *y = "Hi!";	// todo: global variables
-// todo other integer types
+// other integer type literals
+// operations todo other integer types
 // todo other integer literals
 // todo char literals
 // todo casts/conversions
