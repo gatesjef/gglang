@@ -9,27 +9,37 @@ llvm_type i8 {
   i8
 }
 
+i32 add_i32(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = add $a $b
+  }
+  return x;
+}
 
-//i8 add_i8(i8 a, i8 b) {
-//	i8 x;
-//	llvm {
-//		$x = add $a $b
-//	}
-//  return x;
-//}
+
+i8 add_i8(i8 a, i8 b) {
+  i8 x;
+  llvm {
+    $x = add $a $b
+  }
+  return x;
+}
 
 
 extern i32 putchar(i32 c);
 extern i32 puts(i8* s);
 
 i32 main() {
-  i32[10] r;
+  //i32[10] r;
   //r[0] = 1;
   //r[1] = r[0] + 1;
   //putchar(r[0] + 64);
   //putchar(r[1] + 64);
-  i8 *str = "Hello";
-  puts(str);
+  i32 x = add_i32(65, 10);
+  //i8 *str = "Hello";
+  //puts(str);
+  putchar(x);
   return 1;
 }
 

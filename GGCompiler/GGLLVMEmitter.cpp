@@ -69,6 +69,16 @@ bool substring_cmp(const GGSubString &substring, const GGSubString &substring0) 
   return strncmp(substring.start, substring0.start, substring0.length) == 0;
 }
 
+void *db_lookup_any(LLVM &llvm, const GGSubString &substring) {
+  for(int i = 0; i < llvm.num_db_items; ++i) {
+    DBItem &item = llvm.db_items[i];
+    if (substring_cmp(item.identifier, substring)) {
+      return item.value;
+    }
+  }
+  return NULL;
+}
+
 void *db_lookup_any(LLVM &llvm, const GGToken &token) {
   for(int i = 0; i < llvm.num_db_items; ++i) {
     DBItem &item = llvm.db_items[i];
@@ -76,6 +86,19 @@ void *db_lookup_any(LLVM &llvm, const GGToken &token) {
       return item.value;
     }
   }
+  return NULL;
+}
+
+llvm::Value *db_lookup_variable(LLVM &llvm, const GGSubString &substring)
+{
+  for(int i = 0; i < llvm.num_db_items; ++i) {
+    DBItem &item = llvm.db_items[i];
+    if (substring_cmp(item.identifier, substring)) {
+      assert(item.itemType == IDENTIFIER_VARIABLE);
+      return item.value;
+    }
+  }
+  halt();
   return NULL;
 }
 
@@ -148,9 +171,41 @@ void db_add_type(LLVM &llvm, const GGToken &identifier, llvm::Type *type) {
   item.scope = llvm.db_scope;
 }
 
-//void db_add_global_variable(LLVM &llvm, const GGToken &identifier, llvm::Value *) {
-//  // TODO
-//}
+enum LLVMTokenType {
+  LLVM_TOKEN_NONE,
+  //LLVM_TOKEN_EXACT,
+  LLVM_EQUALS,
+  LLVM_LOCAL_IDENTIFIER,
+  LLVM_BOUND_IDENTIFIER,
+  LLVM_GLOBAL_IDENTIFIER,
+  LLVM_TOKEN_NUMERIC,
+  LLVM_TOKEN_ALPHA,
+  LLVM_TOKEN_EOL,
+
+  LLVM_ADD,
+  LLVM_SUB,
+  LLVM_MUL,
+  LLVM_SDIV,
+  LLVM_SREM,
+  LLVM_UDIV,
+  LLVM_UREM,
+};
+
+struct LLVMToken {
+  LLVMTokenType type;
+  GGSubString substring;
+};
+
+void db_add_llvm_variable(LLVM &llvm, const LLVMToken &token, llvm::Value *value) {
+  void *existing = db_lookup_any(llvm, token.substring);
+  assert(existing == NULL);
+  assert(llvm.num_db_items < MAX_DB_ITEMS);
+  DBItem &item = llvm.db_items[llvm.num_db_items++];
+  item.itemType = IDENTIFIER_VARIABLE;
+  item.identifier = token.substring;
+  item.value = value;
+  item.scope = llvm.db_scope;
+}
 
 void db_add_variable(LLVM &llvm, const GGToken &identifier, llvm::Value *value) {
   void *existing = db_lookup_any(llvm, identifier);
@@ -220,10 +275,10 @@ llvm::Value *emit_rvalue_function_call(LLVM &llvm, const GGToken &function_call)
   return retval;
 }
 
-int get_integer_type_num_bits(const GGToken &integer_type) {
-  //TODO
-  return 32;
-}
+//int get_integer_type_num_bits(const GGToken &integer_type) {
+//  //TODO
+//  return 32;
+//}
 
 //llvm::Value *emit_integer_literal(LLVM &llvm, const GGParseOutput &integer_literal) {
 //	assert(integer_literal.token == TOKEN_COMPOUND_LITERAL_INTEGER);
@@ -341,7 +396,7 @@ llvm::Value *emit_rvalue_string_literal(LLVM &llvm, const GGToken &string_litera
 
 llvm::Value *emit_rvalue_integer_literal(LLVM &llvm, const GGToken &integer_literal) {
   assert(integer_literal.token == TOKEN_LITERAL_INTEGER);
-  int num_bits = get_integer_type_num_bits(integer_literal);
+  int num_bits = 32; //get_integer_type_num_bits(integer_literal);
 
   llvm::IntegerType *type = llvm::IntegerType::get(*llvm.context, num_bits);
   llvm::StringRef str = to_string_ref(integer_literal.substring);
@@ -622,14 +677,12 @@ int lines_to_instructions(const GGSubString *lines, int num_lines, llvm::Instruc
 
 const int MAX_LLVM_LINES = 1024;
 
-int lines_to_llvm(LLVM &llvm, const GGSubString *lines, int num_lines) {
+void lines_to_llvm(LLVM &llvm, const GGSubString *lines, int num_lines) {
   llvm::Instruction *instructions[MAX_LLVM_LINES];
   int num_instructions = lines_to_instructions(lines, num_lines, instructions);
   for(int i = 0; i < num_instructions; ++i) {
     llvm.builder->Insert(instructions[i]); //.instruction, instruction.name);
   }
-  // TODO
-  return 0;
 }
 
 enum LLVMReplacement {
@@ -679,114 +732,555 @@ LLVMReplacement matches_replacement(const GGSubString &line, GGSubString &token_
   }
 }
 
-GGSubString format_substring(const char *, ...) {
-  //TODO
-  return GGSubString();
+void llvm_lex_whitespace(const char *&cur, const char *end) {
+  while (cur != end) {
+    if (*cur == ' ' || *cur == '\t' ) ++cur;
+    else break;
+  }
 }
 
-GGSubString to_type_str(llvm::Type *type) {
-  //TODO
-  return GGSubString();
+void llvm_lex_comment(const char *&cur, const char *end) {
+  while (cur != end) {
+    if (*cur != '\r' && *cur == '\n' ) ++cur;
+    else break;
+  }
 }
 
-llvm::Type *get_type(LLVM &llvm, const GGSubString &type) {
-  //TODO
-  return 0;
+void llvm_lex_exact(LLVMToken &token, const char *&cur, const char *end) {
+  switch(*cur) {
+  case '=': 
+    token.type = LLVM_EQUALS;
+    break;
+  default:
+    halt();
+  }
+  token.substring.start = cur++;
+  token.substring.length = 1;
 }
 
-int substring_to_lines(const GGSubString &source, GGSubString *lines, int max_lines) {
-  //TODO
-  return 0;
-}
-
-int lines_replace_tokens(LLVM &llvm, GGSubString *lines, int num_lines, int max_lines) {
-  int temp_n = 0;
-  for(int i = 0; i < num_lines;) {
-    GGSubString &line = lines[i];
-
-    GGSubString old_lhs;
-    GGSubString token_str;
-    GGSubString old_rhs;
-    switch(matches_replacement(line, token_str, old_lhs, old_rhs)) {
-    case LLVM_REPLACEMENT_ASSIGNMENT: {
-      llvm::Type *type = get_type(llvm, token_str);
-      GGSubString type_str = to_type_str(type);
-      GGSubString new_line  = format_substring("%%%s.%d %s", old_lhs, token_str, temp_n, old_rhs);
-      GGSubString new_store = format_substring("store %s %%%s.%d %s* %%%s", type_str, token_str, temp_n, type_str, token_str);
-      //lines.remove(line);
-      //lines.insert(new_line);
-      //lines.insert(new_store);
-      //next = new_line;
-    } break;
-    case LLVM_REPLACEMENT_EXPRESSION: {
-      llvm::Type *type = get_type(llvm, token_str);
-      GGSubString type_str = to_type_str(type);
-      GGSubString new_load  = format_substring("%%%s.%d = load %s %%%s", token_str, temp_n, type_str, token_str);
-      GGSubString new_line  = format_substring("%s %s %%%s.%d %s", old_lhs, type_str, token_str, temp_n, old_rhs);
-      //lines.remove(line);
-      //lines.insert(new_load);
-      //lines.insert(new_line);
-      //next = new_line;
-    } break;
-    case LLVM_REPLACEMENT_NONE:
-      ++i;
-      break;
+void llvm_lex_identifier(LLVMToken &token, const char *&cur, const char *end) {
+  switch(*cur) {
+    case '%':
+      token.type = LLVM_LOCAL_IDENTIFIER; break;
+    case '$':
+      token.type = LLVM_BOUND_IDENTIFIER; break;
+    case '@':
+      token.type = LLVM_GLOBAL_IDENTIFIER; break;
     default:
       halt();
-    }
-
-    ++temp_n;
   }
 
-  //return lines.count
-  // TODO
-  return 0;
+  token.substring.start = ++cur;
+  while (cur != end) {
+    if (isalpha(*cur) || isdigit(*cur) || *cur == '.') ++cur;
+    else break;
+  }
+
+  token.substring.length = cur - token.substring.start;
 }
 
-void emit_inline_llvm(LLVM &llvm, GGToken &inline_llvm) {
+void llvm_lex_numeric(LLVMToken &token, const char *&cur, const char *end) {
+  token.type = LLVM_TOKEN_NUMERIC;
+  token.substring.start = cur;
+  while (cur != end) {
+    if (isdigit(*cur)) ++cur;
+    else break;
+  }
+  token.substring.length = cur - token.substring.start;
+}
+
+struct LLVMInstructionDef {
+  const char *str;
+  LLVMTokenType type;
+};
+
+bool llvm_lex_instruction(LLVMToken &token, const char *&cur, const char *end) {
+  static const LLVMInstructionDef LLVM_INSTRUCTIONS[] = {
+    {"add", LLVM_ADD, },
+    {"sub", LLVM_SUB, },
+    {"mul", LLVM_MUL, },
+    {"sdiv", LLVM_SDIV, },
+    {"srem", LLVM_SREM, },
+    {"udiv", LLVM_UDIV, },
+    {"urem", LLVM_UREM, },
+  };
+  static const int NUM_INSTRUCTIONS = 7; // ARRAYSIZE(LLVM_INSTRUCTIONS);
+
+  for(int i = 0; i < NUM_INSTRUCTIONS; ++i) {
+    const LLVMInstructionDef &instructionDef = LLVM_INSTRUCTIONS[i];
+    int length = strlen(instructionDef.str);
+    if (length > end - cur) continue;
+
+    if (strncmp(cur, instructionDef.str, length) == 0) {
+      token.type = instructionDef.type;
+      token.substring.start = cur;
+      token.substring.length = length;
+      cur += length;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void llvm_lex_alpha(LLVMToken &token, const char *&cur, const char *end) {
+  if (llvm_lex_instruction(token, cur, end)) return;
+
+  token.type = LLVM_TOKEN_ALPHA;
+  token.substring.start = cur;
+  while (cur != end) {
+    if (isdigit(*cur) || isalpha(*cur)) ++cur;
+    else break;
+  }
+  token.substring.length = cur - token.substring.start;
+}
+
+void llvm_lex_end_of_line(LLVMToken &token, const char *&cur, const char *end) {
+  token.type = LLVM_TOKEN_EOL;
+  token.substring.start = cur;
+  if ((cur[1] == '\r' || cur[1] == '\n') && cur[1] != cur[0]) {
+    ++cur;
+  }
+  ++cur;
+
+  token.substring.length = cur- token.substring.start;
+}
+
+int raw_llvm_lex(LLVM &llvm, const GGSubString &raw_llvm, LLVMToken *tokens, int max_tokens) {
+  int n = 0;
+  const char * end = raw_llvm.start + raw_llvm.length;
+  for(const char *cur = raw_llvm.start; cur < end;) {
+    assert(n < max_tokens);
+    llvm_lex_whitespace(cur, end);
+
+    if (cur == end) break;
+
+    switch (*cur) {
+    case '\r':
+    case '\n':
+      llvm_lex_end_of_line(tokens[n++], cur, end);
+      break;
+    case '=':
+    case '(':
+    case ')':
+    case '{':
+    case '}':
+      llvm_lex_exact(tokens[n++], cur, end);
+      break;
+    case ';':
+      llvm_lex_comment(cur, end);
+      break;
+    case '%':
+    case '$':
+    case '@':
+      llvm_lex_identifier(tokens[n++], cur, end);
+      break;
+    default:
+      if (isdigit(*cur))
+        llvm_lex_numeric(tokens[n++], cur, end);
+      else if (isalpha(*cur))
+        llvm_lex_alpha(tokens[n++], cur, end);
+      else
+        halt();
+    }
+  }
+
+  return n;
+}
+
+//void llvm_parse(const LLVMToken *tokens, int num_tokens) {
+//  for(int i = 0; i < 
+//}
+//
+//struct LLVMStatement {
+//  LLVMStatementType type;
+//}
+
+
+
+llvm::Value *get_variable(LLVM &llvm, const LLVMToken &lhs) {
+  return db_lookup_variable(llvm, lhs.substring);
+}
+
+llvm::Value *llvm_emit_rvalue(LLVM &llvm, const LLVMToken &rhs) {
+  llvm::Value *variable = get_variable(llvm, rhs);
+
+  if (rhs.type == LLVM_BOUND_IDENTIFIER) {
+    llvm::Value *value = llvm.builder->CreateLoad(variable);
+    return value;
+  } else {
+    return variable;
+  }
+}
+
+void llvm_emit_lvalue(LLVM &llvm, const LLVMToken &lhs, llvm::Value *value) {
+  if (lhs.type == LLVM_BOUND_IDENTIFIER) {
+    llvm::Value *variable = get_variable(llvm, lhs);
+    llvm.builder->CreateStore(value, variable);
+  } else {
+    db_add_llvm_variable(llvm, lhs, value);
+  }
+}
+
+struct LLVMStatement {
+  //LLVMStatementType type;
+  //LLVMToken *subtokens;
+  //int num_subtokens;
+  LLVMToken result;
+  LLVMToken instruction;
+  LLVMToken lhs;
+  LLVMToken rhs;
+
+};
+
+void llvm_emit_add(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateAdd(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
+void llvm_emit_sub(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateSub(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
+void llvm_emit_mul(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateMul(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+void llvm_emit_sdiv(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateSDiv(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+void llvm_emit_srem(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateSRem(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+void llvm_emit_udiv(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateUDiv(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+void llvm_emit_urem(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateURem(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
+void emit_raw_llvm_statement(LLVM &llvm, const LLVMStatement &statement) {
+  switch(statement.instruction.type) {
+  case LLVM_ADD:
+    llvm_emit_add(llvm, statement);
+    break;
+  case LLVM_SUB:
+    llvm_emit_sub(llvm, statement);
+    break;
+  case LLVM_MUL:
+    llvm_emit_mul(llvm, statement);
+    break;
+  case LLVM_SDIV:
+    llvm_emit_sdiv(llvm, statement);
+    break;
+  case LLVM_SREM:
+    llvm_emit_srem(llvm, statement);
+    break;
+  case LLVM_UDIV:
+    llvm_emit_udiv(llvm, statement);
+    break;
+  case LLVM_UREM:
+    llvm_emit_urem(llvm, statement);
+    break;
+  default:
+    halt();
+  }
+}
+
+void emit_raw_llvm_statements(LLVM &llvm, const LLVMStatement *statement, int num_statements) {
+  for(int i = 0; i < num_statements; ++i) {
+    emit_raw_llvm_statement(llvm, statement[i]);
+  }
+}
+
+LLVMToken parse_consume(LLVMTokenType type, const LLVMToken *tokens, int &i) {
+  const LLVMToken &token = tokens[i];
+  LLVMToken retval = {};
+  if (token.type == type) {
+    retval = token;
+    ++i;
+  } else {
+    halt();
+  }
+
+  return retval;
+}
+
+LLVMToken parse_assignment(const LLVMToken *tokens, int &i) {
+  const LLVMToken &token = tokens[i];
+  LLVMToken retval = {};
+  switch(token.type) {
+  case LLVM_EQUALS:
+    retval = token;
+    ++i;
+    break;
+  default:
+    halt();
+  }
+
+  return retval;
+}
+
+LLVMToken parse_result(const LLVMToken *tokens, int &i) {
+  const LLVMToken &token = tokens[i];
+  LLVMToken retval = {};
+  switch(token.type) {
+  //case LLVM_STORE:
+  //case LLVM_CALL:
+    retval.type = LLVM_TOKEN_NONE;
+    break;
+  case LLVM_LOCAL_IDENTIFIER:
+  case LLVM_BOUND_IDENTIFIER:
+    retval = token;
+    ++i;
+    break;
+  default:
+    halt();
+  //case LLVM_ADD:
+  //case LLVM_SUB:
+  //case LLVM_MUL:
+  //case LLVM_SDIV:
+  //case LLVM_SREM:
+  //case LLVM_UDIV:
+  //case LLVM_UREM:
+  }
+
+  return retval;
+}
+
+LLVMToken parse_rvalue(const LLVMToken *tokens, int &i) {
+  const LLVMToken &token = tokens[i];
+  LLVMToken retval = {};
+  switch(token.type) {
+  case LLVM_LOCAL_IDENTIFIER:
+  case LLVM_BOUND_IDENTIFIER:
+  case LLVM_GLOBAL_IDENTIFIER:
+    retval = token;
+    ++i;
+    break;
+  default:
+    halt();
+  }
+
+  return retval;
+}
+
+LLVMToken parse_instruction(const LLVMToken *tokens, int &i) {
+  const LLVMToken &token = tokens[i];
+  LLVMToken retval = {};
+  switch(token.type) {
+  case LLVM_ADD:
+  case LLVM_SUB:
+  case LLVM_MUL:
+  case LLVM_SDIV:
+  case LLVM_SREM:
+  case LLVM_UDIV:
+  case LLVM_UREM:
+    retval = token;
+    ++i;
+    break;
+  default:
+    halt();
+  }
+
+  return retval;
+}
+
+int parse_raw_llvm(const LLVMToken *tokens, int num_tokens, LLVMStatement *statements, int max_statments) {
+  int num_statements = 0;
+  for(int i = 0; i < num_tokens;) {
+    assert(num_statements < max_statments);
+    LLVMStatement &statement = statements[num_statements++];
+    statement.result = parse_result(tokens, i);
+    //parse_assignment(tokens, i);
+    parse_consume(LLVM_EQUALS, tokens, i);
+    statement.instruction = parse_instruction(tokens, i);
+    statement.lhs = parse_rvalue(tokens, i);
+    statement.rhs = parse_rvalue(tokens, i);
+    parse_consume(LLVM_TOKEN_EOL, tokens, i);
+  }
+
+  return num_statements;
+}
+
+//GGSubString format_substring(const char *, ...) {
+//  //TODO
+//  return GGSubString();
+//}
+//
+//GGSubString to_type_str(llvm::Type *type) {
+//  //TODO
+//
+//  return GGSubString();
+//}
+//
+//llvm::Type *get_type(LLVM &llvm, const GGSubString &type) {
+//  //TODO
+//  return 0;
+//}
+//
+//int substring_to_lines(const GGSubString &source, GGSubString *lines, int max_lines) {
+//  //TODO
+//  return 0;
+//}
+//
+//int lines_replace_tokens(LLVM &llvm, GGSubString *lines, int num_lines, int max_lines) {
+//  int temp_n = 0;
+//  for(int i = 0; i < num_lines;) {
+//    GGSubString &line = lines[i];
+//
+//    GGSubString old_lhs;
+//    GGSubString token_str;
+//    GGSubString old_rhs;
+//    switch(matches_replacement(line, token_str, old_lhs, old_rhs)) {
+//    case LLVM_REPLACEMENT_ASSIGNMENT: {
+//      llvm::Type *type = get_type(llvm, token_str);
+//      GGSubString type_str = to_type_str(type);
+//      GGSubString new_line  = format_substring("%%%s.%d %s", old_lhs, token_str, temp_n, old_rhs);
+//      GGSubString new_store = format_substring("store %s %%%s.%d %s* %%%s", type_str, token_str, temp_n, type_str, token_str);
+//      //lines.remove(line);
+//      //lines.insert(new_line);
+//      //lines.insert(new_store);
+//      //next = new_line;
+//    } break;
+//    case LLVM_REPLACEMENT_EXPRESSION: {
+//      llvm::Type *type = get_type(llvm, token_str);
+//      GGSubString type_str = to_type_str(type);
+//      GGSubString new_load  = format_substring("%%%s.%d = load %s %%%s", token_str, temp_n, type_str, token_str);
+//      GGSubString new_line  = format_substring("%s %s %%%s.%d %s", old_lhs, type_str, token_str, temp_n, old_rhs);
+//      //lines.remove(line);
+//      //lines.insert(new_load);
+//      //lines.insert(new_line);
+//      //next = new_line;
+//    } break;
+//    case LLVM_REPLACEMENT_NONE:
+//      ++i;
+//      break;
+//    default:
+//      halt();
+//    }
+//
+//    ++temp_n;
+//  }
+//
+//  //return lines.count
+//  // TODO
+//  return 0;
+//}
+//
+//void emit_inline_llvm(LLVM &llvm, GGToken &inline_llvm) {
+//  assert(inline_llvm.token == TOKEN_COMPOUND_INLINE_LLVM);
+//  assert(inline_llvm.num_subtokens == 0);
+//
+//  // $token = *    --> %token.N = * 
+//  //                   store type %token.N type* %token
+//  // * $token *    --> %token.N = load %token.N
+//  //                   * %token.N *
+//
+//  GGSubString lines[MAX_LLVM_LINES];
+//
+//  int temp_n = 0;
+//  int num_lines = substring_to_lines(inline_llvm.substring, lines, MAX_LLVM_LINES);
+//  num_lines = lines_replace_tokens(llvm, lines, num_lines, MAX_LLVM_LINES);
+//  lines_to_llvm(llvm, lines, num_lines);
+//
+//  //char max_llvm[1024];
+//  //int output_spot = 0;
+//  //for(int i = 0; i < inline_llvm.substring.length; ++i) {
+//  //  if (inline_llvm.substring.start[i] == '%') {
+//  //    GGSubString token;
+//  //    token.start = &inline_llvm.substring.start[i+1];
+//  //    const char *end = find_first_non_token(token.start);
+//  //    token.length = end - token.start;
+//  //    const char *next_token = find_first_non_whitespace(end+1);
+//  //    const char *end_of_line = find_first_end_of_line(end+1);
+//
+//  //    if (*next_token == '=') {
+//
+//  //    } else {            
+//  //                                        
+//  //    }
+//
+//  //    // 
+//
+//  //  } else {
+//  //    max_llvm[output_spot++] = inline_llvm.substring.start[i]
+//  //  }
+//  //}
+//
+//  
+//  
+//}
+
+
+void emit_inline_llvm(LLVM &llvm, const GGToken &inline_llvm) {
   assert(inline_llvm.token == TOKEN_COMPOUND_INLINE_LLVM);
-  assert(inline_llvm.num_subtokens == 0);
+  assert(inline_llvm.num_subtokens == 1);
+  const GGToken &raw_llvm = inline_llvm.subtokens[0];
 
-  // $token = *    --> %token.N = * 
-  //                   store type %token.N type* %token
-  // * $token *    --> %token.N = load %token.N
-  //                   * %token.N *
+  static const int MAX_TOKENS = 1024;
+  LLVMToken tokens[MAX_TOKENS];
+  int num_tokens = raw_llvm_lex(llvm, raw_llvm.substring, tokens, MAX_TOKENS);
 
-  GGSubString lines[MAX_LLVM_LINES];
-
-  int temp_n = 0;
-  int num_lines = substring_to_lines(inline_llvm.substring, lines, MAX_LLVM_LINES);
-  num_lines = lines_replace_tokens(llvm, lines, num_lines, MAX_LLVM_LINES);
-  lines_to_llvm(llvm, lines, num_lines);
-
-  //char max_llvm[1024];
-  //int output_spot = 0;
-  //for(int i = 0; i < inline_llvm.substring.length; ++i) {
-  //  if (inline_llvm.substring.start[i] == '%') {
-  //    GGSubString token;
-  //    token.start = &inline_llvm.substring.start[i+1];
-  //    const char *end = find_first_non_token(token.start);
-  //    token.length = end - token.start;
-  //    const char *next_token = find_first_non_whitespace(end+1);
-  //    const char *end_of_line = find_first_end_of_line(end+1);
-
-  //    if (*next_token == '=') {
-
-  //    } else {            
-  //                                        
-  //    }
-
-  //    // 
-
-  //  } else {
-  //    max_llvm[output_spot++] = inline_llvm.substring.start[i]
-  //  }
-  //}
-
-  
-  
+  static const int MAX_STATEMENTS = MAX_TOKENS;
+  LLVMStatement statements[MAX_STATEMENTS];
+  int num_statements = parse_raw_llvm(tokens, num_tokens, statements, MAX_STATEMENTS);
+  emit_raw_llvm_statements(llvm, statements, num_statements);
 }
-
 
 void llvm_emit_local_return(LLVM &llvm, GGToken &return_statement) {
   assert(return_statement.token == TOKEN_COMPOUND_RETURN_STATEMENT);
