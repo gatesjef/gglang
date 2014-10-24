@@ -379,25 +379,86 @@ GGToken parse_one_or_more_pred(CharPredicate pred, GGTokenType tokenType, const 
   return result;
 }
 
+bool consume_whitespace(GGParseInput &cur_input) {
+  while(1) {
+    GGToken discard = parse_nonsyntax_tokens(cur_input);
+    if (ParseOuputIsFalse(discard)) {
+      return true;
+    } else if (discard.token == TOKEN_EOF) {
+      //ParseOutputAppend(total_output, output);
+      return false;
+    } else if (discard.token == TOKEN_END_OF_LINE) {
+      //ParseOutputAppend(total_output, output);
+      cur_input.data = discard.next;
+      cur_input.info.line_number = discard.info.line_number + 1;
+      cur_input.info.col_number = 0;
+    } else {
+      // discard
+      cur_input.data = discard.next;
+      cur_input.info = discard.info;
+    }
+  }
+}
+
 bool isDigit(char c) {
   return isdigit(c) != 0;
+}
+
+void continue_parse_numeric_literal(GGToken &retval, const GGParseInput &input){
+  GGParseInput cur_input = input;
+  while(isdigit(*cur_input.data)) {
+    cur_input.data++;
+  }
+
+  retval.substring.length = cur_input.data - retval.substring.start;
+  retval.next = cur_input.data;
 }
 
 GGToken parse_integer_literal(const GGParseInput &input) {
   return parse_one_or_more_pred(isDigit, TOKEN_LITERAL_INTEGER, input);
 };
 
-GGToken parse_numeric_literal(const GGParseInput &input) {
-  static const ParseFn numeric_literals[] = { 
-    parse_integer_literal, 
-    //TODO parse_float_literal, 
-    //TODO parse_hex_literal,
-    //parse_octal_literal,
-    //parse_binary_literal,
-  };
-  static const int num_literals = ARRAYSIZE(numeric_literals);
+//GGToken parse_float_literal(const GGParseInput &input) {
+//  return parse_one_or_more_pred(isDigit, TOKEN_LITERAL_FLOAT, input);
+//};
 
-  return parse_first_of(numeric_literals, num_literals, input);
+GGToken parse_numeric_literal(const GGParseInput &input) {
+  GGToken retval = parse_integer_literal(input);
+  if (ParseOuputIsFalse(retval)) {
+    return PARSE_FALSE;
+  }
+
+  GGParseInput cur_input = input;
+  cur_input.data = retval.next;
+  if (*retval.next == '.')
+  {
+    cur_input.data++;
+    retval.token = TOKEN_LITERAL_FLOAT;
+    continue_parse_numeric_literal(retval, cur_input);
+  }
+
+  cur_input.data = retval.next;
+  if (*retval.next == 'e') 
+  {
+    cur_input.data++;
+    retval.token = TOKEN_LITERAL_FLOAT;
+    continue_parse_numeric_literal(retval, cur_input);
+  }
+
+  if (!consume_whitespace(cur_input)) return PARSE_FALSE;
+
+  return retval;
+
+  //static const ParseFn numeric_literals[] = { 
+  //  parse_float_literal, 
+  //  parse_integer_literal, 
+  //  //TODO parse_hex_literal,
+  //  //parse_octal_literal,
+  //  //parse_binary_literal,
+  //};
+  //static const int num_literals = ARRAYSIZE(numeric_literals);
+
+  //return parse_first_of(numeric_literals, num_literals, input);
 }
 
 GGToken parse_string_literal(const GGParseInput &input) {
@@ -811,27 +872,6 @@ GGToken parse_assignment_op_symbol(const GGParseInput &input) {
 
 int binary_operator_get_precedence(const GGToken &op) {
   return BINARY_OPERATORS[op.num_subtokens].precidence;
-}
-
-bool consume_whitespace(GGParseInput &cur_input) {
-  while(1) {
-    GGToken discard = parse_nonsyntax_tokens(cur_input);
-    if (ParseOuputIsFalse(discard)) {
-      return true;
-    } else if (discard.token == TOKEN_EOF) {
-      //ParseOutputAppend(total_output, output);
-      return false;
-    } else if (discard.token == TOKEN_END_OF_LINE) {
-      //ParseOutputAppend(total_output, output);
-      cur_input.data = discard.next;
-      cur_input.info.line_number = discard.info.line_number + 1;
-      cur_input.info.col_number = 0;
-    } else {
-      // discard
-      cur_input.data = discard.next;
-      cur_input.info = discard.info;
-    }
-  }
 }
 
 GGToken parse_unary_expression(const GGParseInput &input);

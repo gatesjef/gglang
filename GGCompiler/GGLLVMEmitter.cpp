@@ -189,6 +189,11 @@ enum LLVMTokenType {
   LLVM_SREM,
   LLVM_UDIV,
   LLVM_UREM,
+
+  LLVM_FADD,
+  LLVM_FSUB,
+  LLVM_FMUL,
+  LLVM_FDIV,
 };
 
 struct LLVMToken {
@@ -392,6 +397,14 @@ llvm::Value *emit_rvalue_string_literal(LLVM &llvm, const GGToken &string_litera
   //llvm::Value *retval = llvm::ConstantInt::get(type, str, RADIX);
   //return retval;
   //return value;
+}
+
+llvm::Value *emit_rvalue_float_literal(LLVM &llvm, const GGToken &float_literal) {
+  assert(float_literal.token == TOKEN_LITERAL_FLOAT);
+  llvm::Type *type = llvm::Type::getFloatTy(*llvm.context);
+  llvm::StringRef str = to_string_ref(float_literal.substring);
+  llvm::Value *retval = llvm::ConstantFP::get(type, str);
+  return retval;
 }
 
 llvm::Value *emit_rvalue_integer_literal(LLVM &llvm, const GGToken &integer_literal) {
@@ -647,6 +660,8 @@ llvm::Value *emit_rvalue_expression(LLVM &llvm, const GGToken &expression) {
     return emit_rvalue_function_call(llvm, expression);
   case TOKEN_LITERAL_INTEGER:
     return emit_rvalue_integer_literal(llvm, expression);
+  case TOKEN_LITERAL_FLOAT:
+    return emit_rvalue_float_literal(llvm, expression);
   case TOKEN_LITERAL_STRING:
     return emit_rvalue_string_literal(llvm, expression);
   case TOKEN_IDENTIFIER:
@@ -803,8 +818,12 @@ bool llvm_lex_instruction(LLVMToken &token, const char *&cur, const char *end) {
     {"srem", LLVM_SREM, },
     {"udiv", LLVM_UDIV, },
     {"urem", LLVM_UREM, },
+    {"fadd", LLVM_FADD, },
+    {"fsub", LLVM_FSUB, },
+    {"fmul", LLVM_FMUL, },
+    {"fdiv", LLVM_FDIV, },
   };
-  static const int NUM_INSTRUCTIONS = 7; // ARRAYSIZE(LLVM_INSTRUCTIONS);
+  static const int NUM_INSTRUCTIONS = sizeof(LLVM_INSTRUCTIONS) / sizeof(LLVM_INSTRUCTIONS[0]);
 
   for(int i = 0; i < NUM_INSTRUCTIONS; ++i) {
     const LLVMInstructionDef &instructionDef = LLVM_INSTRUCTIONS[i];
@@ -933,6 +952,54 @@ struct LLVMStatement {
 
 };
 
+void llvm_emit_fadd(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateFAdd(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
+void llvm_emit_fsub(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateFSub(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
+void llvm_emit_fmul(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateFMul(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
+void llvm_emit_fdiv(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateFDiv(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
 void llvm_emit_add(LLVM &llvm, const LLVMStatement &statement) {
   const LLVMToken &result = statement.result;				
   const LLVMToken &lhs = statement.lhs;
@@ -1015,6 +1082,18 @@ void llvm_emit_urem(LLVM &llvm, const LLVMStatement &statement) {
 
 void emit_raw_llvm_statement(LLVM &llvm, const LLVMStatement &statement) {
   switch(statement.instruction.type) {
+  case LLVM_FADD:
+    llvm_emit_fadd(llvm, statement);
+    break;
+  case LLVM_FSUB:
+    llvm_emit_fsub(llvm, statement);
+    break;
+  case LLVM_FMUL:
+    llvm_emit_fmul(llvm, statement);
+    break;
+  case LLVM_FDIV:
+    llvm_emit_fdiv(llvm, statement);
+    break;
   case LLVM_ADD:
     llvm_emit_add(llvm, statement);
     break;
@@ -1130,6 +1209,10 @@ LLVMToken parse_instruction(const LLVMToken *tokens, int &i) {
   case LLVM_SREM:
   case LLVM_UDIV:
   case LLVM_UREM:
+  case LLVM_FADD:
+  case LLVM_FSUB:
+  case LLVM_FMUL:
+  case LLVM_FDIV:
     retval = token;
     ++i;
     break;
@@ -1671,15 +1754,30 @@ llvm::Type* get_type(LLVM &llvm, const GGToken &type) {
 }
 
 void llvm_emit_global_variable(LLVM &llvm, const GGToken &variable_declaraion) {
-  assert(variable_declaraion.num_subtokens == 3);
+  assert(variable_declaraion.num_subtokens == 3 ||
+    variable_declaraion.num_subtokens == 2);
   const GGToken &type_token = variable_declaraion.subtokens[0];
   const GGToken &identifier = variable_declaraion.subtokens[1];
-  const GGToken &expression = variable_declaraion.subtokens[2];
 
   llvm::Type *type = get_type(llvm, type_token);
+
+  llvm::Constant *constant;
+  if (variable_declaraion.num_subtokens == 3)
+  {
+    const GGToken &const_expression = variable_declaraion.subtokens[2];
+    uint64_t val64 = 0;
+    val64 = eval_constexpr(const_expression);
+    constant = llvm::ConstantInt::get(type, val64);
+  }
+  else 
+  {
+    constant = llvm::Constant::getNullValue(type);
+  }
+
   llvm::StringRef name = to_string_ref(identifier.substring);
-  //	llvm::Value *value = new llvm::GlobalVariable(*llvm.module, type, false, llvm::GlobalVariable::CommonLinkage, NULL, name);
-  llvm::Value *value = new llvm::GlobalVariable(*llvm.module, type, false, llvm::GlobalVariable::LinkOnceAnyLinkage, NULL, name);
+  llvm::Value *value = new llvm::GlobalVariable(*llvm.module, type, false, llvm::GlobalVariable::ExternalLinkage, constant, name);
+
+
 
   //llvm.module->getOrInsertGlobal(
   //  

@@ -9,6 +9,18 @@ llvm_type i8 {
   i8
 }
 
+llvm_type f32 { 
+  float
+}
+
+f32 add_f32(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fadd $a $b
+  }
+  return x;
+}
+
 i32 add_i32(i32 a, i32 b) {
   i32 x;
   llvm {
@@ -26,34 +38,64 @@ i8 add_i8(i8 a, i8 b) {
   return x;
 }
 
+i8 sub_i8(i8 a, i8 b) {
+  i8 x;
+  llvm {
+    $x = sub $a $b
+  }
+  return x;
+}
+
+struct Vec2 {
+  f32 x;
+  f32 y;
+}
+
+//other type literals (suffixess)
+//structs
+//pass by val/ref, return by val/ref
+//casting 
+//operator overloading
+//multiple files 
+//prelude
+//error messages
+//function overloading
+//out of order declaration
+//type inference
+//slices
+//templates
+//std lib
+//reflection
+//case statement
+//enums
+//full llvm parsing
+//if statement
+//for statement
+//named breaks/continue
+//scoped functions/types
+//capture
+//vector types
+//perf
+//vstudio integration
+//better linker integration
+//pre-main
+//global constants
+//constexpr
 
 extern i32 putchar(i32 c);
 extern i32 puts(i8* s);
 
+i32 b;
+
 i32 main() {
-  //i32[10] r;
-  //r[0] = 1;
-  //r[1] = r[0] + 1;
-  //putchar(r[0] + 64);
-  //putchar(r[1] + 64);
-  i32 x = add_i32(65, 10);
-  //i8 *str = "Hello";
-  //puts(str);
-  putchar(x);
+  f32 fl = 5.0;
+  b += 5;
+  i32 x = add_i32(65, b);
+  i8 *str = "Hello";
+  puts(str);
   return 1;
 }
 
-//s[0] = z[0];
-//i8 m[10] = {};	// todo: array initialization;
-//i8 *y = "Hi!";	// todo: global variables
-// other integer type literals
-// operations todo other integer types
-// todo other integer literals
-// todo char literals
-// todo casts/conversions
-// todo structs/members
-// todo prelude
-// todo float types
 
 
 
