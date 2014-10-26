@@ -12,18 +12,27 @@ enum GGIdentifierType {
   IDENTIFIER_VARIABLE,
 };
 
+struct FieldInfo {
+  GGSubString fieldName;
+};
+
 struct DBItem {
   GGIdentifierType itemType;
   GGSubString identifier;
   int scope;
   union {
-    llvm::Type *type;
+    struct {
+      llvm::Type *type;
+      FieldInfo *fields;
+      int numFields;
+    } typeInfo;
     llvm::Function *function;
     llvm::Value *value;
   };
 };
 
 const int MAX_DB_ITEMS = 1024;
+const int MAX_FIELDS = 1024;
 
 struct LLVM {
   llvm::Module *module;
@@ -33,6 +42,9 @@ struct LLVM {
   DBItem db_items[MAX_DB_ITEMS];
   int num_db_items;
   int db_scope;
+
+  FieldInfo fields[MAX_FIELDS];
+  int num_fields;
 };
 
 enum {
@@ -121,7 +133,7 @@ llvm::Type *db_lookup_type(LLVM &llvm, const GGToken &token)
     DBItem &item = llvm.db_items[i];
     if (substring_cmp(item.identifier, token.substring)) {
       assert(item.itemType == IDENTIFIER_TYPE);
-      return item.type;
+      return item.typeInfo.type;
     }
   }
   halt();
@@ -160,15 +172,16 @@ void db_pop_scope(LLVM &llvm)
   }
 }
 
-void db_add_type(LLVM &llvm, const GGToken &identifier, llvm::Type *type) {
+DBItem &db_add_type(LLVM &llvm, const GGToken &identifier, llvm::Type *type) {
   void *existing_type = db_lookup_any(llvm, identifier);
   assert(existing_type == NULL);
   assert(llvm.num_db_items < MAX_DB_ITEMS);
   DBItem &item = llvm.db_items[llvm.num_db_items++];
   item.itemType = IDENTIFIER_TYPE;
   item.identifier = identifier.substring;
-  item.type = type;
+  item.typeInfo.type = type;
   item.scope = llvm.db_scope;
+  return item;
 }
 
 enum LLVMTokenType {
@@ -200,6 +213,13 @@ struct LLVMToken {
   LLVMTokenType type;
   GGSubString substring;
 };
+
+FieldInfo *db_alloc_fields(LLVM &llvm, int count) {
+  assert(llvm.num_fields + count < MAX_FIELDS);
+  FieldInfo *retval = llvm.fields;
+  llvm.num_fields += count;
+  return retval;
+}
 
 void db_add_llvm_variable(LLVM &llvm, const LLVMToken &token, llvm::Value *value) {
   void *existing = db_lookup_any(llvm, token.substring);
@@ -562,7 +582,7 @@ llvm::Value *emit_rvalue_unary_post_op(LLVM &llvm, const GGToken &token) {
   const GGToken &op_expr= token.subtokens[1];
 
   llvm::Value *lvalue = emit_lvalue_expression(llvm, value_expr);
-  llvm::Value *const1 = llvm::ConstantInt::get(llvm::IntegerType::get(*llvm.context, 32), 11, SIGNED);
+  llvm::Value *const1 = llvm::ConstantInt::get(llvm::IntegerType::get(*llvm.context, 32), 1, SIGNED);
   llvm::Value *value = llvm.builder->CreateLoad(lvalue);
 
   llvm::Value *newValue;
@@ -583,9 +603,27 @@ llvm::Value *emit_rvalue_unary_post_op(LLVM &llvm, const GGToken &token) {
   return value;
 }
 
-llvm::Value *field_index(LLVM &llvm, const GGToken &token) {
-  // TODO
-  return llvm::ConstantInt::get(llvm::IntegerType::get(*llvm.context, 32), 0, SIGNED);
+int field_idx_lookup(LLVM &llvm, llvm::Type *type, const GGSubString &substring) {
+  for(int i = 0; i < llvm.num_db_items; ++i) {
+    DBItem &dbItem = llvm.db_items[i];
+    if (dbItem.itemType != IDENTIFIER_TYPE) continue;
+    if (dbItem.typeInfo.type != type) continue;
+
+    for(int j = 0; j < dbItem.typeInfo.numFields; ++j) {
+      if (substring_cmp(dbItem.typeInfo.fields[j].fieldName, substring)) {
+        return j;
+      }
+    }
+    break;
+  }
+
+  halt();
+  return 0;
+}
+
+llvm::Value *field_index(LLVM &llvm, llvm::Type *type, const GGToken &field_identifier) {
+  int field_idx = field_idx_lookup(llvm, type, field_identifier.substring);
+  return llvm::ConstantInt::get(llvm::IntegerType::get(*llvm.context, 32), field_idx, SIGNED);
 }
 
 llvm::Value *emit_lvalue_identifier(LLVM &llvm, const GGToken &token) {
@@ -607,7 +645,11 @@ llvm::Value *emit_lvalue_member_identifier(LLVM &llvm, const GGToken &token) {
   llvm::Value *basePointer = emit_lvalue_expression(llvm, basePointerExpr);
   assert(basePointer);
 
-  llvm::Value *fieldIndex = field_index(llvm, fieldIdentifier);
+  llvm::Type *basePointerType = basePointer->getType();
+  assert(basePointerType->isPointerTy());
+  llvm::Type *baseValueType = basePointerType->getContainedType(0);
+
+  llvm::Value *fieldIndex = field_index(llvm, baseValueType, fieldIdentifier);
   llvm::Value *zero = llvm::ConstantInt::get(llvm::IntegerType::get(*llvm.context, 32), 0, SIGNED);
 
   llvm::Value *idxs[] = {zero, fieldIndex};
@@ -1443,7 +1485,6 @@ void llvm_emit_assignment_statement(LLVM &llvm, const GGToken &assigment) {
   const GGToken &rhs_expr = assigment.subtokens[2];
 
   llvm::Value *lhs = emit_lvalue_expression(llvm, lhs_expr);
-  llvm::Value *r_lhs = emit_rvalue_expression(llvm, lhs_expr);
   llvm::Value *rhs = emit_rvalue_expression(llvm, rhs_expr);
 
   switch(assigment_op.substring.start[0]) {
@@ -1451,22 +1492,27 @@ void llvm_emit_assignment_statement(LLVM &llvm, const GGToken &assigment) {
     llvm.builder->CreateStore(rhs, lhs);
             } break;
   case '+': {
+    llvm::Value *r_lhs = emit_rvalue_expression(llvm, lhs_expr);
     llvm::Value *newVal = llvm.builder->CreateAdd(r_lhs, rhs);
     llvm.builder->CreateStore(newVal, lhs);
             } break;
   case '-': {
+    llvm::Value *r_lhs = emit_rvalue_expression(llvm, lhs_expr);
     llvm::Value *newVal = llvm.builder->CreateSub(r_lhs, rhs);
     llvm.builder->CreateStore(newVal, lhs);
             } break;
   case '*': {
+    llvm::Value *r_lhs = emit_rvalue_expression(llvm, lhs_expr);
     llvm::Value *newVal = llvm.builder->CreateMul(r_lhs, rhs);
     llvm.builder->CreateStore(newVal, lhs);
             } break;
   case '/': {
+    llvm::Value *r_lhs = emit_rvalue_expression(llvm, lhs_expr);
     llvm::Value *newVal = llvm.builder->CreateSDiv(r_lhs, rhs);
     llvm.builder->CreateStore(newVal, lhs);
             } break;
   case '%': {
+    llvm::Value *r_lhs = emit_rvalue_expression(llvm, lhs_expr);
     llvm::Value *newVal = llvm.builder->CreateSRem(r_lhs, rhs);
     llvm.builder->CreateStore(newVal, lhs);
             } break;
@@ -1827,7 +1873,13 @@ llvm::Type *llvm_emit_struct_definition(LLVM &llvm, const GGToken &struct_def) {
 
   static const int IS_PACKED = true;
   llvm::Type *type = llvm::StructType::get(*llvm.context, ref_fields, IS_PACKED);
-  db_add_type(llvm, identifier, type);
+  DBItem &item = db_add_type(llvm, identifier, type);
+  item.typeInfo.numFields = struct_body.num_subtokens;
+  item.typeInfo.fields = db_alloc_fields(llvm, struct_body.num_subtokens);
+  for(int i = 0; i < struct_body.num_subtokens; ++i) {
+    item.typeInfo.fields[i].fieldName = struct_body.subtokens[i].subtokens[1].substring;
+  }
+
   return type;
 }
 

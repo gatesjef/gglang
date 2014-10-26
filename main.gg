@@ -51,8 +51,40 @@ struct Vec2 {
   f32 y;
 }
 
+struct Vec2I {
+  i32 x;
+  i32 y;
+}
+
+extern i32 putchar(i32 c);
+extern i32 puts(i8* s);
+
+Vec2I veci_add(Vec2I a, Vec2I b) {
+  Vec2I retval;
+  retval.x = a.x + b.x;
+  retval.y = a.y + b.y;
+  return retval;
+}
+
+i32 main() {
+  Vec2I rho;
+  rho.x = -2;
+  rho.y = 2;
+
+  Vec2I tau;
+  tau.x = 6;
+  tau.y = 4;
+
+  Vec2I pi = veci_add(rho, tau);
+
+  putchar(pi.x + pi.y + 65);
+  return 1;
+}
+
+
+
+
 //other type literals (suffixess)
-//structs
 //pass by val/ref, return by val/ref
 //casting 
 //operator overloading
@@ -81,21 +113,5 @@ struct Vec2 {
 //pre-main
 //global constants
 //constexpr
-
-extern i32 putchar(i32 c);
-extern i32 puts(i8* s);
-
-i32 b;
-
-i32 main() {
-  f32 fl = 5.0;
-  b += 5;
-  i32 x = add_i32(65, b);
-  i8 *str = "Hello";
-  puts(str);
-  return 1;
-}
-
-
-
+//non-zero struct defaults
 
