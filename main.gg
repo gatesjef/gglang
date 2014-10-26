@@ -59,13 +59,6 @@ struct Vec2I {
 extern i32 putchar(i32 c);
 extern i32 puts(i8* s);
 
-Vec2I veci_add(Vec2I a, Vec2I b) {
-  Vec2I retval;
-  retval.x = a.x + b.x;
-  retval.y = a.y + b.y;
-  return retval;
-}
-
 i32 main() {
   Vec2I rho;
   rho.x = -2;
@@ -81,25 +74,33 @@ i32 main() {
   return 1;
 }
 
+Vec2I veci_add(Vec2I a, Vec2I b) {
+  Vec2I retval;
+  retval.x = a.x + b.x;
+  retval.y = a.y + b.y;
+  return retval;
+}
 
 
 
-//other type literals (suffixess)
-//pass by val/ref, return by val/ref
-//casting 
-//operator overloading
 //multiple files 
 //prelude
-//error messages
+//casting 
 //function overloading
-//out of order declaration
+//operator overloading
+//pass by val/ref, return by val/ref
+//enums
+
+//constexpr
+//pre-main
+//other type literals (suffixess)
+//error messages
 //type inference
 //slices
 //templates
 //std lib
 //reflection
 //case statement
-//enums
 //full llvm parsing
 //if statement
 //for statement
@@ -110,8 +111,6 @@ i32 main() {
 //perf
 //vstudio integration
 //better linker integration
-//pre-main
 //global constants
-//constexpr
 //non-zero struct defaults
 

@@ -1521,6 +1521,41 @@ void llvm_emit_assignment_statement(LLVM &llvm, const GGToken &assigment) {
   }
 }
 
+void llvm_emit_function_declaration(LLVM &llvm, const GGToken &function_declaration) {
+  assert(function_declaration.token == TOKEN_COMPOUND_FUNCTION_DEFINITION);
+  assert(function_declaration.num_subtokens == 4);
+  const GGToken &function_return_type = function_declaration.subtokens[0];
+  const GGToken &function_identifier  = function_declaration.subtokens[1];
+  const GGToken &function_param_types = function_declaration.subtokens[2];
+
+  llvm::Type *retval_type = get_type(llvm, function_return_type);
+
+  llvm::FunctionType *functionType;
+  if (function_param_types.num_subtokens == 0) 
+  {
+    functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
+  }
+  else
+  {
+    llvm::Type *param_types[MAX_PARAMS];
+    int num_params = get_param_types(llvm, function_param_types, param_types, MAX_PARAMS);
+
+    llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
+    functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
+
+    //emit_paramater_bindings(llvm, function_params);
+  }
+
+  llvm::StringRef name = to_string_ref(function_identifier.substring);
+
+  llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, llvm.module);
+  assert(function);
+
+  //function->addFnAttr("nounwind");
+
+  db_add_function(llvm, function_identifier, function);
+}
+
 void llvm_emit_external_function_declaration(LLVM &llvm, const GGToken &function_declaration) {
   assert(function_declaration.token == TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION);
   assert(function_declaration.num_subtokens == 3);
@@ -1564,27 +1599,27 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
   const GGToken &function_params      = function_definition.subtokens[2];
   const GGToken &function_body        = function_definition.subtokens[3];
 
+  llvm::Function *function = db_lookup_function(llvm, function_identifier);
+  //llvm::Type *retval_type = get_type(llvm, function_return_type);
+  //llvm::FunctionType *functionType;
+  //if (function_params.num_subtokens == 0) 
+  //{
+  //  functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
+  //}
+  //else
+  //{
+  //  llvm::Type *param_types[MAX_PARAMS];
+  //  int num_params = get_param_types(llvm, function_params, param_types, MAX_PARAMS);
+  //  llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
+  //  functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
 
-  llvm::Type *retval_type = get_type(llvm, function_return_type);
-  llvm::FunctionType *functionType;
-  if (function_params.num_subtokens == 0) 
-  {
-    functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
-  }
-  else
-  {
-    llvm::Type *param_types[MAX_PARAMS];
-    int num_params = get_param_types(llvm, function_params, param_types, MAX_PARAMS);
-    llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
-    functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
+  //  //emit_paramater_bindings(llvm, function_params);
+  //}
 
-    //emit_paramater_bindings(llvm, function_params);
-  }
+  //llvm::StringRef name = to_string_ref(function_identifier.substring);
 
-  llvm::StringRef name = to_string_ref(function_identifier.substring);
-
-  llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, llvm.module);
-  assert(function);
+  //llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, llvm.module);
+  //assert(function);
 
   db_push_scope(llvm);
   llvm::BasicBlock *entry = llvm::BasicBlock::Create(*llvm.context, "", function);
@@ -1638,7 +1673,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
   //llvm_emit_function_body(llvm, function, function_body);
   //function->addFnAttr("nounwind");
 
-  db_add_function(llvm, function_identifier, function);
+  //db_add_function(llvm, function_identifier, function);
 }
 
 uint64_t substring_to_uint64(const GGSubString &substring) {
@@ -1883,16 +1918,39 @@ llvm::Type *llvm_emit_struct_definition(LLVM &llvm, const GGToken &struct_def) {
   return type;
 }
 
-void llvm_emit_global_definitions(LLVM &llvm, const GGToken &program) {
+//void llvm_emit_global_definitions(LLVM &llvm, const GGToken &program) {
+//  for(int i = 0; i < program.num_subtokens; ++i) {
+//    const GGToken &subtoken = program.subtokens[i];
+//    switch(subtoken.token) {
+//    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+//      llvm_emit_global_variable(llvm, subtoken);
+//      break;
+//    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
+//      llvm_emit_function_definition(llvm, subtoken);
+//      break;
+//    case TOKEN_COMPOUND_STRUCT_DEFINITION:
+//      llvm_emit_struct_definition(llvm, subtoken);
+//      break;
+//    case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
+//      llvm_emit_type_definition(llvm, subtoken);
+//      break;
+//    case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
+//      llvm_emit_llvm_type_definition(llvm, subtoken);
+//      break;
+//    case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
+//      llvm_emit_external_function_declaration(llvm, subtoken);
+//    case TOKEN_COMMENT:
+//      break;
+//    default:
+//      halt();
+//    }
+//  }
+//}
+
+void llvm_emit_global_type_definitions(LLVM &llvm, const GGToken &program) {
   for(int i = 0; i < program.num_subtokens; ++i) {
     const GGToken &subtoken = program.subtokens[i];
     switch(subtoken.token) {
-    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
-      llvm_emit_global_variable(llvm, subtoken);
-      break;
-    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
-      llvm_emit_function_definition(llvm, subtoken);
-      break;
     case TOKEN_COMPOUND_STRUCT_DEFINITION:
       llvm_emit_struct_definition(llvm, subtoken);
       break;
@@ -1902,8 +1960,71 @@ void llvm_emit_global_definitions(LLVM &llvm, const GGToken &program) {
     case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
       llvm_emit_llvm_type_definition(llvm, subtoken);
       break;
+    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
+    case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
+    case TOKEN_COMMENT:
+      break;
+    default:
+      halt();
+    }
+  }
+}
+
+void llvm_emit_global_function_definitions(LLVM &llvm, const GGToken &program) {
+  for(int i = 0; i < program.num_subtokens; ++i) {
+    const GGToken &subtoken = program.subtokens[i];
+    switch(subtoken.token) {
+    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
+      llvm_emit_function_definition(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+    case TOKEN_COMPOUND_STRUCT_DEFINITION:
+    case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
+    case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
+    case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
+    case TOKEN_COMMENT:
+      break;
+    default:
+      halt();
+    }
+  }
+}
+
+void llvm_emit_global_variable_definitions(LLVM &llvm, const GGToken &program) {
+  for(int i = 0; i < program.num_subtokens; ++i) {
+    const GGToken &subtoken = program.subtokens[i];
+    switch(subtoken.token) {
+    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+      llvm_emit_global_variable(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
+    case TOKEN_COMPOUND_STRUCT_DEFINITION:
+    case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
+    case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
+    case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
+    case TOKEN_COMMENT:
+      break;
+    default:
+      halt();
+    }
+  }
+}
+
+void llvm_emit_global_function_prototypes(LLVM &llvm, const GGToken &program) {
+  for(int i = 0; i < program.num_subtokens; ++i) {
+    const GGToken &subtoken = program.subtokens[i];
+    switch(subtoken.token) {
     case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
       llvm_emit_external_function_declaration(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
+      llvm_emit_function_declaration(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+    case TOKEN_COMPOUND_STRUCT_DEFINITION:
+    case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
+    case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
     case TOKEN_COMMENT:
       break;
     default:
@@ -1952,7 +2073,10 @@ void GGLLVMEmitProgram(const GGToken &program) {
   LLVM llvm = GGLLVMInit();
 
   //emit_global_functions_declarations(llvm, program);
-  llvm_emit_global_definitions(llvm, program);
+  llvm_emit_global_type_definitions(llvm, program);
+  llvm_emit_global_function_prototypes(llvm, program);
+  llvm_emit_global_variable_definitions(llvm, program);
+  llvm_emit_global_function_definitions(llvm, program);
 
   llvm.module->dump();
 
