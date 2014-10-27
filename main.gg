@@ -12,24 +12,40 @@ i32 main() {
   tau.x = 6;
   tau.y = 4;
 
-  Vec2I pi = veci_add(rho, tau);
+  Vec2I pi = vec_add(rho, tau);
+
+  Vec2 rho2;
+  rho2.x = 2.0;
+  rho2.y = 2.0;
+
+  Vec2 tau2;
+  tau2.x = 6.0;
+  tau2.y = 4.0;
+
+  Vec2 pi2 = vec_add(rho2, tau2);
+
 
   putchar(pi.x + pi.y + 65);
   return 1;
 }
 
-Vec2I veci_add(Vec2I a, Vec2I b) {
+Vec2I vec_add(Vec2I a, Vec2I b) {
   Vec2I retval;
   retval.x = a.x + b.x;
   retval.y = a.y + b.y;
   return retval;
 }
 
+Vec2 vec_add(Vec2 a, Vec2 b) {
+  Vec2 retval;
+  retval.x = add_f32(a.x, b.x);
+  retval.y = add_f32(a.y, b.y);
+  return retval;
+}
 
 
-//casting 
-//function overloading
 //operator overloading
+//casting 
 //pass by val/ref, return by val/ref
 //enums
 
@@ -37,6 +53,7 @@ Vec2I veci_add(Vec2I a, Vec2I b) {
 //pre-main
 //other type literals (suffixess)
 //error messages
+//allocator
 //type inference
 //slices
 //templates

@@ -16,6 +16,10 @@ struct FieldInfo {
   GGSubString fieldName;
 };
 
+struct FunctionParamInfo { 
+  llvm::Type *type;
+};
+
 struct DBItem {
   GGIdentifierType itemType;
   GGSubString identifier;
@@ -26,7 +30,13 @@ struct DBItem {
       FieldInfo *fields;
       int numFields;
     } typeInfo;
-    llvm::Function *function;
+
+    struct {
+      llvm::Function *function;
+      FunctionParamInfo *paramInfo;
+      int numParams;
+    } functionInfo;
+
     llvm::Value *value;
   };
 };
@@ -45,6 +55,9 @@ struct LLVM {
 
   FieldInfo fields[MAX_FIELDS];
   int num_fields;
+
+  FunctionParamInfo function_params[MAX_FIELDS];
+  int num_function_params;
 };
 
 enum {
@@ -140,18 +153,88 @@ llvm::Type *db_lookup_type(LLVM &llvm, const GGToken &token)
   return NULL;
 }
 
-llvm::Function *db_lookup_function(LLVM &llvm, const GGToken &token)
+bool compare_type_params(const DBItem &item, llvm::Type **types, int num_types) {
+  if (item.functionInfo.numParams != num_types) return false;
+
+  for(int i = 0; i < num_types; ++i) {
+    if (item.functionInfo.paramInfo[i].type != types[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool compare_value_params(const DBItem &item, llvm::Value **values, int num_values) {
+  if (item.functionInfo.numParams != num_values) return false;
+
+  for(int i = 0; i < num_values; ++i) {
+    if (item.functionInfo.paramInfo[i].type != values[i]->getType()) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+llvm::Function *db_lookup_any_function_declaration(LLVM &llvm, const GGToken &function_identifier, llvm::Type **types, int num_types)
 {
   for(int i = 0; i < llvm.num_db_items; ++i) {
     DBItem &item = llvm.db_items[i];
-    if (substring_cmp(item.identifier, token.substring)) {
+    if (substring_cmp(item.identifier, function_identifier.substring)) {
       assert(item.itemType == IDENTIFIER_FUNCTION);
-      return item.function;
+      if (compare_type_params(item, types, num_types) == true) {
+        return item.functionInfo.function;
+      }
+    }
+  }
+  return NULL;
+}
+
+llvm::Function *db_lookup_function_declaration(LLVM &llvm, const GGToken &function_identifier, llvm::Type **types, int num_types)
+{
+  for(int i = 0; i < llvm.num_db_items; ++i) {
+    DBItem &item = llvm.db_items[i];
+    if (substring_cmp(item.identifier, function_identifier.substring)) {
+      assert(item.itemType == IDENTIFIER_FUNCTION);
+      if (compare_type_params(item, types, num_types) == true) {
+        return item.functionInfo.function;
+      }
     }
   }
   halt();
   return NULL;
 }
+
+llvm::Function *db_lookup_function_call(LLVM &llvm, const GGToken &function_identifier, llvm::Value **values, int num_values)
+{
+  for(int i = 0; i < llvm.num_db_items; ++i) {
+    DBItem &item = llvm.db_items[i];
+    if (substring_cmp(item.identifier, function_identifier.substring)) {
+      assert(item.itemType == IDENTIFIER_FUNCTION);
+      if (compare_value_params(item, values, num_values) == true) {
+        return item.functionInfo.function;
+      }
+    }
+  }
+  halt();
+  return NULL;
+}
+
+//llvm::Function *db_lookup_function_call(LLVM &llvm, const GGToken &function_identifier)
+//{
+//  for(int i = 0; i < llvm.num_db_items; ++i) {
+//    DBItem &item = llvm.db_items[i];
+//    if (substring_cmp(item.identifier, function_identifier.substring)) {
+//      assert(item.itemType == IDENTIFIER_FUNCTION);
+//      if (item.functionInfo.numParams == 0) {
+//        return item.functionInfo.function;
+//      }
+//    }
+//  }
+//  halt();
+//  return NULL;
+//}
 
 void db_push_scope(LLVM &llvm)
 {
@@ -216,8 +299,16 @@ struct LLVMToken {
 
 FieldInfo *db_alloc_fields(LLVM &llvm, int count) {
   assert(llvm.num_fields + count < MAX_FIELDS);
-  FieldInfo *retval = llvm.fields;
+  FieldInfo *retval = &llvm.fields[llvm.num_fields];
   llvm.num_fields += count;
+  return retval;
+}
+
+FunctionParamInfo *db_alloc_function_params(LLVM &llvm, int count) {
+  if (count == 0) return NULL;
+  assert(llvm.num_function_params + count < MAX_FIELDS);
+  FunctionParamInfo *retval = &llvm.function_params[llvm.num_function_params];
+  llvm.num_function_params += count;
   return retval;
 }
 
@@ -243,14 +334,19 @@ void db_add_variable(LLVM &llvm, const GGToken &identifier, llvm::Value *value) 
   item.scope = llvm.db_scope;
 }
 
-void db_add_function(LLVM &llvm, const GGToken &identifier, llvm::Function *function) {
-  void *existing = db_lookup_any(llvm, identifier);
+void db_add_function(LLVM &llvm, const GGToken &identifier, llvm::Function *function, llvm::Type **param_types, int num_params) {
+  void *existing = db_lookup_any_function_declaration(llvm, identifier, param_types, num_params);
   assert(existing == NULL);
   assert(llvm.num_db_items < MAX_DB_ITEMS);
   DBItem &item = llvm.db_items[llvm.num_db_items++];
   item.itemType = IDENTIFIER_FUNCTION;
   item.identifier = identifier.substring;
-  item.function = function;
+  item.functionInfo.function = function;
+  item.functionInfo.paramInfo = db_alloc_function_params(llvm, num_params);
+  for(int i = 0; i < num_params; ++i) {
+    item.functionInfo.paramInfo[i].type = param_types[i];
+  }
+  item.functionInfo.numParams = num_params;
   item.scope = llvm.db_scope;
 }
 
@@ -275,27 +371,28 @@ llvm::Value *emit_rvalue_function_call(LLVM &llvm, const GGToken &function_call)
   GGToken &function_identifier = function_call.subtokens[0];
   GGToken &function_params = function_call.subtokens[1];
 
-  llvm::StringRef name = to_string_ref(function_identifier.substring);
-  llvm::Function *callee = llvm.module->getFunction(name);
-  //llvm::Function *callee = db_lookup_function(llvm, function_identifier);
-
-  assert(function_params.num_subtokens == callee->arg_size());
+  //llvm::Function *callee = llvm.module->getFunction(name);
 
   llvm::Value *retval = NULL;
   if (function_params.num_subtokens == 0)
   {
+    llvm::StringRef name = to_string_ref(function_identifier.substring);
+    llvm::Function *callee = db_lookup_function_call(llvm, function_identifier, NULL, 0);
     retval = llvm.builder->CreateCall(callee);
-    //assert(retval);
   }
   else
   {
     llvm::Value *param_expressions[MAX_PARAMS];
     int num_params = emit_function_call_params(llvm, function_params, param_expressions, MAX_PARAMS);
 
+    llvm::StringRef name = to_string_ref(function_identifier.substring);
+    llvm::Function *callee = db_lookup_function_call(llvm, function_identifier, param_expressions, num_params);
+
     llvm::ArrayRef<llvm::Value *> ref_params = to_array_ref(param_expressions, num_params);
     retval = llvm.builder->CreateCall(callee, ref_params);
     //assert(retval);
   }
+
 
   return retval;
 }
@@ -1531,14 +1628,13 @@ void llvm_emit_function_declaration(LLVM &llvm, const GGToken &function_declarat
   llvm::Type *retval_type = get_type(llvm, function_return_type);
 
   llvm::FunctionType *functionType;
+  int num_params;
+  llvm::Type *param_types[MAX_PARAMS];
   if (function_param_types.num_subtokens == 0) 
   {
     functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
-  }
-  else
-  {
-    llvm::Type *param_types[MAX_PARAMS];
-    int num_params = get_param_types(llvm, function_param_types, param_types, MAX_PARAMS);
+  } else {
+    num_params = get_param_types(llvm, function_param_types, param_types, MAX_PARAMS);
 
     llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
     functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
@@ -1553,7 +1649,11 @@ void llvm_emit_function_declaration(LLVM &llvm, const GGToken &function_declarat
 
   //function->addFnAttr("nounwind");
 
-  db_add_function(llvm, function_identifier, function);
+  if (function_param_types.num_subtokens == 0) {
+    db_add_function(llvm, function_identifier, function, NULL, 0);
+  } else {
+    db_add_function(llvm, function_identifier, function, param_types, num_params);
+  }
 }
 
 void llvm_emit_external_function_declaration(LLVM &llvm, const GGToken &function_declaration) {
@@ -1566,14 +1666,15 @@ void llvm_emit_external_function_declaration(LLVM &llvm, const GGToken &function
   llvm::Type *retval_type = get_type(llvm, function_return_type);
 
   llvm::FunctionType *functionType;
+  int num_params;
+  llvm::Type *param_types[MAX_PARAMS];
   if (function_param_types.num_subtokens == 0) 
   {
     functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
   }
   else
   {
-    llvm::Type *param_types[MAX_PARAMS];
-    int num_params = get_param_types(llvm, function_param_types, param_types, MAX_PARAMS);
+    num_params = get_param_types(llvm, function_param_types, param_types, MAX_PARAMS);
 
     llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
     functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
@@ -1588,7 +1689,11 @@ void llvm_emit_external_function_declaration(LLVM &llvm, const GGToken &function
 
   //function->addFnAttr("nounwind");
 
-  db_add_function(llvm, function_identifier, function);
+  if (function_param_types.num_subtokens == 0) {
+    db_add_function(llvm, function_identifier, function, NULL, 0);
+  } else {
+    db_add_function(llvm, function_identifier, function, param_types, num_params);
+  }
 }
 
 void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definition) {
@@ -1599,7 +1704,15 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
   const GGToken &function_params      = function_definition.subtokens[2];
   const GGToken &function_body        = function_definition.subtokens[3];
 
-  llvm::Function *function = db_lookup_function(llvm, function_identifier);
+  llvm::Function *function;
+  
+  if (function_params.num_subtokens == 0)  {
+    function = db_lookup_function_declaration(llvm, function_identifier, NULL, 0);
+  } else {
+    llvm::Type *param_types[MAX_PARAMS];
+    int num_params = get_param_types(llvm, function_params, param_types, MAX_PARAMS);
+    function = db_lookup_function_declaration(llvm, function_identifier, param_types, num_params);
+  }
   //llvm::Type *retval_type = get_type(llvm, function_return_type);
   //llvm::FunctionType *functionType;
   //if (function_params.num_subtokens == 0) 

@@ -4,12 +4,12 @@ gglang
 Good Game Language - A programming language designed for video games
 
 
-Inspired by this youtube series: https://www.youtube.com/watch?v=TH9VCN6UkyQ, GGLang is an attempt to explore ideas that would make a good game programming language.
+Inspired by this youtube series: https://www.youtube.com/watch?v=TH9VCN6UkyQ, GGLang is an attempt to explore ideas that would make a good game programming language.  The current design direction is "C with a couple more things"
 
 
-Current features include:
-* inline llvm
+Current features (beyond c) include:
 * any order declaration
+* inline llvm
 * c foreign function interface
 
 Planned features include:

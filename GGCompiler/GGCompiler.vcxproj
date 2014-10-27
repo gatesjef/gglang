@@ -99,6 +99,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="..\main.gg" />
+    <None Include="..\prelude.gg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
