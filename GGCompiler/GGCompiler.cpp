@@ -505,6 +505,18 @@ GGToken parse_literal(const GGParseInput &input)
   return parse_first_of(literals, num_literals, input);
 }
 
+bool inline_parse_exact_discard(const char *str, GGToken *&token, int& num_remaining, GGParseInput &input) {
+  const char *c = str;
+  const char *&data = input.data;
+  while(*c) {
+    if (*c != *data) return false;
+    c++;
+    data++;
+  }
+  
+  return true;
+}
+
 GGToken parse_exact(const char *str, GGTokenType tokenType, const GGParseInput &input) {
   const char *c = str;
   const char *data = input.data;
@@ -1337,6 +1349,18 @@ GGToken parse_extern_exact(const GGParseInput &input) {
   return parse_exact("extern", TOKEN_DISCARD, input);
 }
 
+GGToken parse_import_exact(const GGParseInput &input) {
+  return parse_exact("import", TOKEN_DISCARD, input);
+}
+
+bool inline_parse_import_exact(GGToken *&token, int& num_remaining, GGParseInput &input) {
+  return inline_parse_exact_discard("import", token, num_remaining, input);
+}
+
+bool inline_parse_semicolon(GGToken *&token, int& num_remaining, GGParseInput &input) {
+  return inline_parse_exact_discard(";", token, num_remaining, input);
+}
+
 
 //T[,,] = tuple(T*, int size1, int stride1, int size2, int stride2, int size3)
 //  T[,5] = tuple(T*, int size1) // stride = 5*sizeof(T)
@@ -1541,6 +1565,148 @@ GGToken parse_enum_definition(const GGParseInput &input) {
   return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_ENUM_DEFINITION, input);
 }
 
+bool inline_parse_1_to_3_strings(GGToken *&token, int &remainingTokens, GGParseInput &cur_input) {
+  assert(remainingTokens >= 3);
+
+  int num_strings = 0;
+  for(int i = 0; i < 3; ++i) {
+    GGToken &subtoken = *token++;
+    subtoken = parse_string_literal(cur_input);
+    if (ParseOuputIsFalse(subtoken)) {
+      break;
+    } else {
+      num_strings++;
+      cur_input.info = subtoken.info;
+      cur_input.data = subtoken.next;
+      if (consume_whitespace(cur_input) == false) break;
+    }
+  }
+
+  remainingTokens -= num_strings;
+  return num_strings != 0;
+}
+
+typedef bool (*ParseFn2)(GGToken *&token, int &num_remaining, GGParseInput &);
+
+bool inline_parse_whitespace_separated_sequence(const ParseFn2 *parse_fns, int num_functions, GGToken *&token, int &remainingTokens, GGParseInput &cur_input) {
+  for(int i = 0; i < num_functions; ++i) {
+    bool result = parse_fns[i](token, remainingTokens, cur_input);
+    if (result == false) return false;
+    if (consume_whitespace(cur_input) == false) return false;
+  }
+
+  return true;
+}
+
+const int MAX_FILES = 1024;
+const int MAX_STACK = 1024;
+struct FileList {
+  GGSubString directory_stack[MAX_STACK];
+  int stack_depth;
+
+  GGSubString files[MAX_FILES];
+  int num_files;
+} gFileList;
+
+bool substring_cmp(const GGSubString &substring, const GGSubString &substring0);
+
+bool FileListLookup(const FileList &files, const GGSubString &new_file) {
+  for(int i = 0; i < files.num_files; ++i) {
+    if (substring_cmp(files.files[i], new_file)) return true;
+  }
+
+  return false;
+}
+
+const int MAX_FILENAME = 1024;
+
+GGSubString filepath_concat(const GGSubString &dir, const GGSubString &file) {
+  if (dir.length == 0) {
+    return file;
+  }
+  
+  GGSubString retval;
+  retval.length = dir.length + file.length;
+  char *new_str = (char *)malloc(retval.length * sizeof(char));
+  strncpy(new_str, dir.start, dir.length);
+  strncpy(new_str + dir.length, file.start, file.length);
+  retval.start = new_str;
+
+  return retval;
+}
+
+void MakeFileName(const FileList &files, const GGSubString &file, GGSubString &project_relative_filename) {
+  if (files.stack_depth == 0) {
+    project_relative_filename = file;
+    return;
+  }
+
+  const GGSubString &dir = files.directory_stack[files.stack_depth-1];
+  project_relative_filename = filepath_concat(dir, file);
+}
+
+void FileListAdd(FileList &files, const GGSubString &new_file) {
+  GGSubString project_relative_filename;
+  MakeFileName(files, new_file, project_relative_filename);
+
+  if (FileListLookup(files, project_relative_filename) == true) return;
+
+  files.files[files.num_files++] = project_relative_filename;
+}
+
+void FileListAdd(FileList &files, const char *new_file) {
+  GGSubString substring;
+  substring.start = new_file;
+  substring.length = strlen(new_file);
+  FileListAdd(files, substring);
+}
+
+void emit_import_statement(FileList &list, const GGToken &import_statement) {
+  assert(import_statement.num_subtokens >= 1);
+  assert(import_statement.num_subtokens <= 3);
+
+  switch(import_statement.num_subtokens) {
+  case 1:
+    FileListAdd(list, import_statement.subtokens[0].substring);
+    break;
+  case 2:
+  case 3:
+    // TODO
+  default:
+    halt();
+  }
+}
+
+
+GGToken parse_import_statement(const GGParseInput &input) {
+  // identifier := expression;
+  
+  static const ParseFn2 statements[] = {
+    inline_parse_import_exact,
+    inline_parse_1_to_3_strings,
+    inline_parse_semicolon,
+  };
+  static const int num_statements = ARRAYSIZE(statements);
+
+  GGToken retval = ParseOutputAlloc(TOKEN_COMPOUND_IMPORT_STATEMENT, 3);
+  int num_remaining = 3;
+  GGParseInput cur_input = input;
+  GGToken *subtokens = retval.subtokens;
+  bool result = inline_parse_whitespace_separated_sequence(statements, num_statements, subtokens, num_remaining, cur_input);
+  if (result == false) {
+    ParseOutputFree(retval);
+    return PARSE_FALSE;
+  }
+
+  retval.num_subtokens = 3 - num_remaining;
+  retval.info = input.info;
+  retval.next = cur_input.data;
+
+  emit_import_statement(gFileList, retval);
+
+  return retval;
+};
+
 GGToken parse_extern_function_declaration(const GGParseInput &input) {
   // identifier := expression;
   static const ParseFn statements[] = {
@@ -1715,6 +1881,7 @@ GGToken parse_function_definition(const GGParseInput &input) {
 GGToken parse_program_statement(const GGParseInput &input) {
   static const ParseFn fns[] = { 
     //parse_nonsyntax_tokens,
+    parse_import_statement, 
     parse_extern_function_declaration, 
     parse_type_definition, 
     parse_variable_definition, 
@@ -1731,10 +1898,136 @@ GGToken parse_program(const GGParseInput &input) {
   return parse_zero_or_more(parse_program_statement, TOKEN_COMPOUND_PROGRAM, cur_input);
 }
 
-GGToken GGCompile(const char *file_data) {
+
+bool inline_parse_zero_or_more(GGToken *&tokens, int &num_remamining, ParseFn fn, GGParseInput &input) {
+  int num_tokens = 0;
+  while(1) {
+    GGToken output = fn(input);
+    if (ParseOuputIsFalse(output)) {
+      break;
+    } else {
+      assert(num_tokens < num_remamining);
+      tokens[num_tokens++] = output;
+      input.data = output.next;
+    }
+
+    if (consume_whitespace(input) == false) break;
+  }
+
+  tokens += num_tokens;
+  num_remamining -= num_tokens;
+  return true;
+}
+bool inline_parse_program(GGToken *&tokens, int &num_remaining, GGParseInput &input) {
+  consume_whitespace(input);
+  return inline_parse_zero_or_more(tokens, num_remaining, parse_program_statement, input);
+}
+
+bool inline_ggcompile(const char *file_data, GGToken *&tokens, int &num_remaining) {
   GGParseInput input = {};
   input.data = file_data;
-  GGToken output = parse_program(input);
+  bool result = inline_parse_program(tokens, num_remaining, input);
+  return result;
+}
+
+//GGToken GGCompile(const char *file_data) {
+//  GGParseInput input = {};
+//  input.data = file_data;
+//  GGToken output = ParseOutputAlloc(TOKEN_COMPOUND_PROGRAM, 1024);
+//  int num_remaining = 1024;
+//  inline_parse_program(output.subtokens, num_remaining, input);
+//  output.num_subtokens = 1024 - num_remaining;
+//  return output;
+//}
+
+void error(const char *format, ...) {
+  exit(-1);
+}
+
+int fsize(FILE *file) {
+  fseek(file, 0, SEEK_END);
+  int size = ftell (file);
+  rewind(file);
+  return size;
+}
+
+char *FileRead(const GGSubString &filename) {
+  char input_filename[MAX_FILENAME];
+  assert(filename.length < MAX_FILENAME - 1);
+
+  strncpy(input_filename, filename.start, filename.length);
+  input_filename[filename.length] = 0;
+  
+  FILE *input_file = fopen(input_filename, "rb");
+
+  if (input_file == NULL) {
+    error("cannot open %s", input_filename);
+  }
+
+  int file_size = fsize(input_file);
+  char *file_data = (char *)malloc(file_size + 1);
+  int read = fread(file_data, 1, file_size, input_file);
+  file_data[file_size] = 0;
+
+  if (read != file_size) {
+    error("cannon read %s", input_filename);
+  }
+
+  return file_data;
+}
+
+//GGToken GGCompile(const FileList &files) {
+//  GGToken output = ParseOutputAlloc(TOKEN_COMPOUND_PROGRAM, 1024);
+//  int num_remaining = 1024;
+//  for(int i = 0; i < files.num_files; ++i) {
+//    char *file_data = FileRead(files.files[i]);
+//    inline_ggcompile(file_data, output.subtokens, num_remaining);
+//  }
+//  output.num_subtokens = 1024 - num_remaining;
+//  return output;
+//}
+
+void FileNameParse(const GGSubString &source_path, GGSubString &filename, GGSubString &directory) {
+  for(int i = source_path.length - 1; i >= 0; --i) {
+    if (source_path.start[i] == '/') {
+      directory.start = source_path.start;
+      directory.length = i+1;
+      filename.start = source_path.start + i + 1;
+      filename.length = source_path.length - i - 1;
+      return;
+    }
+  }
+
+  directory.start = 0;
+  directory.length = 0;
+  filename = source_path;
+}
+
+void FileListSetDirectory(FileList &list, const GGSubString &directory) {
+  list.directory_stack[list.stack_depth++] = directory;
+}
+
+void FileListPopDirectory(FileList &list) {
+  list.stack_depth--;
+}
+
+GGToken GGCompile(const char * source_file) {
+  GGToken output = ParseOutputAlloc(TOKEN_COMPOUND_PROGRAM, 1024);
+
+  //FileList files;
+  FileListAdd(gFileList, source_file); // get from argv;
+  int num_remaining = 1024;
+  GGToken *subtokens = output.subtokens;
+  for(int i = 0; i < gFileList.num_files; ++i) {
+    GGSubString filename;
+    GGSubString directory;
+    FileNameParse(gFileList.files[i], filename, directory);
+    FileListSetDirectory(gFileList, directory);
+    char *file_data = FileRead(gFileList.files[i]);
+    inline_ggcompile(file_data, subtokens, num_remaining);
+    FileListPopDirectory(gFileList);
+  }
+  output.num_subtokens = 1024 - num_remaining;
   return output;
 }
 

@@ -1947,6 +1947,41 @@ llvm::Type *llvm_emit_struct_definition(LLVM &llvm, const GGToken &struct_def) {
 //  }
 //}
 
+//void llvm_emit_import_statement(LLVM &llvm, const GGToken &import_statement) {
+//  assert(import_statement.num_subtokens >= 1);
+//  assert(import_statement.num_subtokens <= 3);
+//
+//  switch(import_statement.num_subtokens) {
+//  case 1:
+//    break;
+//  default:
+//    halt();
+//  }
+//  GGToken GGCompile(file_data);
+//}
+
+//void llvm_emit_import_statements(LLVM &llvm, const GGToken &program) {
+//  for(int i = 0; i < program.num_subtokens; ++i) {
+//    const GGToken &subtoken = program.subtokens[i];
+//    switch(subtoken.token) {
+//    case TOKEN_COMPOUND_IMPORT_STATEMENT:
+//      llvm_emit_import_statement(llvm, subtoken);
+//      break;
+//    case TOKEN_COMPOUND_STRUCT_DEFINITION:
+//    case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
+//    case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
+//    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+//    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
+//    case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
+//    case TOKEN_COMMENT:
+//      break;
+//    default:
+//      halt();
+//    }
+//  }
+//}
+
+
 void llvm_emit_global_type_definitions(LLVM &llvm, const GGToken &program) {
   for(int i = 0; i < program.num_subtokens; ++i) {
     const GGToken &subtoken = program.subtokens[i];
@@ -1960,6 +1995,7 @@ void llvm_emit_global_type_definitions(LLVM &llvm, const GGToken &program) {
     case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
       llvm_emit_llvm_type_definition(llvm, subtoken);
       break;
+    case TOKEN_COMPOUND_IMPORT_STATEMENT:
     case TOKEN_COMPOUND_VARIABLE_DEFINITION:
     case TOKEN_COMPOUND_FUNCTION_DEFINITION:
     case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
@@ -1978,6 +2014,7 @@ void llvm_emit_global_function_definitions(LLVM &llvm, const GGToken &program) {
     case TOKEN_COMPOUND_FUNCTION_DEFINITION:
       llvm_emit_function_definition(llvm, subtoken);
       break;
+    case TOKEN_COMPOUND_IMPORT_STATEMENT:
     case TOKEN_COMPOUND_VARIABLE_DEFINITION:
     case TOKEN_COMPOUND_STRUCT_DEFINITION:
     case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
@@ -1998,6 +2035,7 @@ void llvm_emit_global_variable_definitions(LLVM &llvm, const GGToken &program) {
     case TOKEN_COMPOUND_VARIABLE_DEFINITION:
       llvm_emit_global_variable(llvm, subtoken);
       break;
+    case TOKEN_COMPOUND_IMPORT_STATEMENT:
     case TOKEN_COMPOUND_FUNCTION_DEFINITION:
     case TOKEN_COMPOUND_STRUCT_DEFINITION:
     case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
@@ -2021,6 +2059,7 @@ void llvm_emit_global_function_prototypes(LLVM &llvm, const GGToken &program) {
     case TOKEN_COMPOUND_FUNCTION_DEFINITION:
       llvm_emit_function_declaration(llvm, subtoken);
       break;
+    case TOKEN_COMPOUND_IMPORT_STATEMENT:
     case TOKEN_COMPOUND_VARIABLE_DEFINITION:
     case TOKEN_COMPOUND_STRUCT_DEFINITION:
     case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
@@ -2073,6 +2112,7 @@ void GGLLVMEmitProgram(const GGToken &program) {
   LLVM llvm = GGLLVMInit();
 
   //emit_global_functions_declarations(llvm, program);
+  //llvm_emit_import_statements(llvm, program);
   llvm_emit_global_type_definitions(llvm, program);
   llvm_emit_global_function_prototypes(llvm, program);
   llvm_emit_global_variable_definitions(llvm, program);

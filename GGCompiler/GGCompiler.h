@@ -30,6 +30,8 @@ enum GGTokenType {
 
   TOKEN_COMPOUND_PROGRAM,
 
+  TOKEN_COMPOUND_IMPORT_STATEMENT,
+
   TOKEN_COMPOUND_VARIABLE_DEFINITION,
   //TOKEN_COMPOUND_GLOBAL_VARIABLE,
 
@@ -98,6 +100,6 @@ struct GGToken {
   const char *next;
 };
 
-GGToken GGCompile(const char *file_data);
+GGToken GGCompile(const char *source_file);
 
 
