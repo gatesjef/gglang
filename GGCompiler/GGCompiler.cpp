@@ -335,8 +335,193 @@ GGToken parse_variable_identifier(const GGParseInput &input) {
   return parse_identifier(input);
 }
 
+GGToken parse_exact(const char *str, GGTokenType tokenType, const GGParseInput &input) {
+  const char *c = str;
+  const char *data = input.data;
+  while(*c) {
+    if (*c != *data) return PARSE_FALSE;
+    c++;
+    data++;
+  }
+
+  GGToken result = {};
+  result.token = tokenType;
+  result.info = input.info;
+  result.substring.start = input.data;
+  result.substring.length = data - input.data;
+  result.next = data;
+  return result;
+}
+
+bool inline_parse_exact_discard(const char *str, GGToken *&token, int& num_remaining, GGParseInput &input) {
+  const char *c = str;
+  const char *&data = input.data;
+  while(*c) {
+    if (*c != *data) return false;
+    c++;
+    data++;
+  }
+  
+  return true;
+}
+
+bool inline_parse_operator_keyword_exact(GGToken *&tokens, int &numRemaining, GGParseInput &input) {
+  return inline_parse_exact_discard("operator", tokens, numRemaining, input);
+}
+
+
+GGToken parse_operator_keyword_exact(const GGParseInput &input) {
+  return parse_exact("operator", TOKEN_DISCARD, input);
+}
+
+enum Associativity {
+  LEFT_TO_RIGHT,
+  RIGHT_TO_LEFT,
+};
+
+struct OperatorDef {
+  const char *symbol;
+  int precidence;
+  Associativity associativity;
+};
+
+const OperatorDef BINARY_OPERATORS[] = {
+  //{ "()", 2, LEFT_TO_RIGHT },   // function call
+  //{ "[]", 2, LEFT_TO_RIGHT },   // array subscript
+  //{ ".",  2, LEFT_TO_RIGHT },   // field selection
+
+  { "*",  5, LEFT_TO_RIGHT},    // multiplication
+  { "/",  5, LEFT_TO_RIGHT},    // division
+  { "%",  5, LEFT_TO_RIGHT},    // remainder
+
+  { "+",  6, LEFT_TO_RIGHT},    // addition
+  { "-",  6, LEFT_TO_RIGHT},    // subtraction
+
+  { "<<", 7, LEFT_TO_RIGHT},    // bitwise left shift
+  { ">>", 7, LEFT_TO_RIGHT},    // bitwise right shift
+
+  { ">=", 8, LEFT_TO_RIGHT},    // gte comparison
+  { "<=", 8, LEFT_TO_RIGHT},    // lte comparison
+  { ">",  8, LEFT_TO_RIGHT},    // gt comparison
+  { "<",  8, LEFT_TO_RIGHT},    // lt comparison
+
+  { "==", 9, LEFT_TO_RIGHT},    // eq comparison
+  { "!=", 9, LEFT_TO_RIGHT},    // neq comparison
+
+  { "&",  10, LEFT_TO_RIGHT},   // bitwise and
+  { "^",  11, LEFT_TO_RIGHT},   // bitwise xor
+  { "|",  12, LEFT_TO_RIGHT},   // bitwise or
+  { "&&", 13, LEFT_TO_RIGHT},   // boolean and
+  { "||", 14, LEFT_TO_RIGHT},   // boolean or
+};
+const int NUM_BINARY_OPERATORS = ARRAYSIZE(BINARY_OPERATORS);
+
+
+const OperatorDef ASSIGNMENT_OPERATORS[] = {
+  { "=",  16, RIGHT_TO_LEFT},   // assignment
+  { "+=", 16, RIGHT_TO_LEFT},   // compound assignment
+  { "-=", 16, RIGHT_TO_LEFT},   // 
+  { "*=", 16, RIGHT_TO_LEFT},   // 
+  { "/=", 16, RIGHT_TO_LEFT},   // 
+  { "%=", 16, RIGHT_TO_LEFT},   // 
+  { "|=", 16, RIGHT_TO_LEFT},   // 
+  { "&=", 16, RIGHT_TO_LEFT},   // 
+  { "^=", 16, RIGHT_TO_LEFT},   // 
+};
+const int NUM_ASSIGNMENT_OPERATORS = ARRAYSIZE(ASSIGNMENT_OPERATORS);
+
+GGToken parse_op_symbol(const GGParseInput &input, GGTokenType token, const OperatorDef *ops, int num_ops) {
+  for(int i = 0; i < num_ops; ++i) {
+    const OperatorDef &opdef = ops[i];
+    int len = strlen(opdef.symbol);
+    if (strncmp(opdef.symbol, input.data, len) == 0) {
+      GGToken retval = {};
+      retval.info = input.info;
+      retval.token = token;
+      retval.num_subtokens = i;
+      retval.substring.start = input.data;
+      retval.substring.length = len;
+      retval.next = input.data + len;
+      return retval;
+    }
+  }
+
+  return PARSE_FALSE;
+  //return parse_one_or_more_pred(isBinaryOperator, TOKEN_BINARY_OPERATOR, input);
+};
+
+GGToken parse_binary_op_symbol(const GGParseInput &input) {
+  return parse_op_symbol(input, TOKEN_BINARY_OPERATOR, BINARY_OPERATORS, NUM_BINARY_OPERATORS);
+}
+
+bool consume_whitespace(GGParseInput &cur_input) {
+  while(1) {
+    GGToken discard = parse_nonsyntax_tokens(cur_input);
+    if (ParseOuputIsFalse(discard)) {
+      return true;
+    } else if (discard.token == TOKEN_EOF) {
+      //ParseOutputAppend(total_output, output);
+      return false;
+    } else if (discard.token == TOKEN_END_OF_LINE) {
+      //ParseOutputAppend(total_output, output);
+      cur_input.data = discard.next;
+      cur_input.info.line_number = discard.info.line_number + 1;
+      cur_input.info.col_number = 0;
+    } else {
+      // discard
+      cur_input.data = discard.next;
+      cur_input.info = discard.info;
+    }
+  }
+}
+
+bool inline_parse_binary_op_symbol(GGToken *&tokens, int &numRemaining, GGParseInput &input) {
+  assert(numRemaining > 0);
+  GGToken retval = parse_op_symbol(input, TOKEN_BINARY_OPERATOR, BINARY_OPERATORS, NUM_BINARY_OPERATORS);
+  if (ParseOuputIsFalse(retval)) return false;
+
+  *tokens++ = retval;
+  numRemaining--;
+  input.data = retval.next;
+  if (consume_whitespace(input) == false) return false;
+  return true;
+}
+
+typedef bool (*ParseFn2)(GGToken *&token, int &num_remaining, GGParseInput &);
+
+bool inline_parse_whitespace_separated_sequence(const ParseFn2 *parse_fns, int num_functions, GGToken *&token, int &remainingTokens, GGParseInput &cur_input) {
+  for(int i = 0; i < num_functions; ++i) {
+    bool result = parse_fns[i](token, remainingTokens, cur_input);
+    if (result == false) return false;
+    if (consume_whitespace(cur_input) == false) return false;
+  }
+
+  return true;
+}
+
+GGToken parse_operator_identifier(const GGParseInput &input) {
+  static const ParseFn2 fns[] = { 
+    inline_parse_operator_keyword_exact, 
+    inline_parse_binary_op_symbol, 
+  };
+
+  static const int num = ARRAYSIZE(fns);
+  GGToken retval = {};
+  GGToken *param = &retval;
+  int remainingTokens = 1;
+  GGParseInput cur_input = input;
+  bool result = inline_parse_whitespace_separated_sequence(fns, num, param, remainingTokens, cur_input);
+  if (result == false) return PARSE_FALSE;
+  return retval;
+}
+
 GGToken parse_function_identifier(const GGParseInput &input) {
-  return parse_identifier(input);
+  static const ParseFn fns[] = { 
+    parse_operator_identifier, 
+    parse_identifier, 
+  };
+  static const int num = ARRAYSIZE(fns);
+  return parse_first_of(fns, num, input);
 }
 
 GGToken parse_member_identifier(const GGParseInput &input) {
@@ -377,27 +562,6 @@ GGToken parse_one_or_more_pred(CharPredicate pred, GGTokenType tokenType, const 
   result.substring.length = data - input.data;
   result.next = data;
   return result;
-}
-
-bool consume_whitespace(GGParseInput &cur_input) {
-  while(1) {
-    GGToken discard = parse_nonsyntax_tokens(cur_input);
-    if (ParseOuputIsFalse(discard)) {
-      return true;
-    } else if (discard.token == TOKEN_EOF) {
-      //ParseOutputAppend(total_output, output);
-      return false;
-    } else if (discard.token == TOKEN_END_OF_LINE) {
-      //ParseOutputAppend(total_output, output);
-      cur_input.data = discard.next;
-      cur_input.info.line_number = discard.info.line_number + 1;
-      cur_input.info.col_number = 0;
-    } else {
-      // discard
-      cur_input.data = discard.next;
-      cur_input.info = discard.info;
-    }
-  }
 }
 
 bool isDigit(char c) {
@@ -505,36 +669,6 @@ GGToken parse_literal(const GGParseInput &input)
   return parse_first_of(literals, num_literals, input);
 }
 
-bool inline_parse_exact_discard(const char *str, GGToken *&token, int& num_remaining, GGParseInput &input) {
-  const char *c = str;
-  const char *&data = input.data;
-  while(*c) {
-    if (*c != *data) return false;
-    c++;
-    data++;
-  }
-  
-  return true;
-}
-
-GGToken parse_exact(const char *str, GGTokenType tokenType, const GGParseInput &input) {
-  const char *c = str;
-  const char *data = input.data;
-  while(*c) {
-    if (*c != *data) return PARSE_FALSE;
-    c++;
-    data++;
-  }
-
-  GGToken result = {};
-  result.token = tokenType;
-  result.info = input.info;
-  result.substring.start = input.data;
-  result.substring.length = data - input.data;
-  result.next = data;
-  return result;
-}
-
 GGToken parse_semicolon(const GGParseInput &input) {
   return parse_exact(";", TOKEN_DISCARD, input);
 }
@@ -542,18 +676,6 @@ GGToken parse_semicolon(const GGParseInput &input) {
 GGToken parse_declaration_assignment_operator(const GGParseInput &input) {
   return parse_exact("=", TOKEN_DISCARD, input);
 }
-
-
-enum Associativity {
-  LEFT_TO_RIGHT,
-  RIGHT_TO_LEFT,
-};
-
-struct OperatorDef {
-  const char *symbol;
-  int precidence;
-  Associativity associativity;
-};
 
 const OperatorDef POSTFIX_OPERATORS[] = {
   { "[", 2, LEFT_TO_RIGHT },   // array subscript []
@@ -584,51 +706,6 @@ const OperatorDef UNARY_OPERATORS[] = {
   { "*",  3, RIGHT_TO_LEFT},    // dereference
 };
 const int NUM_UNARY_OPERATORS = ARRAYSIZE(UNARY_OPERATORS);
-
-const OperatorDef BINARY_OPERATORS[] = {
-  //{ "()", 2, LEFT_TO_RIGHT },   // function call
-  //{ "[]", 2, LEFT_TO_RIGHT },   // array subscript
-  //{ ".",  2, LEFT_TO_RIGHT },   // field selection
-
-  { "*",  5, LEFT_TO_RIGHT},    // multiplication
-  { "/",  5, LEFT_TO_RIGHT},    // division
-  { "%",  5, LEFT_TO_RIGHT},    // remainder
-
-  { "+",  6, LEFT_TO_RIGHT},    // addition
-  { "-",  6, LEFT_TO_RIGHT},    // subtraction
-
-  { "<<", 7, LEFT_TO_RIGHT},    // bitwise left shift
-  { ">>", 7, LEFT_TO_RIGHT},    // bitwise right shift
-
-  { ">=", 8, LEFT_TO_RIGHT},    // gte comparison
-  { "<=", 8, LEFT_TO_RIGHT},    // lte comparison
-  { ">",  8, LEFT_TO_RIGHT},    // gt comparison
-  { "<",  8, LEFT_TO_RIGHT},    // lt comparison
-
-  { "==", 9, LEFT_TO_RIGHT},    // eq comparison
-  { "!=", 9, LEFT_TO_RIGHT},    // neq comparison
-
-  { "&",  10, LEFT_TO_RIGHT},   // bitwise and
-  { "^",  11, LEFT_TO_RIGHT},   // bitwise xor
-  { "|",  12, LEFT_TO_RIGHT},   // bitwise or
-  { "&&", 13, LEFT_TO_RIGHT},   // boolean and
-  { "||", 14, LEFT_TO_RIGHT},   // boolean or
-};
-const int NUM_BINARY_OPERATORS = ARRAYSIZE(BINARY_OPERATORS);
-
-
-const OperatorDef ASSIGNMENT_OPERATORS[] = {
-  { "=",  16, RIGHT_TO_LEFT},   // assignment
-  { "+=", 16, RIGHT_TO_LEFT},   // compound assignment
-  { "-=", 16, RIGHT_TO_LEFT},   // 
-  { "*=", 16, RIGHT_TO_LEFT},   // 
-  { "/=", 16, RIGHT_TO_LEFT},   // 
-  { "%=", 16, RIGHT_TO_LEFT},   // 
-  { "|=", 16, RIGHT_TO_LEFT},   // 
-  { "&=", 16, RIGHT_TO_LEFT},   // 
-  { "^=", 16, RIGHT_TO_LEFT},   // 
-};
-const int NUM_ASSIGNMENT_OPERATORS = ARRAYSIZE(ASSIGNMENT_OPERATORS);
 
 //string
 //OSString 
@@ -835,34 +912,10 @@ GGToken parse_atomic_expression(const GGParseInput &input) {
 //	ParseFirstOf(parse_unary_expression, parse_atomic_expression)
 //}
 
-GGToken parse_op_symbol(const GGParseInput &input, GGTokenType token, const OperatorDef *ops, int num_ops) {
-  for(int i = 0; i < num_ops; ++i) {
-    const OperatorDef &opdef = ops[i];
-    int len = strlen(opdef.symbol);
-    if (strncmp(opdef.symbol, input.data, len) == 0) {
-      GGToken retval = {};
-      retval.info = input.info;
-      retval.token = token;
-      retval.num_subtokens = i;
-      retval.substring.start = input.data;
-      retval.substring.length = len;
-      retval.next = input.data + len;
-      return retval;
-    }
-  }
-
-  return PARSE_FALSE;
-  //return parse_one_or_more_pred(isBinaryOperator, TOKEN_BINARY_OPERATOR, input);
-};
-
 GGToken parse_postfix_op_symbol(const GGParseInput &input) {
   return parse_op_symbol(input, TOKEN_POSTFIX_OPERATOR, POSTFIX_OPERATORS, NUM_POSTFIX_OPERATORS);
 }
 
-
-GGToken parse_binary_op_symbol(const GGParseInput &input) {
-  return parse_op_symbol(input, TOKEN_BINARY_OPERATOR, BINARY_OPERATORS, NUM_BINARY_OPERATORS);
-}
 
 GGToken parse_unary_op_symbol(const GGParseInput &input) {
   return parse_op_symbol(input, TOKEN_UNARY_OPERATOR, UNARY_OPERATORS, NUM_UNARY_OPERATORS);
@@ -1584,18 +1637,6 @@ bool inline_parse_1_to_3_strings(GGToken *&token, int &remainingTokens, GGParseI
 
   remainingTokens -= num_strings;
   return num_strings != 0;
-}
-
-typedef bool (*ParseFn2)(GGToken *&token, int &num_remaining, GGParseInput &);
-
-bool inline_parse_whitespace_separated_sequence(const ParseFn2 *parse_fns, int num_functions, GGToken *&token, int &remainingTokens, GGParseInput &cur_input) {
-  for(int i = 0; i < num_functions; ++i) {
-    bool result = parse_fns[i](token, remainingTokens, cur_input);
-    if (result == false) return false;
-    if (consume_whitespace(cur_input) == false) return false;
-  }
-
-  return true;
 }
 
 const int MAX_FILES = 1024;

@@ -1,0 +1,46 @@
+// i8.gg
+
+llvm_type i8 { 
+  i8 
+}
+
+i8 operator +(i8 a, i8 b) {
+  i8 x;
+  llvm {
+    $x = add $a $b
+  }
+  return x;
+}
+
+i8 operator -(i8 a, i8 b) {
+  i8 x;
+  llvm {
+    $x = sub $a $b
+  }
+  return x;
+}
+
+i8 operator *(i8 a, i8 b) {
+  i8 x;
+  llvm {
+    $x = mul $a $b
+  }
+  return x;
+}
+
+i8 operator /(i8 a, i8 b) {
+  i8 x;
+  llvm {
+    $x = sdiv $a $b
+  }
+  return x;
+}
+
+i8 operator %(i8 a, i8 b) {
+  i8 x;
+  llvm {
+    $x = srem $a $b
+  }
+  return x;
+}
+

@@ -1,0 +1,46 @@
+// i32.gg
+
+llvm_type i32 { 
+  i32 
+}
+
+i32 operator +(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = add $a $b
+  }
+  return x;
+}
+
+i32 operator -(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = sub $a $b
+  }
+  return x;
+}
+
+i32 operator *(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = mul $a $b
+  }
+  return x;
+}
+
+i32 operator /(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = sdiv $a $b
+  }
+  return x;
+}
+
+i32 operator %(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = srem $a $b
+  }
+  return x;
+}
+

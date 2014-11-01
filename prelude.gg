@@ -1,60 +1,18 @@
 // prelude.gg
 // More comments!
 
-llvm_type i32 { 
-  i32 
-}
+import "i8.gg";
+import "i16.gg";
+import "i32.gg";
+import "i64.gg";
+//import "u8.gg";
+//import "u16.gg";
+//import "u32.gg";
+//import "u64.gg";
+import "f32.gg";
+import "f64.gg";
 
-llvm_type i8 { 
-  i8
-}
-
-llvm_type f32 { 
-  float
-}
-
-f32 add_f32(f32 a, f32 b) {
-  f32 x;
-  llvm {
-    $x = fadd $a $b
-  }
-  return x;
-}
-
-i32 add_i32(i32 a, i32 b) {
-  i32 x;
-  llvm {
-    $x = add $a $b
-  }
-  return x;
-}
-
-
-i8 add_i8(i8 a, i8 b) {
-  i8 x;
-  llvm {
-    $x = add $a $b
-  }
-  return x;
-}
-
-i8 sub_i8(i8 a, i8 b) {
-  i8 x;
-  llvm {
-    $x = sub $a $b
-  }
-  return x;
-}
-
-struct Vec2 {
-  f32 x;
-  f32 y;
-}
-
-struct Vec2I {
-  i32 x;
-  i32 y;
-}
+import "Vec2.gg";
 
 extern i32 putchar(i32 c);
 extern i32 puts(i8* s);

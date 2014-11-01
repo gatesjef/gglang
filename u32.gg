@@ -1,0 +1,46 @@
+// u32.gg
+
+llvm_type u32 { 
+  u32 
+}
+
+u32 operator +(u32 a, u32 b) {
+  u32 x;
+  llvm {
+    $x = add $a $b
+  }
+  return x;
+}
+
+u32 operator -(u32 a, u32 b) {
+  u32 x;
+  llvm {
+    $x = sub $a $b
+  }
+  return x;
+}
+
+u32 operator *(u32 a, u32 b) {
+  u32 x;
+  llvm {
+    $x = mul $a $b
+  }
+  return x;
+}
+
+u32 operator /(u32 a, u32 b) {
+  u32 x;
+  llvm {
+    $x = udiv $a $b
+  }
+  return x;
+}
+
+u32 operator %(u32 a, u32 b) {
+  u32 x;
+  llvm {
+    $x = urem $a $b
+  }
+  return x;
+}
+

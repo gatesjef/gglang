@@ -1,0 +1,101 @@
+// Vec2.gg
+
+struct Vec2 {
+  f32 x;
+  f32 y;
+}
+
+Vec2 operator +(Vec2 a, Vec2 b) {
+  Vec2 retval;
+  retval.x = a.x + b.x;
+  retval.y = a.y + b.y;
+  return retval;
+}
+
+Vec2 operator -(Vec2 a, Vec2 b) {
+  Vec2 retval;
+  retval.x = a.x - b.x;
+  retval.y = a.y - b.y;
+  return retval;
+}
+
+Vec2 operator *(Vec2 a, f32 b) {
+  Vec2 retval;
+  retval.x = a.x * b;
+  retval.y = a.y * b;
+  return retval;
+}
+
+Vec2 operator *(f32 a, Vec2 b) {
+  Vec2 retval;
+  retval.x = a * b.x;
+  retval.y = a * b.y;
+  return retval;
+}
+
+Vec2 operator /(Vec2 a, f32 b) {
+  f32 inv_b = 1./b;
+  Vec2 retval;
+  retval.x = a.x * inv_b;
+  retval.y = a.y * inv_b;
+  return retval;
+}
+
+f32 Dot(Vec2 a, Vec2 b) {
+  f32 retval = a.x*b.x + a.y*b.y;
+  return retval;
+}
+
+f32 SqrLength(Vec2 a) {
+  return Dot(a, a);
+}
+
+f32 SqrDist(Vec2 a, Vec2 b) {
+  Vec2 diff = b - a;
+  return SqrLength(diff);
+}
+
+f32 Length(Vec2 a) {
+  f32 length2 = SqrLength(a);
+  f32 retval = sqrt(length2);
+  return retval;
+}
+
+f32 Dist(Vec2 a, Vec2 b) {
+  f32 dist2 = SqrDist(a, b);
+  f32 retval = sqrt(dist2);
+  return retval;
+}
+
+Vec2 Norm(Vec2 a) {
+  f32 length = Length(a);
+  Vec2 retval = a/length;
+  return retval;
+}
+
+f32 EPSILON = .00001;
+
+Vec2 Norm_Safe(Vec2 a) {
+  f32 length = Length(a);
+  Vec2 retval = a/(length + EPSILON);
+  return retval;
+}
+
+Vec2 Perp(Vec2 a) {
+  Vec2 retval;
+  retval.x = v.y;
+  retval.y = -v.x;
+  return retval;
+}
+
+f32 Cross2(Vec2 a, Vec2 b) {
+  return a.x*b.y - a.y*b.x;
+}
+
+Vec2 Lerp(Vec2 a, Vec2 b, f32 t) {
+  return (1-t)*a + t*b;
+}
+
+
+
+

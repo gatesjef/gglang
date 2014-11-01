@@ -1,0 +1,56 @@
+// f32.gg
+
+llvm_type f32 { 
+  float 
+}
+
+f32 operator +(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fadd $a $b
+  }
+  return x;
+}
+
+f32 operator -(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fsub $a $b
+  }
+  return x;
+}
+
+f32 operator *(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fmul $a $b
+  }
+  return x;
+}
+
+f32 operator /(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fdiv $a $b
+  }
+  return x;
+}
+
+extern f32 sqrt(f32 a);
+//f32 sqrt(f32 a) {
+//  f32 x;
+//  llvm {
+//    $x = call float @llvm.sqrt.f32($a)
+//  }
+//  return x;
+//}
+
+// this causes a linker error - missing external function fmodf
+//f32 operator %(f32 a, f32 b) {
+//  f32 x;
+//  llvm {
+//    $x = frem $a $b
+//  }
+//  return x;
+//}
+

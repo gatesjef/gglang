@@ -206,11 +206,11 @@ llvm::Function *db_lookup_function_declaration(LLVM &llvm, const GGToken &functi
   return NULL;
 }
 
-llvm::Function *db_lookup_function_call(LLVM &llvm, const GGToken &function_identifier, llvm::Value **values, int num_values)
+llvm::Function *db_lookup_function_call(LLVM &llvm, const GGSubString &substring, llvm::Value **values, int num_values)
 {
   for(int i = 0; i < llvm.num_db_items; ++i) {
     DBItem &item = llvm.db_items[i];
-    if (substring_cmp(item.identifier, function_identifier.substring)) {
+    if (substring_cmp(item.identifier, substring)) {
       assert(item.itemType == IDENTIFIER_FUNCTION);
       if (compare_value_params(item, values, num_values) == true) {
         return item.functionInfo.function;
@@ -290,6 +290,7 @@ enum LLVMTokenType {
   LLVM_FSUB,
   LLVM_FMUL,
   LLVM_FDIV,
+  LLVM_FREM,
 };
 
 struct LLVMToken {
@@ -355,9 +356,10 @@ llvm::Value *emit_lvalue_expression(LLVM &llvm, const GGToken &expression);
 llvm::Value *emit_rvalue_expression(LLVM &llvm, const GGToken &expression);
 
 
+
 int emit_function_call_params(LLVM &llvm, const GGToken &params, llvm::Value **values, int maxParams)
 {
-  assert(params.num_subtokens < maxParams);
+  assert(params.num_subtokens <= maxParams);
   for(int i = 0; i< params.num_subtokens; ++i) {
     values[i] = emit_rvalue_expression(llvm, params.subtokens[i]);
   }
@@ -377,7 +379,7 @@ llvm::Value *emit_rvalue_function_call(LLVM &llvm, const GGToken &function_call)
   if (function_params.num_subtokens == 0)
   {
     llvm::StringRef name = to_string_ref(function_identifier.substring);
-    llvm::Function *callee = db_lookup_function_call(llvm, function_identifier, NULL, 0);
+    llvm::Function *callee = db_lookup_function_call(llvm, function_identifier.substring, NULL, 0);
     retval = llvm.builder->CreateCall(callee);
   }
   else
@@ -386,7 +388,7 @@ llvm::Value *emit_rvalue_function_call(LLVM &llvm, const GGToken &function_call)
     int num_params = emit_function_call_params(llvm, function_params, param_expressions, MAX_PARAMS);
 
     llvm::StringRef name = to_string_ref(function_identifier.substring);
-    llvm::Function *callee = db_lookup_function_call(llvm, function_identifier, param_expressions, num_params);
+    llvm::Function *callee = db_lookup_function_call(llvm, function_identifier.substring, param_expressions, num_params);
 
     llvm::ArrayRef<llvm::Value *> ref_params = to_array_ref(param_expressions, num_params);
     retval = llvm.builder->CreateCall(callee, ref_params);
@@ -612,38 +614,52 @@ llvm::Value *emit_rvalue_binary_op(LLVM &llvm, const GGToken &token) {
   llvm::Value *lhs = emit_rvalue_expression(llvm, lhsToken);
   llvm::Value *rhs = emit_rvalue_expression(llvm, rhsToken);
 
-  switch(*op_token.substring.start) {
-  case '+': {
-    return llvm.builder->CreateAdd(lhs, rhs, "addtmp");
-            }
-  case '-': {
-    return llvm.builder->CreateSub(lhs, rhs, "subtmp");
-            }
-  case '*': {
-    return llvm.builder->CreateMul(lhs, rhs, "multmp");
-            }
-  case '/': {
-    return llvm.builder->CreateSDiv(lhs, rhs, "divtmp");
-            }
-  case '%': {
-    return llvm.builder->CreateSRem(lhs, rhs, "remtmp");
-            }
-            //case OP_BINARY_AND:
-            //case OP_BINARY_OR:
-            //case OP_BINARY_XOR:
-            //case OP_LOGICAL_AND:
-            //case OP_LOGICAL_OR:
-            //case OP_COMPARE_EQUAL:
-            //case OP_COMPARE_NOT_EQUAL:
-            //case OP_COMPARE_LESS_THAN:
-            //case OP_COMPARE_LESS_THAN_EQUAL:
-            //case OP_COMPARE_GREATER_THAN:
-            //case OP_COMPARE_GREATER_THAN_EQUAL:
-  default:
-    halt();
-  }
+  GGSubString function_identifier = op_token.substring;
+  //switch(*op_token.substring.start) {
+  //case '+': {
+  //  GGToken replacementToken;
+  //  token.substring.start = "op_++";
+  //  token.substring.length
+  //  return llvm.builder->CreateAdd(lhs, rhs, "addtmp");
+  //          }
+  //case '-': {
+  //  return llvm.builder->CreateSub(lhs, rhs, "subtmp");
+  //          }
+  //case '*': {
+  //  return llvm.builder->CreateMul(lhs, rhs, "multmp");
+  //          }
+  //case '/': {
+  //  return llvm.builder->CreateSDiv(lhs, rhs, "divtmp");
+  //          }
+  //case '%': {
+  //  return llvm.builder->CreateSRem(lhs, rhs, "remtmp");
+  //          }
+  //          //case OP_BINARY_AND:
+  //          //case OP_BINARY_OR:
+  //          //case OP_BINARY_XOR:
+  //          //case OP_LOGICAL_AND:
+  //          //case OP_LOGICAL_OR:
+  //          //case OP_COMPARE_EQUAL:
+  //          //case OP_COMPARE_NOT_EQUAL:
+  //          //case OP_COMPARE_LESS_THAN:
+  //          //case OP_COMPARE_LESS_THAN_EQUAL:
+  //          //case OP_COMPARE_GREATER_THAN:
+  //          //case OP_COMPARE_GREATER_THAN_EQUAL:
+  //default:
+  //  halt();
+  //}
 
-  return NULL;
+  llvm::Value *param_expressions[2];
+  param_expressions[0] = lhs;
+  param_expressions[1] = rhs;
+
+  llvm::StringRef name = to_string_ref(function_identifier);
+  llvm::Function *callee = db_lookup_function_call(llvm, function_identifier, param_expressions, 2);
+
+  llvm::ArrayRef<llvm::Value *> ref_params = to_array_ref(param_expressions, 2);
+  llvm::Value *retval = llvm.builder->CreateCall(callee, ref_params);
+
+  return retval;
 }
 
 llvm::Value *emit_lvalue_array_dereference(LLVM &llvm, const GGToken &token) {
@@ -961,6 +977,7 @@ bool llvm_lex_instruction(LLVMToken &token, const char *&cur, const char *end) {
     {"fsub", LLVM_FSUB, },
     {"fmul", LLVM_FMUL, },
     {"fdiv", LLVM_FDIV, },
+    {"frem", LLVM_FREM, },
   };
   static const int NUM_INSTRUCTIONS = sizeof(LLVM_INSTRUCTIONS) / sizeof(LLVM_INSTRUCTIONS[0]);
 
@@ -1127,6 +1144,18 @@ void llvm_emit_fmul(LLVM &llvm, const LLVMStatement &statement) {
   llvm_emit_lvalue(llvm, result, value);
 }
 
+void llvm_emit_frem(LLVM &llvm, const LLVMStatement &statement) {
+  const LLVMToken &result = statement.result;				
+  const LLVMToken &lhs = statement.lhs;
+  const LLVMToken &rhs = statement.rhs;
+
+  llvm::Value *lhs_val = llvm_emit_rvalue(llvm, lhs);
+  llvm::Value *rhs_val = llvm_emit_rvalue(llvm, rhs);
+
+  llvm::Value *value = llvm.builder->CreateFRem(lhs_val, rhs_val);
+  llvm_emit_lvalue(llvm, result, value);
+}
+
 void llvm_emit_fdiv(LLVM &llvm, const LLVMStatement &statement) {
   const LLVMToken &result = statement.result;				
   const LLVMToken &lhs = statement.lhs;
@@ -1232,6 +1261,9 @@ void emit_raw_llvm_statement(LLVM &llvm, const LLVMStatement &statement) {
     break;
   case LLVM_FDIV:
     llvm_emit_fdiv(llvm, statement);
+    break;
+  case LLVM_FREM:
+    llvm_emit_frem(llvm, statement);
     break;
   case LLVM_ADD:
     llvm_emit_add(llvm, statement);
@@ -1352,6 +1384,7 @@ LLVMToken parse_instruction(const LLVMToken *tokens, int &i) {
   case LLVM_FSUB:
   case LLVM_FMUL:
   case LLVM_FDIV:
+  case LLVM_FREM:
     retval = token;
     ++i;
     break;
@@ -1361,6 +1394,7 @@ LLVMToken parse_instruction(const LLVMToken *tokens, int &i) {
 
   return retval;
 }
+
 
 int parse_raw_llvm(const LLVMToken *tokens, int num_tokens, LLVMStatement *statements, int max_statments) {
   int num_statements = 0;
@@ -1487,6 +1521,24 @@ int parse_raw_llvm(const LLVMToken *tokens, int num_tokens, LLVMStatement *state
 //  
 //  
 //}
+
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/AsmParser/Parser.h"
+
+void emit_inline_llvm_2(LLVM &llvm, const GGToken &inline_llvm) {
+  assert(inline_llvm.token == TOKEN_COMPOUND_INLINE_LLVM);
+  assert(inline_llvm.num_subtokens == 1);
+  const GGToken &raw_llvm = inline_llvm.subtokens[0];
+
+  //llvm::MemoryBuffer memory;
+  llvm::StringRef llvmAssembly = to_string_ref(raw_llvm.substring);
+  //memory.init(raw_llvm.substring.start, raw_llvm.substring.start + raw_llvm.substring.length, false);
+
+  llvm::MemoryBuffer *memory = llvm::MemoryBuffer::getMemBuffer(llvmAssembly, "<string>", true);
+
+  llvm::SMDiagnostic error;
+  llvm::ParseAssembly(memory, llvm.module, error, *llvm.context);
+}
 
 
 void emit_inline_llvm(LLVM &llvm, const GGToken &inline_llvm) {
@@ -1848,6 +1900,7 @@ llvm::Type *get_llvm_type(LLVM &llvm, const GGToken &type) {
   assert(trimmed_content.start != NULL);
 
   switch(trimmed_content.start[0]) {
+  case 'u':
   case 'i': {
     GGSubString digits = trimmed_content;
     digits.start++;
@@ -2005,6 +2058,27 @@ llvm::Type *llvm_emit_struct_field(LLVM &llvm, const GGToken &struct_field) {
   return get_type(llvm, type_decl);
 }
 
+const int IS_PACKED = true;
+
+llvm::Type *llvm_emit_struct_declaration(LLVM &llvm, const GGToken &struct_def) {
+  assert(struct_def.num_subtokens == 2);
+  const GGToken &identifier = struct_def.subtokens[0];
+  const GGToken &struct_body = struct_def.subtokens[1];
+
+  llvm::StringRef name = to_string_ref(identifier.substring);
+  llvm::StructType *type = llvm::StructType::create(*llvm.context, name);
+
+  DBItem &item = db_add_type(llvm, identifier, type);
+  item.typeInfo.numFields = struct_body.num_subtokens;
+  item.typeInfo.fields = db_alloc_fields(llvm, struct_body.num_subtokens);
+  for(int i = 0; i < struct_body.num_subtokens; ++i) {
+    item.typeInfo.fields[i].fieldName = struct_body.subtokens[i].subtokens[1].substring;
+  }
+
+
+  return type;
+}
+
 llvm::Type *llvm_emit_struct_definition(LLVM &llvm, const GGToken &struct_def) {
   assert(struct_def.num_subtokens == 2);
   const GGToken &identifier = struct_def.subtokens[0];
@@ -2019,15 +2093,10 @@ llvm::Type *llvm_emit_struct_definition(LLVM &llvm, const GGToken &struct_def) {
 
   llvm::ArrayRef<llvm::Type *> ref_fields = to_array_ref(fields, struct_body.num_subtokens);
 
-  static const int IS_PACKED = true;
-  llvm::Type *type = llvm::StructType::get(*llvm.context, ref_fields, IS_PACKED);
-  DBItem &item = db_add_type(llvm, identifier, type);
-  item.typeInfo.numFields = struct_body.num_subtokens;
-  item.typeInfo.fields = db_alloc_fields(llvm, struct_body.num_subtokens);
-  for(int i = 0; i < struct_body.num_subtokens; ++i) {
-    item.typeInfo.fields[i].fieldName = struct_body.subtokens[i].subtokens[1].substring;
-  }
+  llvm::StructType *type = (llvm::StructType *)db_lookup_type(llvm, identifier);
+  type->setBody(ref_fields, IS_PACKED); 
 
+  //llvm::Type *type = llvm::StructType::get(*llvm.context, ref_fields, IS_PACKED);
   return type;
 }
 
@@ -2100,14 +2169,33 @@ void llvm_emit_global_type_definitions(LLVM &llvm, const GGToken &program) {
     const GGToken &subtoken = program.subtokens[i];
     switch(subtoken.token) {
     case TOKEN_COMPOUND_STRUCT_DEFINITION:
+      llvm_emit_struct_declaration(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
+      llvm_emit_llvm_type_definition(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
+    case TOKEN_COMPOUND_IMPORT_STATEMENT:
+    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+    case TOKEN_COMPOUND_FUNCTION_DEFINITION:
+    case TOKEN_COMPOUND_EXTERNAL_FUNCTION_DECLARATION:
+    case TOKEN_COMMENT:
+      break;
+    default:
+      halt();
+    }
+  }
+
+  for(int i = 0; i < program.num_subtokens; ++i) {
+    const GGToken &subtoken = program.subtokens[i];
+    switch(subtoken.token) {
+    case TOKEN_COMPOUND_STRUCT_DEFINITION:
       llvm_emit_struct_definition(llvm, subtoken);
       break;
     case TOKEN_COMPOUND_TYPEDEF_DEFINITION:
       llvm_emit_type_definition(llvm, subtoken);
       break;
     case TOKEN_COMPOUND_LLVM_TYPE_DEFINITION:
-      llvm_emit_llvm_type_definition(llvm, subtoken);
-      break;
     case TOKEN_COMPOUND_IMPORT_STATEMENT:
     case TOKEN_COMPOUND_VARIABLE_DEFINITION:
     case TOKEN_COMPOUND_FUNCTION_DEFINITION:

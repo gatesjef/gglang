@@ -3,6 +3,11 @@
 
 import "prelude.gg";
 
+struct Vec2I {
+  i32 x;
+  i32 y;
+}
+
 i32 main() {
   Vec2I rho;
   rho.x = -2;
@@ -12,7 +17,7 @@ i32 main() {
   tau.x = 6;
   tau.y = 4;
 
-  Vec2I pi = vec_add(rho, tau);
+  Vec2I pi = rho + tau;
 
   Vec2 rho2;
   rho2.x = 2.0;
@@ -22,47 +27,42 @@ i32 main() {
   tau2.x = 6.0;
   tau2.y = 4.0;
 
-  Vec2 pi2 = vec_add(rho2, tau2);
+  Vec2 pi2 = rho2 + tau2;
 
 
   putchar(pi.x + pi.y + 65);
   return 1;
 }
 
-Vec2I vec_add(Vec2I a, Vec2I b) {
+Vec2I operator +(Vec2I a, Vec2I b) {
   Vec2I retval;
   retval.x = a.x + b.x;
   retval.y = a.y + b.y;
   return retval;
 }
 
-Vec2 vec_add(Vec2 a, Vec2 b) {
-  Vec2 retval;
-  retval.x = add_f32(a.x, b.x);
-  retval.y = add_f32(a.y, b.y);
-  return retval;
-}
 
-
-//operator overloading
-//casting 
+//error messages
+//typechecking
+//var args (printf)
 //pass by val/ref, return by val/ref
+//casting 
 //enums
 
 //constexpr
+//if statement
+//for statement
+//case statement
 //pre-main
 //other type literals (suffixess)
-//error messages
 //allocator
 //type inference
+//scoped declarations
 //slices
 //templates
 //std lib
 //reflection
-//case statement
 //full llvm parsing
-//if statement
-//for statement
 //named breaks/continue
 //scoped functions/types
 //capture
