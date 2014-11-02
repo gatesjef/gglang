@@ -7,7 +7,7 @@ llvm_type u8 {
 u8 operator +(u8 a, u8 b) {
   u8 x;
   llvm {
-    $x = add $a $b
+    $x = add $a, $b
   }
   return x;
 }
@@ -15,7 +15,7 @@ u8 operator +(u8 a, u8 b) {
 u8 operator -(u8 a, u8 b) {
   u8 x;
   llvm {
-    $x = sub $a $b
+    $x = sub $a, $b
   }
   return x;
 }
@@ -23,7 +23,7 @@ u8 operator -(u8 a, u8 b) {
 u8 operator *(u8 a, u8 b) {
   u8 x;
   llvm {
-    $x = mul $a $b
+    $x = mul $a, $b
   }
   return x;
 }
@@ -31,7 +31,7 @@ u8 operator *(u8 a, u8 b) {
 u8 operator /(u8 a, u8 b) {
   u8 x;
   llvm {
-    $x = udiv $a $b
+    $x = udiv $a, $b
   }
   return x;
 }
@@ -39,7 +39,7 @@ u8 operator /(u8 a, u8 b) {
 u8 operator %(u8 a, u8 b) {
   u8 x;
   llvm {
-    $x = urem $a $b
+    $x = urem $a, $b
   }
   return x;
 }

@@ -7,7 +7,7 @@ llvm_type f32 {
 f32 operator +(f32 a, f32 b) {
   f32 x;
   llvm {
-    $x = fadd $a $b
+    $x = fadd $a, $b
   }
   return x;
 }
@@ -15,7 +15,7 @@ f32 operator +(f32 a, f32 b) {
 f32 operator -(f32 a, f32 b) {
   f32 x;
   llvm {
-    $x = fsub $a $b
+    $x = fsub $a, $b
   }
   return x;
 }
@@ -23,7 +23,7 @@ f32 operator -(f32 a, f32 b) {
 f32 operator *(f32 a, f32 b) {
   f32 x;
   llvm {
-    $x = fmul $a $b
+    $x = fmul $a, $b
   }
   return x;
 }
@@ -31,7 +31,7 @@ f32 operator *(f32 a, f32 b) {
 f32 operator /(f32 a, f32 b) {
   f32 x;
   llvm {
-    $x = fdiv $a $b
+    $x = fdiv $a, $b
   }
   return x;
 }
@@ -49,7 +49,7 @@ extern f32 sqrt(f32 a);
 //f32 operator %(f32 a, f32 b) {
 //  f32 x;
 //  llvm {
-//    $x = frem $a $b
+//    $x = frem $a, $b
 //  }
 //  return x;
 //}

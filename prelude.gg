@@ -1,6 +1,7 @@
 // prelude.gg
 // More comments!
 
+import "bool.gg";
 import "i8.gg";
 import "i16.gg";
 import "i32.gg";

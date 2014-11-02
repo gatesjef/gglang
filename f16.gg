@@ -7,7 +7,7 @@ llvm_type f16 {
 f16 operator +(f16 a, f16 b) {
   f16 x;
   llvm {
-    $x = fadd $a $b
+    $x = fadd $a, $b
   }
   return x;
 }
@@ -15,7 +15,7 @@ f16 operator +(f16 a, f16 b) {
 f16 operator -(f16 a, f16 b) {
   f16 x;
   llvm {
-    $x = fsub $a $b
+    $x = fsub $a, $b
   }
   return x;
 }
@@ -23,7 +23,7 @@ f16 operator -(f16 a, f16 b) {
 f16 operator *(f16 a, f16 b) {
   f16 x;
   llvm {
-    $x = fmul $a $b
+    $x = fmul $a, $b
   }
   return x;
 }
@@ -31,7 +31,7 @@ f16 operator *(f16 a, f16 b) {
 f16 operator /(f16 a, f16 b) {
   f16 x;
   llvm {
-    $x = fdiv $a $b
+    $x = fdiv $a, $b
   }
   return x;
 }
@@ -39,7 +39,7 @@ f16 operator /(f16 a, f16 b) {
 f16 operator %(f16 a, f16 b) {
   f16 x;
   llvm {
-    $x = frem $a $b
+    $x = frem $a, $b
   }
   return x;
 }

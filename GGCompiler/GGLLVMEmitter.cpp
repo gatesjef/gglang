@@ -140,11 +140,11 @@ llvm::Value *db_lookup_variable(LLVM &llvm, const GGToken &token)
   return NULL;
 }
 
-llvm::Type *db_lookup_type(LLVM &llvm, const GGToken &token)
+llvm::Type *db_lookup_type(LLVM &llvm, const GGSubString &substring)
 {
   for(int i = 0; i < llvm.num_db_items; ++i) {
     DBItem &item = llvm.db_items[i];
-    if (substring_cmp(item.identifier, token.substring)) {
+    if (substring_cmp(item.identifier, substring)) {
       assert(item.itemType == IDENTIFIER_TYPE);
       return item.typeInfo.type;
     }
@@ -859,6 +859,7 @@ enum LLVMReplacement {
   LLVM_REPLACEMENT_NONE,
   LLVM_REPLACEMENT_ASSIGNMENT,
   LLVM_REPLACEMENT_EXPRESSION,
+  LLVM_REPLACEMENT_FIRST_EXPRESSION,
 };
 
 const char *find_char(const char *start, const char *end, char c) {
@@ -876,26 +877,38 @@ const char *find_any_of(const char *start, const char *end, char *chars) {
   return NULL;
 }
 
-LLVMReplacement matches_replacement(const GGSubString &line, GGSubString &token_str, GGSubString &old_lhs, GGSubString &old_rhs) {
-  const char *end = line.start + line.length;
-  const char *replacement = find_char(line.start, end, '$');
+LLVMReplacement matches_replacement(std::string &line, std::string &token_str, GGSubString &token_substr, std::string &old_lhs, std::string &old_rhs) {
+  const char *end = line.data() + line.length();
+  const char *replacement = find_char(line.data(), end, '$');
   if (replacement == NULL) return LLVM_REPLACEMENT_NONE;
 
-  const char *space = find_any_of(replacement, end, " \t\r\n\0");
-  assert(space);
+  const char *space = find_any_of(replacement, end, ", \t\r\n\0");
+  if (space == NULL) {
+    space = end;
+  }
 
   const char *equals = find_char(space, end, '=');
 
-  old_lhs.start = line.start;
-  old_lhs.length = replacement - old_lhs.start;
+  old_lhs = std::string(line.data(), replacement);
+  //old_lhs.start = line.data();
+  //old_lhs.length = replacement - old_lhs.start;
 
-  token_str.start = replacement + 1;
-  token_str.length = space - token_str.start;
+  token_str = std::string(replacement + 1, space);
+  token_substr.start = replacement + 1;
+  token_substr.length = space - token_substr.start;
 
-  old_rhs.start = space;
-  old_rhs.length = end - space;
+  old_rhs = std::string(space, end);
+  //old_rhs.start = space;
+  //old_rhs.length = end - space;
 
   if (equals == NULL) {
+    const char *equals = find_char(line.data(), end, '=');
+    assert(equals);
+    //if (equals == NULL) return LLVM_REPLACEMENT_FIRST_EXPRESSION;
+
+    const char *first_item = find_char(equals, end, '%');
+    if (first_item == NULL) return LLVM_REPLACEMENT_FIRST_EXPRESSION;
+    if (first_item > replacement) return LLVM_REPLACEMENT_FIRST_EXPRESSION;
     return LLVM_REPLACEMENT_EXPRESSION;
   } else {
     return LLVM_REPLACEMENT_ASSIGNMENT;
@@ -904,7 +917,7 @@ LLVMReplacement matches_replacement(const GGSubString &line, GGSubString &token_
 
 void llvm_lex_whitespace(const char *&cur, const char *end) {
   while (cur != end) {
-    if (*cur == ' ' || *cur == '\t' ) ++cur;
+    if (*cur == ' ' || *cur == '\t' || *cur == ',' ) ++cur;
     else break;
   }
 }
@@ -1434,49 +1447,219 @@ int parse_raw_llvm(const LLVMToken *tokens, int num_tokens, LLVMStatement *state
 //  return 0;
 //}
 //
-//int lines_replace_tokens(LLVM &llvm, GGSubString *lines, int num_lines, int max_lines) {
-//  int temp_n = 0;
-//  for(int i = 0; i < num_lines;) {
-//    GGSubString &line = lines[i];
+
+//i32# sizeof(Type T) {
+//  return T.size;
+//}
 //
-//    GGSubString old_lhs;
-//    GGSubString token_str;
-//    GGSubString old_rhs;
-//    switch(matches_replacement(line, token_str, old_lhs, old_rhs)) {
-//    case LLVM_REPLACEMENT_ASSIGNMENT: {
-//      llvm::Type *type = get_type(llvm, token_str);
-//      GGSubString type_str = to_type_str(type);
-//      GGSubString new_line  = format_substring("%%%s.%d %s", old_lhs, token_str, temp_n, old_rhs);
-//      GGSubString new_store = format_substring("store %s %%%s.%d %s* %%%s", type_str, token_str, temp_n, type_str, token_str);
-//      //lines.remove(line);
-//      //lines.insert(new_line);
-//      //lines.insert(new_store);
-//      //next = new_line;
-//    } break;
-//    case LLVM_REPLACEMENT_EXPRESSION: {
-//      llvm::Type *type = get_type(llvm, token_str);
-//      GGSubString type_str = to_type_str(type);
-//      GGSubString new_load  = format_substring("%%%s.%d = load %s %%%s", token_str, temp_n, type_str, token_str);
-//      GGSubString new_line  = format_substring("%s %s %%%s.%d %s", old_lhs, type_str, token_str, temp_n, old_rhs);
-//      //lines.remove(line);
-//      //lines.insert(new_load);
-//      //lines.insert(new_line);
-//      //next = new_line;
-//    } break;
-//    case LLVM_REPLACEMENT_NONE:
-//      ++i;
-//      break;
-//    default:
-//      halt();
-//    }
+//Type typeof(T val) {
+//  return T;
+//}
 //
-//    ++temp_n;
+//Fields[]# fieldsof(type T) {
+//  return T.fields;
+//}
+//
+//
+//i32
+//
+//auto foo(bool x) {
+//  if (x)
+//    return 1;
+//  else
+//    return "a";
+//}
+//
+//T foo(T x) {
+//  return x;
+//}
+//
+//T# foo(T# x) {
+//  return x;
+//}
+//
+//
+//
+//T lerp(T x0, T x1, f32 t) {
+//  return (1-t)*x0 + t*x1;
+//}
+//==>
+//
+//x = lerp(0, 10, .5);
+//
+//Vec2 v0 = Vec2(0, 0);
+//Vec2 v1 = Vec2(1, 1);
+//v = lerp(v0, v1, .5);
+//
+//T lerp(Type T, a, b, f32 t) {
+//  %0 = sub 1 t;
+//
+//  if (T == float)
+//    %1 = mul %0, a
+//    %2 = mul %0, b
+//    %3 = add %1, %2
+//  else
+//    %1 = call Vec2 op*, %0, a
+//    %1 = call Vec2 op*, %0, b
+//    %3 = call Vec2 op+, %1, %2
+//  end
+//
+//  ret %3
+//}
+//
+//void ListAdd(List<T> &list, T *val) 
+//{
+//  ListNode &node = list.AllocNode();
+//  node.next = list.head;
+//  list.head = &node;
+//  node.val = &val;
+//}
+//
+//
+//void ListAdd(T, list, val) 
+//{
+//  //ListNode &node = list.AllocNode();
+//  %0 = call AllocNode list
+//  
+//  // node.next = list.head;  
+//  %1 = getPtr %0 'next
+//  %2 = getPtr list 'head
+//  store %1 %2
+//
+//  //list.val = &val;
+//  %3 = getPtr %0 'val
+//  store %3 val
+//}
+//
+//
+//
+//
+//f32 lerp(f32 x0, f32 x1, f32 t) {
+//  return (1-t)*x0 + t*x1;
+//}
+//f32 lerp(f32 x0, f32 x1, f32 t) {
+//  return (1-t)*x0 + t*x1;
+//}
+//
+//
+//==>
+
+
+
+
+
+
+
+
+
+//struct StringBuilder() {
+//  AppendType {
+//    GGString,
+//    CharStar,
+//    Integer
 //  }
 //
-//  //return lines.count
-//  // TODO
-//  return 0;
+//  AddGGString(
+//  AddString(
+//  AddInteger(
 //}
+//
+//
+//StringBuilder builder;
+//builder.add(old_lhs).add(".").add(
+//  + "." + tempN + old_rhs;
+
+std::string to_llvm_type_str(llvm::Type *type)
+{
+  std::string data;
+  llvm::raw_string_ostream stream(data);
+  type->getContainedType(0)->print(stream);
+  return stream.str();
+}
+
+//void LinesRemove(GGSubString *lines, int num_lines, int line_to_remove) {
+//  std::vector<std::string> lines2;
+//  int i = 0;
+//  lines2.erase(&lines2[i]);
+//  lines2.insert(&lines2[i], 
+//
+//}
+
+std::string format_string(const std::string fmt, ...) {
+    int size = ((int)fmt.size()) * 2 + 50;   // use a rubric appropriate for your code
+    std::string str;
+    va_list ap;
+    while (1) {     // maximum 2 passes on a POSIX system...
+        str.resize(size);
+        va_start(ap, fmt);
+        int n = vsnprintf((char *)str.data(), size, fmt.c_str(), ap);
+        va_end(ap);
+        if (n > -1 && n < size) {  // everything worked
+            str.resize(n);
+            return str;
+        }
+        if (n > -1)  // needed size returned
+            size = n + 1;   // for null char
+        else
+            size *= 2;      // guess at a larger size (o/s specific)
+    }
+    return str;
+}
+
+typedef std::vector<std::string> Lines;
+
+int lines_replace_tokens(LLVM &llvm, Lines &lines) {
+  int temp_n = 0;
+  for(int i = 0; i < (int)lines.size();) {
+    auto line = lines[i];
+
+    std::string old_lhs;
+    std::string token_str;
+    GGSubString token_substr;
+    std::string old_rhs;
+    LLVMReplacement replacement = matches_replacement(line, token_str, token_substr, old_lhs, old_rhs);
+    switch(replacement) {
+    case LLVM_REPLACEMENT_ASSIGNMENT: {
+      llvm::Type *type = db_lookup_variable(llvm, token_substr)->getType();
+      std::string type_str = to_llvm_type_str(type);
+      std::string new_line = format_string("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+      std::string new_store = format_string("store %s %%%s%d, %s* %%%s", type_str.c_str(), token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
+
+      lines.erase(lines.begin() + i); //lines.remove(i); //line);
+      lines.insert(lines.begin() + i, new_line);
+      lines.insert(lines.begin() + i+1, new_store);
+      //next = i;
+    } break;
+    case LLVM_REPLACEMENT_FIRST_EXPRESSION: 
+    case LLVM_REPLACEMENT_EXPRESSION: {
+      llvm::Type *type = db_lookup_variable(llvm, token_substr)->getType();
+      std::string type_str = to_llvm_type_str(type);
+      std::string new_load  = format_string("%%%s%d = load %s* %%%s", token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
+      std::string new_line        = format_string("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+      std::string new_line_no_type= format_string("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+      if (replacement == LLVM_REPLACEMENT_EXPRESSION) new_line = new_line_no_type;
+
+      lines.erase(lines.begin() + i); //lines.remove(line);
+      lines.insert(lines.begin() + i, new_load); //lines.insert(new_load);
+      lines.insert(lines.begin() + i+1, new_line); //lines.insert(new_line);
+      ++i; //next = new_line;
+    } break;
+    case LLVM_REPLACEMENT_NONE:
+      ++i;
+      break;
+    default:
+      halt();
+    }
+
+    ++temp_n;
+  }
+
+  //return lines.count
+  // TODO
+  return 0;
+}
+
+
 //
 //void emit_inline_llvm(LLVM &llvm, GGToken &inline_llvm) {
 //  assert(inline_llvm.token == TOKEN_COMPOUND_INLINE_LLVM);
@@ -1522,26 +1705,113 @@ int parse_raw_llvm(const LLVMToken *tokens, int num_tokens, LLVMStatement *state
 //  
 //}
 
+void trim(std::string &str)
+{
+  size_t startPos = str.find_first_not_of(" \t\r\n");
+  if (startPos != str.npos)
+    str = str.substr(startPos);
+  else 
+    str.clear();
+
+  size_t endPos = str.find_last_not_of(" \t\r\n");
+  if (endPos != str.npos)
+    str = str.substr(0, endPos+1);
+  else
+    str.clear();
+
+}
+
+void substring_to_lines(const GGSubString &substring, Lines &lines) {
+  const char* prevStart = substring.start;
+
+  for(int i = 0; i < substring.length; ++i)
+  {
+    const char* potentialEnd = &substring.start[i];
+    if (substring.start[i] == '\r') {
+      if (substring.start[i] == '\n') ++i;
+    } else if (substring.start[i] == '\n') {
+      if (substring.start[i] == '\n') ++i;
+    } else if (i == substring.length-1) 
+    {
+      // do string and exit
+    } else {
+      continue;
+    }
+
+    std::string newStr(prevStart, potentialEnd);
+    trim(newStr);
+    if (newStr.length() > 0) {
+      lines.push_back(newStr);
+    }
+
+    if (i == substring.length-1) break;
+
+    ++i;
+    prevStart = &substring.start[i+1];
+  }
+}
+
+void lines_to_buffer(const Lines &lines, char *buffer, int buffer_size) {
+  const char *start = buffer;
+  buffer[0] = 0;
+  for(auto line : lines) {
+    buffer = strcat(buffer, line.data());
+    assert(buffer - start < buffer_size);
+    buffer = strcat(buffer, "\n");
+  }
+}
+
+void replace_inline_llvm_bindings(LLVM &llvm, const GGToken &raw_llvm, char replaced_llvm_buffer[1024]) 
+{
+  //GGSubString lines[MAX_LLVM_LINES];
+  Lines lines;
+  substring_to_lines(raw_llvm.substring, lines);
+  lines_replace_tokens(llvm, lines);
+  lines_to_buffer(lines, replaced_llvm_buffer, 1024);
+}
+
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/AsmParser/Parser.h"
+#include "LLParser2.h"
 
-void emit_inline_llvm_2(LLVM &llvm, const GGToken &inline_llvm) {
+bool ParseAssembly2(llvm::MemoryBuffer *F, llvm::Module &M, llvm::SMDiagnostic &Err, llvm::Function *Function, llvm::BasicBlock *BB) 
+{
+  llvm::SourceMgr SM;
+  //std::unique_ptr<MemoryBuffer> Buf = llvm::MemoryBuffer::getMemBuffer(F, false);
+  //SM.AddNewSourceBuffer(std::move(Buf), SMLoc());
+  return llvm::LLParser2(F, SM, Err, &M).RunSubFunction(Function, BB);
+}
+
+void emit_inline_llvm(LLVM &llvm, llvm::Function *function, const GGToken &inline_llvm) {
   assert(inline_llvm.token == TOKEN_COMPOUND_INLINE_LLVM);
   assert(inline_llvm.num_subtokens == 1);
   const GGToken &raw_llvm = inline_llvm.subtokens[0];
 
+  llvm.builder->GetInsertPoint();
+
+  char replaced_llvm_buffer[1024];
+  replace_inline_llvm_bindings(llvm, raw_llvm, replaced_llvm_buffer);
+
+  //const char *replaced_llvm_buffer = "%a1 = load i32* %a";
+  //const char *replaced_llvm_buffer = "%Vec2Ib = type <{ i32, i32 }>";
+
   //llvm::MemoryBuffer memory;
-  llvm::StringRef llvmAssembly = to_string_ref(raw_llvm.substring);
+  llvm::StringRef llvmAssembly(replaced_llvm_buffer);
   //memory.init(raw_llvm.substring.start, raw_llvm.substring.start + raw_llvm.substring.length, false);
 
   llvm::MemoryBuffer *memory = llvm::MemoryBuffer::getMemBuffer(llvmAssembly, "<string>", true);
 
   llvm::SMDiagnostic error;
-  llvm::ParseAssembly(memory, llvm.module, error, *llvm.context);
+  //auto retval = llvm::ParseAssembly(memory, llvm.module, error, *llvm.context);
+  //assert(retval);
+
+  llvm.module->dump();
+  bool retval = ParseAssembly2(memory, *llvm.module, error, function, llvm.builder->GetInsertBlock());
+  assert(retval);
 }
 
 
-void emit_inline_llvm(LLVM &llvm, const GGToken &inline_llvm) {
+void emit_inline_llvm_2(LLVM &llvm, llvm::Function *function, GGToken &inline_llvm) {
   assert(inline_llvm.token == TOKEN_COMPOUND_INLINE_LLVM);
   assert(inline_llvm.num_subtokens == 1);
   const GGToken &raw_llvm = inline_llvm.subtokens[0];
@@ -1824,7 +2094,7 @@ void llvm_emit_function_definition(LLVM &llvm, const GGToken &function_definitio
       emit_rvalue_expression(llvm, subtoken.subtokens[0]);
       break;
     case TOKEN_COMPOUND_INLINE_LLVM:
-      emit_inline_llvm(llvm, subtoken);
+      emit_inline_llvm(llvm, function, subtoken);
       break;
     default: 
       halt();
@@ -1942,7 +2212,7 @@ uint64_t eval_constexpr(const GGToken &constexpr_token) {
 
 llvm::Type *get_type_identifier(LLVM &llvm, const GGToken &type_token) {
   assert(type_token.token == TOKEN_TYPE_IDENTIFIER);
-  llvm::Type *type = db_lookup_type(llvm, type_token);
+  llvm::Type *type = db_lookup_type(llvm, type_token.substring);
   assert(type);
   return type;
 }
@@ -2093,7 +2363,7 @@ llvm::Type *llvm_emit_struct_definition(LLVM &llvm, const GGToken &struct_def) {
 
   llvm::ArrayRef<llvm::Type *> ref_fields = to_array_ref(fields, struct_body.num_subtokens);
 
-  llvm::StructType *type = (llvm::StructType *)db_lookup_type(llvm, identifier);
+  llvm::StructType *type = (llvm::StructType *)db_lookup_type(llvm, identifier.substring);
   type->setBody(ref_fields, IS_PACKED); 
 
   //llvm::Type *type = llvm::StructType::get(*llvm.context, ref_fields, IS_PACKED);

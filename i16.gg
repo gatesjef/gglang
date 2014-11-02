@@ -7,7 +7,7 @@ llvm_type i16 {
 i16 operator +(i16 a, i16 b) {
   i16 x;
   llvm {
-    $x = add $a $b
+    $x = add $a, $b
   }
   return x;
 }
@@ -15,7 +15,7 @@ i16 operator +(i16 a, i16 b) {
 i16 operator -(i16 a, i16 b) {
   i16 x;
   llvm {
-    $x = sub $a $b
+    $x = sub $a, $b
   }
   return x;
 }
@@ -23,7 +23,7 @@ i16 operator -(i16 a, i16 b) {
 i16 operator *(i16 a, i16 b) {
   i16 x;
   llvm {
-    $x = mul $a $b
+    $x = mul $a, $b
   }
   return x;
 }
@@ -31,7 +31,7 @@ i16 operator *(i16 a, i16 b) {
 i16 operator /(i16 a, i16 b) {
   i16 x;
   llvm {
-    $x = sdiv $a $b
+    $x = sdiv $a, $b
   }
   return x;
 }
@@ -39,7 +39,7 @@ i16 operator /(i16 a, i16 b) {
 i16 operator %(i16 a, i16 b) {
   i16 x;
   llvm {
-    $x = srem $a $b
+    $x = srem $a, $b
   }
   return x;
 }

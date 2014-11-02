@@ -86,12 +86,16 @@
   <ItemGroup>
     <ClInclude Include="GGCompiler.h" />
     <ClInclude Include="GGLLVMEmitter.h" />
+    <ClInclude Include="LLParser2.h" />
     <ClInclude Include="precompile.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="GGCompiler.cpp" />
     <ClCompile Include="GGLLVMEmitter.cpp" />
     <ClCompile Include="GGMain.cpp" />
+    <ClCompile Include="LLParser2.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="precompile.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
