@@ -1,12 +1,15 @@
 // gg_main.cpp
 
 #include "precompile.h"
+#include "GGParser.h"
 #include "GGCompiler.h"
 #include "GGLLVMEmitter.h"
 
 int main(int argc, char* argv[])
 {
   const char *source_file = "../main.gg";
+
+  parse_program(source_file);
   GGToken output = GGCompile(source_file);
   GGLLVMEmitProgram(output);
   return 0;

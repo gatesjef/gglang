@@ -296,7 +296,7 @@ GGToken parse_whitespace_separated_sequence(const ParseFn sequence[], int num_se
   return retval;
 }
 
-bool ischar(char c0, char c1)
+static bool ischar(char c0, char c1)
 {
   return c0 == c1;
 };
@@ -564,7 +564,7 @@ GGToken parse_one_or_more_pred(CharPredicate pred, GGTokenType tokenType, const 
   return result;
 }
 
-bool isDigit(char c) {
+static bool isDigit(char c) {
   return isdigit(c) != 0;
 }
 
@@ -1787,6 +1787,32 @@ GGToken parse_return_statement(const GGParseInput &input) {
   return parse_whitespace_separated_sequence(sequence, num_sequence, TOKEN_COMPOUND_RETURN_STATEMENT, input);
 }
 
+
+
+//bool Parse(GGTokens &tokens, GGCursor &cursor, GGError &error)
+
+//GGToken parse_if_statement(const GGParseInput &input) {
+//  GGToken if_statement = ParseOutputAlloc(TOKEN_COMPOUND_IF_STATEMENT, 3);
+//
+//  {
+//    static const ParseFn sequence[] = {parse_if_exact, parse_left_paren, parse_expression, parse_right_paren, parse_statement};
+//    static const int num_sequence = ARRAYSIZE(sequence);
+//    continue_parse_whitespace_separated_sequence(if_statement, sequence, num_sequence, input);
+//    if (ParseOuputIsFalse(if_statement)) return PARSE_FALSE;
+//  }
+//
+//  GGToken token = parse_else_exact(cur_input);
+//  consume_whitespace(cur_input);
+//
+//  if (ParseOuputIsFalse(token)) {
+//  } else {
+//    static const ParseFn sequence[] = {parse_statement};
+//    static const int num_sequence = ARRAYSIZE(sequence);
+//    continue_parse_whitespace_separated_sequence(if_statement, sequence, num_sequence, input);
+//  }
+//
+//}
+
 GGToken parse_expression_statement(const GGParseInput &input) {
   static const ParseFn sequence[] = {parse_expression, parse_semicolon};
   static const int num_sequence = ARRAYSIZE(sequence);
@@ -2071,7 +2097,6 @@ GGToken GGCompile(const char * source_file) {
   output.num_subtokens = 1024 - num_remaining;
   return output;
 }
-
 //void substring_printf(const char *format, ...) {
 //};
 

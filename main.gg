@@ -29,7 +29,6 @@ i32 main() {
 
   Vec2 pi2 = rho2 + tau2;
 
-
   putchar(pi.x + pi.y + 65);
   return 1;
 }
@@ -42,6 +41,7 @@ Vec2I operator +(Vec2I a, Vec2I b) {
 }
 
 
+//if statement
 //error messages
 //typechecking
 //var args (printf)
@@ -50,7 +50,6 @@ Vec2I operator +(Vec2I a, Vec2I b) {
 //enums
 
 //constexpr
-//if statement
 //for statement
 //case statement
 //pre-main
