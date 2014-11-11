@@ -3,10 +3,6 @@
 #include "Precompile.h"
 //#include "GGCompiler.h"
 
-struct SubString {
-  const char *start;
-  int length;
-};
 
 enum TokenType {
   TOKEN_NONE,
@@ -117,6 +113,11 @@ TOKEN_OP_END,
 struct ParseTable;
 struct Type;
 
+struct SubString {
+  const char *start;
+  int length;
+};
+
 struct Token {
   TokenType type;
   Type *expr_type;
@@ -134,9 +135,6 @@ struct Token {
 };
 
 struct Error {
-};
-
-struct TokenPool {
 };
 
 const int MAX_TOKENS = 16 * 1024;
@@ -159,6 +157,144 @@ struct ParserState {
   std::vector<char *> file_data;
   int current_file_idx;
 };
+
+struct Function
+{
+  //Type *retval_type;
+  //TypeList *param_types;
+  Type *type;
+  llvm::Function *function;
+
+  TokenType op;
+  SubString identifier;
+};
+
+struct Value
+{
+  SubString identifier;
+  Type *type;
+  llvm::Value *llvm_value;
+};
+
+struct SymbolDatabase {
+  //std::map<SubString, Type> types;
+  //std::map<SubString, Value> variables;
+  //std::multimap<SubString, Function> functions;
+  std::vector<Type *> types;
+  std::vector<Value *> variables;
+  std::vector<Function *> functions;
+} db;
+
+struct LLVM {
+  llvm::Module *module;
+  llvm::IRBuilder<> *builder;
+  llvm::LLVMContext *context;
+
+  //DBItem db_items[MAX_DB_ITEMS];
+  //int num_db_items;
+  //int db_scope;
+
+  //FieldInfo fields[MAX_FIELDS];
+  //int num_fields;
+
+  //FunctionParamInfo function_params[MAX_FIELDS];
+  //int num_function_params;
+};
+
+struct G {
+  //ParserState parser;
+  SymbolDatabase db;
+  LLVM llvm;
+} g;
+
+void LLVMInit(const char *dest_file) {
+  g.llvm.context = &llvm::getGlobalContext();
+  g.llvm.builder = new llvm::IRBuilder<>(*g.llvm.context);
+  g.llvm.module = new llvm::Module(dest_file, *g.llvm.context);
+  //return llvm;
+}
+
+//void GlobalsInit() {
+//  //ParserInit(g.parser);
+//  LLVMInit(g.llvm);
+//}
+
+//struct TokenPool {
+//};
+
+enum TypeKind {
+  BASE_TYPE,
+  //LLVM_TYPE,
+  //TYPEDEF_TYPE,
+  //STRUCT_TYPE,
+  ARRAY_TYPE,
+  POINTER_TYPE,
+  FUNCTION_TYPE,
+};
+
+//struct TypeList;
+struct Type;
+
+//struct Field
+//{
+//  int index;
+//  Type *type;
+//
+//  SubString identifier;
+//};
+
+struct Type
+{
+  //Type = BaseType token | PointerType base | ArrayType base count | FunctionType retval params
+
+  TypeKind kind;
+
+  union {
+    struct BaseType {
+      Token *type_definition;
+    } base;
+    struct PointerType {
+      Type *base_type;
+    } pointer;
+    struct ArrayType {
+      Type *base_type;
+      uint64_t count;
+    } array;
+    struct FunctionType {
+      Type *retval_type;
+      Token *param_list;
+    } function;
+  };
+
+  //Type *base_type;
+
+  llvm::Type *llvm_type;
+
+  //union {
+  //  struct { // llvm_type
+  //    SubString identifier;
+  //  };
+  //  struct { // array type
+  //    Type *base;
+  //    int64_t count;
+  //  };
+  //  struct { // function type
+  //    Type *retval;
+  //    Token *param_list;
+  //  };
+
+  //  struct { // struct type
+  //    //std::vector<Field> fields;
+  //    Token *fields;
+  //  };
+  //};
+};
+
+//struct TypeList
+//{
+//  Type *type;
+//  TypeList *next;
+//};
 
 void consume_whitespace(ParserState &parser) {
   enum CommentMode {
@@ -238,6 +374,24 @@ ParseResult parse_exact(ParserState &parser, const char *str) {
   parser.current_char += length;
   consume_whitespace(parser);
   return PARSE_EMPTY;
+}
+
+enum EmitResultType  {
+  EMIT_OK,
+  EMIT_ERROR,
+};
+
+struct EmitResult {
+  EmitResultType type;
+  Error error;
+};
+
+const EmitResult EMIT_SUCCESS = {};
+
+EmitResult make_emit_error(const char *error_fmt, ...) {
+  EmitResult retval;
+  retval.type = EMIT_ERROR;
+  return retval;
 }
 
 ParseResult make_error(ParserState &parser, const char *error_fmt, ...) {
@@ -1191,6 +1345,64 @@ ParseResult parse_declaration_assignment_operator(ParserState &parser) {
   return parse_exact(parser, "=");
 }
 
+bool substring_cmp(const SubString &substring0, const SubString &substring1);
+bool substring_cmp(const SubString &substring0, const char *substring1);
+
+SubString get_identifier(Token *type_definition) {
+  return type_definition->start->substring;
+}
+
+Type *db_lookup_type_by_identifier(const SubString &identifier) {
+  for(auto *type : db.types) {
+    if (type->kind == BASE_TYPE &&
+      substring_cmp(get_identifier(type->base.type_definition), identifier) == true) {
+      return type;
+    }
+  }
+
+  return NULL;
+}
+
+bool db_add_type_definition(Token *token) {
+  SubString identifier = get_identifier(token);
+  Type *existing_type = db_lookup_type_by_identifier(identifier);
+  if (existing_type != NULL) return false;
+  Type *new_type = new Type;
+  new_type->kind = BASE_TYPE;
+  new_type->base.type_definition = token;
+  new_type->llvm_type = NULL;
+  db.types.push_back(new_type);
+  return true;
+}
+
+
+//
+//Type *db_lookup_type_by_identifier(const SubString &identifier) {
+//  //foreach(type in db) {
+//  for(auto *type : db.types) {
+//    if (type->kind == LLVM_TYPE ||
+//      type->kind == TYPEDEF_TYPE ||
+//      type->kind == STRUCT_TYPE ||
+//      type->kind == LLVM_TYPE) {
+//        if (substring_cmp(identifier, type->identifier)) {
+//          return type;
+//        }
+//    }
+//  }
+//
+//  return NULL;
+//}
+//
+//Type *db_add_typedef_type_partial(const SubString &identifier) {
+//  if (db_lookup_type_by_identifier(identifier) != NULL) return NULL;
+//
+//  Type *new_type = new Type;
+//  new_type->kind = TYPEDEF_TYPE;
+//  new_type->identifier = identifier;
+//  db.types.push_back(new_type);
+//  return new_type;
+//}
+
 ParseResult parse_typedef_definition(ParserState &parser) {
   static const ParseFn statments[] = {
     parse_typedef_exact, 
@@ -1253,6 +1465,26 @@ ParseResult parse_struct_fields(ParserState &parser) {
   ParseResult result = parse_zero_or_more(parser, parse_struct_field);
   return make_result(parser, TOKEN_STRUCT_FIELDS, result);
 }
+
+//Type *db_add_struct_type_partial(const SubString &identifier) {
+//  if (db_lookup_type_by_identifier(identifier) != NULL) return NULL;
+//
+//  Type *new_type = new Type;
+//  new_type->kind = STRUCT_TYPE;
+//  new_type->identifier = identifier;
+//  db.types.push_back(new_type);
+//  return new_type;
+//}
+//
+//Type *db_add_llvm_type_partial(const SubString &identifier) {
+//  if (db_lookup_type_by_identifier(identifier) != NULL) return NULL;
+//
+//  Type *new_type = new Type;
+//  new_type->kind = LLVM_TYPE;
+//  new_type->identifier = identifier;
+//  db.types.push_back(new_type);
+//  return new_type;
+//}
 
 ParseResult parse_struct_definition(ParserState &parser) {
   static const ParseFn statements[] = {
@@ -1338,7 +1570,11 @@ ParseResult parse_type_definition(ParserState &parser) {
   };
   static const int num_statements = ARRAYSIZE(statements);
 
-  return parse_first_of(parser, statements, num_statements);
+  ParseResult result = parse_first_of(parser, statements, num_statements);
+  if (is_success(result)) {
+    db_add_type_definition(result.start);
+  }
+  return result;
 }
 
 ParseResult parse_function_body(ParserState &parser);
@@ -1665,96 +1901,21 @@ ParseResult parse_program(const char *source_file) {
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 
-enum TypeKind {
-  //BASE_TYPE,
-  LLVM_TYPE,
-  TYPEDEF_TYPE,
-  STRUCT_TYPE,
-  ARRAY_TYPE,
-  POINTER_TYPE,
-  FUNCTION_TYPE,
-};
-
-//struct TypeList;
-struct Type;
-
-//struct Field
-//{
-//  int index;
-//  Type *type;
-//
-//  SubString identifier;
-//};
-
-struct Type
-{
-  llvm::Type *llvm_type;
-  TypeKind kind;
-
-  union {
-    struct { // llvm_type
-      SubString identifier;
-    };
-    struct { // array type
-      Type *base;
-      int64_t count;
-    };
-    struct { // function type
-      Type *retval;
-      Token *param_list;
-    };
-
-    struct { // struct type
-      //std::vector<Field> fields;
-      Token *fields;
-    };
-  };
-
-};
-
-//struct TypeList
-//{
-//  Type *type;
-//  TypeList *next;
-//};
-
-struct Function
-{
-  //Type *retval_type;
-  //TypeList *param_types;
-  Type *type;
-
-  TokenType op;
-  SubString identifier;
-};
-
-struct Value
-{
-  Type *type;
-};
-
-struct SymbolDatabase {
-  //std::map<SubString, Type> types;
-  //std::map<SubString, Value> variables;
-  //std::multimap<SubString, Function> functions;
-  std::vector<Type *> types;
-  std::vector<Value *> variables;
-  std::vector<Function *> functions;
-} db;
-
 Type *db_add_pointer_type(Type *subtype) {
   Type *new_type = new Type;
   new_type->kind = POINTER_TYPE;
-  new_type->base = subtype;
+  new_type->pointer.base_type = subtype;
+  new_type->llvm_type = NULL;
   db.types.push_back(new_type);
   return new_type;
 }
-
+//
 Type *db_add_array_type(Type *subtype, int64_t count) {
   Type *new_type = new Type;
   new_type->kind = ARRAY_TYPE;
-  new_type->base = subtype;
-  new_type->count = count;
+  new_type->array.base_type = subtype;
+  new_type->array.count = count;
+  new_type->llvm_type = NULL;
   db.types.push_back(new_type);
   return new_type;
 }
@@ -1786,57 +1947,52 @@ bool expand_typelist(Token *param_list, Type **param_types, int expected_params)
   return (actual_params == expected_params);
 }
 
-bool compare_function_params(Function *function, Type *lhs, Type *rhs) {
-  Type *param_types[2];
-  bool correct_params = expand_typelist(function->type->param_list, param_types, 2);
-  if (correct_params) return false;
-  if (lhs != param_types[0]) return false;
-  if (rhs != param_types[1]) return false;
-  return true;
-}
+//bool compare_function_params(Function *function, Type *lhs, Type *rhs) {
+//  Type *param_types[2];
+//  bool correct_params = expand_typelist(function->type->param_list, param_types, 2);
+//  if (correct_params) return false;
+//  if (lhs != param_types[0]) return false;
+//  if (rhs != param_types[1]) return false;
+//  return true;
+//}
+//
+//bool compare_function_params(Function *function, Type *lhs) {
+//  Type *param_types[1];
+//  bool correct_params = expand_typelist(function->type->param_list, param_types, 1);
+//  if (correct_params) return false;
+//  if (lhs != param_types[0]) return false;
+//  return true;
+//}
 
-bool compare_function_params(Function *function, Type *lhs) {
-  Type *param_types[1];
-  bool correct_params = expand_typelist(function->type->param_list, param_types, 1);
-  if (correct_params) return false;
-  if (lhs != param_types[0]) return false;
-  return true;
-}
+//Type *db_add_struct_type(const SubString &identifier, Token *fields) {
+//  if (db_lookup_type_by_identifier(identifier) != NULL) return NULL;
+//
+//  Type *new_type = new Type;
+//  new_type->kind = STRUCT_TYPE;
+//  new_type->identifier = identifier;
+//  new_type->fields = fields;
+//  db.types.push_back(new_type);
+//  return new_type;
+//}
+//
 
-bool substring_cmp(const SubString &substring0, const SubString &substring1);
-
-Type *db_lookup_type_by_identifier(const SubString &identifier) {
-  //foreach(type in db) {
-  for(auto *type : db.types) {
-    if (type->kind == LLVM_TYPE ||
-      type->kind == TYPEDEF_TYPE ||
-      type->kind == STRUCT_TYPE ||
-      type->kind == LLVM_TYPE) {
-        if (substring_cmp(identifier, type->identifier)) {
-          return type;
-        }
-    }
-  }
-
-  return NULL;
-}
-
-Type *db_add_struct_type(const SubString &identifier, Token *fields) {
-  if (db_lookup_type_by_identifier(identifier) != NULL) return NULL;
-
-  Type *new_type = new Type;
-  new_type->kind = STRUCT_TYPE;
-  new_type->identifier = identifier;
-  new_type->fields = fields;
-  db.types.push_back(new_type);
-  return new_type;
-}
+//EmitResult db_add_varaible(const SubString &identifier, llvm::Value *variable) {
+//  void *existing = db_lookup_any(identifier);
+//  assert(existing == NULL);
+//  assert(llvm.num_db_items < MAX_DB_ITEMS);
+//  DBItem &item = llvm.db_items[llvm.num_db_items++];
+//  item.itemType = IDENTIFIER_VARIABLE;
+//  item.identifier = identifier.substring;
+//  item.value = value;
+//  item.scope = llvm.db_scope;
+//}
 
 Type *db_add_function_type(Type *retval_type, Token *param_list) {
   Type *new_type = new Type;
   new_type->kind = FUNCTION_TYPE;
-  new_type->retval = retval_type;
-  new_type->param_list = param_list;
+  new_type->function.retval_type = retval_type;
+  new_type->function.param_list = param_list;
+  new_type->llvm_type = NULL;
   //copy_param_list(new_type->params, param_list);
   db.types.push_back(new_type);
   return new_type;
@@ -1846,20 +2002,20 @@ Type *db_get_pointer_type(Type *subtype) {
   //foreach(type in db) {
   for(auto *type : db.types) {
     if (type->kind == POINTER_TYPE &&
-      type->base == subtype) {
+      type->pointer.base_type == subtype) {
         return type;
     }
   }
 
   return db_add_pointer_type(subtype);
 }
-
+//
 Type *db_get_array_type(Type *subtype, int64_t count) {
   //foreach(type in db) {
   for(auto *type : db.types) {
     if (type->kind == ARRAY_TYPE &&
-      type->base == subtype &&
-      type->count == count) {
+      type->array.base_type== subtype &&
+      type->array.count == count) {
         return type;
     }
   }
@@ -1876,44 +2032,49 @@ int expand_tokens(Token *token, Token *subtokens[], int max_subtokens) {
   return num_tokens;
 }
 
-Type *emit_type_declaration(Token *declaration);
-
-Type *db_get_field_type(Type *type, const SubString &identifier) {
-  //foreach(type in db) {
-  //for(auto &field : type->fields) {
-  for(Token *field = type->fields->start; field != NULL; field = field->next) {
-    Token *subtokens[3];
-    int num_subtokens = expand_tokens(field, subtokens, 3);
-    Token *type_token = subtokens[0];
-    Token *identifier_token = subtokens[1];
-    if (substring_cmp(identifier_token->substring, identifier)) {
-        return emit_type_declaration(type_token);
-    }
-  }
-
-  return NULL;
+Type *db_get_field_type(Type *type, const SubString &field_identifier) {
+  assert(type->kind == BASE_TYPE);
+  assert(type->base.type_definition->type == TOKEN_STRUCT_DEFINITION);
 }
 
-Type *db_get_base_type(const SubString &identifier) {
-  //foreach(type in db) {
-  for(auto *type : db.types) {
-    if ((type->kind == LLVM_TYPE ||
-      type->kind == STRUCT_TYPE ||
-      type->kind == TYPEDEF_TYPE) &&
-      substring_cmp(type->identifier, identifier)) {
-        return type;
-    }
-  }
-
-  return NULL;
-}
-
+//Type *emit_type_declaration(Token *declaration);
+//
+//Type *db_get_field_type(Type *type, const SubString &identifier) {
+//  //foreach(type in db) {
+//  //for(auto &field : type->fields) {
+//  for(Token *field = type->fields->start; field != NULL; field = field->next) {
+//    Token *subtokens[3];
+//    int num_subtokens = expand_tokens(field, subtokens, 3);
+//    Token *type_token = subtokens[0];
+//    Token *identifier_token = subtokens[1];
+//    if (substring_cmp(identifier_token->substring, identifier)) {
+//        return emit_type_declaration(type_token);
+//    }
+//  }
+//
+//  return NULL;
+//}
+//
+//Type *db_get_base_type(const SubString &identifier) {
+//  //foreach(type in db) {
+//  for(auto *type : db.types) {
+//    if ((type->kind == LLVM_TYPE ||
+//      type->kind == STRUCT_TYPE ||
+//      type->kind == TYPEDEF_TYPE) &&
+//      substring_cmp(type->identifier, identifier)) {
+//        return type;
+//    }
+//  }
+//
+//  return NULL;
+//}
+//
 Type *db_get_function_type(Type *retval_type, Token *param_list) {
   //foreach(type in db) {
   for(auto *type : db.types) {
     if (type->kind == FUNCTION_TYPE &&
-      type->retval == retval_type &&
-      compare_type_list(type->param_list, param_list)) {
+      type->function.retval_type == retval_type &&
+      compare_type_list(type->function.param_list, param_list)) {
         return type;
     }
   }
@@ -1921,10 +2082,20 @@ Type *db_get_function_type(Type *retval_type, Token *param_list) {
   return db_add_function_type(retval_type, param_list);
 }
 
+bool compare_function_params(Function *function, Token *param_list) {
+}
+
+bool compare_function_params1(Function *function, Type *lhs) {
+}
+
+bool compare_function_params2(Function *function, Type *lhs, Type *rhs) {
+}
+
+
 Function *db_function_lookup(const SubString &identifier, Token *param_list) {
   for(auto *function : db.functions) {
     if (substring_cmp(function->identifier, identifier) &&
-        compare_type_list(function->type->param_list, param_list)) {
+        compare_function_params(function, param_list)) {
         return function;
     }
   }
@@ -1935,7 +2106,7 @@ Function *db_function_lookup(const SubString &identifier, Token *param_list) {
 Function *db_operator_lookup(TokenType op, Type *type_lhs, Type *type_rhs) {
   for(auto *function : db.functions) {
     if (function->op == op &&
-        compare_function_params(function, type_lhs, type_rhs)) {
+        compare_function_params2(function, type_lhs, type_rhs)) {
         return function;
     }
   }
@@ -1946,7 +2117,7 @@ Function *db_operator_lookup(TokenType op, Type *type_lhs, Type *type_rhs) {
 Function *db_operator_lookup(TokenType op, Type *type_lhs) {
   for(auto *function : db.functions) {
     if (function->op == op &&
-        compare_function_params(function, type_lhs)) {
+        compare_function_params1(function, type_lhs)) {
         return function;
     }
   }
@@ -2017,23 +2188,29 @@ TypecheckResult make_result(Type *type) {
   return result;
 }
 
+Type *function_get_retval_type(Function *function) {
+}
+
 TypecheckResult make_result(Function *function) {
   if (function == NULL) {
     return make_error("No function for operator %s with types %s %s");
   } else {
-    return make_result(function->type->retval);
+    Type *retval_type = function_get_retval_type(function);
+    return make_result(retval_type);
   }
 }
 
 bool is_boolean(Type *type) {
-  if (type->kind != LLVM_TYPE) return false;
+  if (type->kind != BASE_TYPE) return false;
+  assert(type->llvm_type);
   return type->llvm_type->isIntegerTy() &&
     type->llvm_type->getScalarSizeInBits() == 1;
 }
-
-
+//
+//
 bool is_integer(Type *type) {
-  if (type->kind != LLVM_TYPE) return false;
+  if (type->kind != BASE_TYPE) return false;
+  assert(type->llvm_type != NULL);
   return type->llvm_type->isIntegerTy();
   // check against llvm type for integerness
 }
@@ -2087,6 +2264,8 @@ uint64_t emit_compile_time_constant_integer(Token *expression) {
 //TypeList *emit_param_type_list(Token *param_list) {
 //}
 
+Type *emit_type_declaration(Token *declaration);
+
 Type *emit_pointer_type(Token *declaration) {
   Token *subtokens[1];
   int num_subtokens = expand_tokens(declaration, subtokens, 1);
@@ -2111,7 +2290,8 @@ Type *emit_function_type(Token *declaration) {
 }
 
 Type *emit_base_type(Token *type_identifier) {
-  db_get_base_type(type_identifier->substring);
+  Type *retval = db_lookup_type_by_identifier(type_identifier->substring);
+  return retval;
 }
 
 Type *emit_type_declaration(Token *declaration) {
@@ -2215,7 +2395,7 @@ TypecheckResult typecheck_function_call_expression(Token *expression){
     return make_error("Unknown function");
   }
 
-  return make_result(function->type->retval);
+  return make_result(function_get_retval_type(function));
 }
 
 bool is_array(Type *type) {
@@ -2246,7 +2426,7 @@ TypecheckResult typecheck_array_dereference_expression(Token *expression){
     return make_error("Expected compile time integer");
   }
 
-  return make_result(result_base.type->base);
+  return make_result(result_base.type->array.base_type);
 }
 
 TypecheckResult typecheck_expression(Token *expression) {
@@ -2438,29 +2618,7 @@ TypecheckResult typecheck_program(Token *program) {
 ////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////
 
-struct EmitResult {
-  Error error;
-};
-
-const EmitResult EMIT_SUCCESS = {};
-
 struct Emitter {
-};
-
-struct LLVM {
-  llvm::Module *module;
-  llvm::IRBuilder<> *builder;
-  llvm::LLVMContext *context;
-
-  //DBItem db_items[MAX_DB_ITEMS];
-  //int num_db_items;
-  //int db_scope;
-
-  //FieldInfo fields[MAX_FIELDS];
-  //int num_fields;
-
-  //FunctionParamInfo function_params[MAX_FIELDS];
-  //int num_function_params;
 };
 
 llvm::StringRef to_string_ref(const SubString &substring) {
@@ -2487,83 +2645,552 @@ llvm::Type *emit_struct_declaration(LLVM &llvm, Token *struct_def) {
   return type;
 }
 
-llvm::Type *llvm_emit_llvm_type_definition(LLVM &llvm, Token *type_def) {
-  assert(type_def.num_subtokens == 2);
-  const GGToken &identifier = type_def.subtokens[0];
-  const GGToken &type_decl = type_def.subtokens[1];
+static bool isWhitespace(char c) {
+  switch(c) {
+  case ' ':
+  case '\t':
+  case '\r':
+  case '\n':
+    return true;
+  default:
+    return false;
+  }
+}
 
-  llvm::Type *type = get_type(llvm, type_decl);
-  db_add_type(llvm, identifier, type);
+SubString substring_trim(const SubString &substring) {
+  SubString retval = substring;
+
+  while(retval.length) {
+    if (isWhitespace(retval.start[0])) {
+      retval.start++;
+      retval.length--;
+    } else {
+      break;
+    }
+  }
+
+  while(retval.length) {
+    if (isWhitespace(retval.start[retval.length - 1])) {
+      retval.length--;
+    } else {
+      break;
+    }
+  }
+
+  return retval;
+}
+
+llvm::Type *llvm_emit_llvm_type(Token *type_definition) {
+  assert(type_definition->type == TOKEN_RAW_LLVM_TYPE);
+  // todo vector types...
+  assert(type_definition->substring.length > 0);
+  assert(type_definition->substring.start != NULL);
+
+  SubString trimmed_content = substring_trim(type_definition->substring);
+
+  assert(trimmed_content.length > 0);
+  assert(trimmed_content.start != NULL);
+
+  switch(trimmed_content.start[0]) {
+  case 'u':
+  case 'i': {
+    SubString digits = trimmed_content;
+    digits.start++;
+    digits.length--;
+
+    uint32_t size = (uint32_t)substring_to_uint64(digits);
+    return llvm::IntegerType::get(*g.llvm.context, size);
+            }
+  default:
+    if (substring_cmp(trimmed_content, "void")) {
+      return llvm::Type::getVoidTy(*g.llvm.context);
+    } else if (substring_cmp(trimmed_content, "half")) {
+      return llvm::Type::getHalfTy(*g.llvm.context);
+    } else if (substring_cmp(trimmed_content, "float")) {
+      return llvm::Type::getFloatTy(*g.llvm.context);
+    } else if (substring_cmp(trimmed_content, "double")) {
+      return llvm::Type::getDoubleTy(*g.llvm.context);
+    } else if (substring_cmp(trimmed_content, "fp128")) {
+      return llvm::Type::getFP128Ty(*g.llvm.context);
+    } else {
+      halt();
+    }
+    break;
+  }
+
+  return NULL;
+}
+
+llvm::Type *llvm_get_type(Type *type);
+const int MAX_PARAMS = 256;
+
+llvm::Type *llvm_emit_struct_field(Token *field) {
+  Token *subtokens[3];
+  int num_subtokens = expand_tokens(field, subtokens, 3);
+  Token *type_declaration = subtokens[0];
+  Token *identifier = subtokens[1];
+  Token *default_value = subtokens[2];
+
+  Type *type = emit_type_declaration(type_declaration);
+  return llvm_get_type(type);
+}
+
+llvm::Type *llvm_emit_typedef_type(Token *type_definition) {
+  Type *type = emit_type_declaration(type_definition);
+  return llvm_get_type(type);
+}
+
+llvm::ArrayRef<llvm::Value *> to_array_ref(llvm::Value **values, int num_values) {
+  return llvm::ArrayRef<llvm::Value *>(values, num_values);
+}
+
+llvm::ArrayRef<llvm::Type *> to_array_ref(llvm::Type **types, int num_types) {
+  return llvm::ArrayRef<llvm::Type *>(types, num_types);
+}
+
+const int IS_PACKED = true;
+
+llvm::Type *llvm_emit_struct_type(Token *type_definition) {
+  assert(type_definition->type == TOKEN_STRUCT_DEFINITION);
+  Token *subtokens[2];
+  int num_subtokens = expand_tokens(type_definition, subtokens, 2);
+  Token *identifier = subtokens[0];
+  Token *struct_fields = subtokens[1];
+
+  llvm::StringRef name = to_string_ref(identifier->substring);
+  llvm::StructType *type = llvm::StructType::create(*g.llvm.context, name);
+
+  llvm::Type *fields[MAX_PARAMS];
+  //for(int i = 0; i < struct_body.num_subtokens; ++i) {
+  int num_fields = 0;
+  for(Token *field = struct_fields->start->start; field != NULL; field = field->next) {
+    llvm::Type *field_type = llvm_emit_struct_field(field);
+    fields[num_fields++] = field_type;
+  }
+
+  llvm::ArrayRef<llvm::Type *> ref_fields = to_array_ref(fields, num_fields);
+  type->setBody(ref_fields, IS_PACKED); 
+
+  //llvm::Type *type = llvm::StructType::get(*llvm.context, ref_fields, IS_PACKED);
   return type;
 }
 
-void emit_global_type_definitions(LLVM &llvm, Token *program) {
-  for(Token *program_statement = program->start; program_statement != NULL; program_statement = program_statement->next) {
+llvm::Type *llvm_emit_base_type(Type *type) {
+  assert(type->llvm_type == NULL);
+  assert(type->kind == BASE_TYPE);
+
+  switch(type->base.type_definition->type) {
+  case TOKEN_LLVM_TYPE_DEFINITION:
+    return llvm_emit_llvm_type(type->base.type_definition);
+  case TOKEN_TYPEDEF_DEFINITION:
+    return llvm_emit_typedef_type(type->base.type_definition);
+  case TOKEN_STRUCT_DEFINITION:
+    return llvm_emit_struct_type(type->base.type_definition);
+  //case TOKEN_ENUM_DEFINITION:
+  //  return llvm_emit_enum_type(type->base.type_definition);
+    break;
+  default:
+    halt();
+  }
+
+  return NULL;
+}
+
+llvm::Type *llvm_emit_pointer_type(Type *pointer_type) {
+  //assert(type_token->type == TOKEN_POINTER_TYPE);
+  //Token *subtokens[1];
+  //int num_subtokens = expand_tokens(type_token, subtokens, 1);
+  assert(pointer_type->kind == POINTER_TYPE);
+  //Token *base_type_declaration = ;
+  //Type *base_type = emit_type_declaration(base_type_declaration);
+  llvm::Type *base_llvm_type = llvm_get_type(pointer_type->pointer.base_type);
+  return llvm::PointerType::get(base_llvm_type, 0);
+}
+
+llvm::Type *llvm_emit_array_type(Type *array_type) {
+  //assert(type_token.token == TOKEN_COMPOUND_ARRAY_TYPE);
+  //assert(type_token.num_subtokens == 2);
+  //const GGToken &base_type_token = type_token.subtokens[0];
+  //const GGToken &array_size = type_token.subtokens[1];
+  assert(array_type->kind == ARRAY_TYPE);
+
+  llvm::Type *base_type = llvm_get_type(array_type->array.base_type);
+  //uint64_t num_elements = eval_constexpr(array_size);
+  return llvm::ArrayType::get(base_type, array_type->array.count);
+}
+
+llvm::Type *emit_param_type(Token *param) {
+  assert(param->type == TOKEN_FUNCTION_PARAM);
+  Token *subtokens[3];
+  int num_subtokens = expand_tokens(param, subtokens, 3);
+  Token *type_declaration = subtokens[0];
+  Token *identifier = subtokens[1];
+  Token *default_value = subtokens[2];
+  Type *type = emit_type_declaration(type_declaration);
+  return llvm_get_type(type);
+}
+
+int llvm_get_param_types(Token *param_list, llvm::Type **types, int max_params) {
+  int num_params = 0;
+  for(Token *token = param_list->start; token != NULL; token = token->next) {
+    assert(num_params < max_params);
+    types[num_params] = emit_param_type(token);
+    num_params++;
+  }
+  return num_params;
+}
+
+enum {
+  FIXED_ARGS = false,
+  VAR_ARGS = true,
+};
+
+llvm::Type *llvm_emit_function_type(Type *function_type) {
+  //assert(type_token.token == TOKEN_COMPOUND_FUNCTION_TYPE);
+  //assert(type_token.num_subtokens == 2);
+  //const GGToken &return_type_token = type_token.subtokens[0];
+  //const GGToken &param_type_tokens = type_token.subtokens[1];
+  assert(function_type->kind == FUNCTION_TYPE);
+
+  llvm::Type *retval_type = llvm_get_type(function_type->function.retval_type);
+
+  llvm::Type *param_types[MAX_PARAMS];
+  int num_params = llvm_get_param_types(function_type->function.param_list, param_types, MAX_PARAMS);
+  llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
+  return llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
+}
+
+
+llvm::Type *llvm_emit_type(Type *type) {
+  assert(type->llvm_type == NULL);
+
+  llvm::Type *llvm_type;
+  switch(type->kind) {
+  case BASE_TYPE:
+    llvm_type = llvm_emit_base_type(type);
+    break;
+  case POINTER_TYPE:
+    llvm_type = llvm_emit_pointer_type(type);
+    break;
+  case ARRAY_TYPE:
+    llvm_type = llvm_emit_array_type(type);
+    break;
+  case FUNCTION_TYPE:
+    llvm_type = llvm_emit_function_type(type);
+    break;
+  default:
+    halt();
+  }
+  //Token *type_definition = type->type_definition;
+  //llvm::Type *llvm_type = llvm_emit_type_defintiion(type_definition);
+  type->llvm_type = llvm_type;
+  return llvm_type;
+}
+
+llvm::Type *llvm_get_type(Type *type) {
+  if (type->llvm_type == NULL) {
+    return type->llvm_type;
+  } else {
+    return llvm_emit_type(type);
+  }
+}
+
+//llvm::Type *llvm_get_type(Token *type_declaration) {
+//
+//  if (type->llvm_type == NULL) {
+//    return type->llvm_type;
+//  } else {
+//    return llvm_emit_type(type);
+//  }
+//}
+
+
+//llvm::Type *llvm_get_type(Token *type_declaration) {
+//  switch(type_declaration->type) {
+//  case TOKEN_IDENTIFIER:
+//    return llvm_get_type_identifier(llvm, type_declaration);
+//  case TOKEN_RAW_LLVM_TYPE:
+//    return llvm_get_llvm_type(llvm, type_declaration);
+//  case TOKEN_POINTER_TYPE:
+//    return llvm_get_pointer_type(llvm, type_declaration);
+//  case TOKEN_ARRAY_TYPE:
+//    return llvm_get_array_type(llvm, type_declaration);
+//  case TOKEN_FUNCTION_TYPE:
+//    return llvm_get_function_type(llvm, type_declaration);
+//  default:
+//    halt();
+//  }
+//  assert(type_declaration->token == TOKEN_TYPE_IDENTIFIER);
+//  Type *type = db_lookup_type(type_declaration->substring);
+//  assert(type);
+//
+//  if (type->llvm_type) {
+//    return type->llvm_type;
+//  } else {
+//    return llvm_emit_type(type);
+//  }
+//}
+
+//llvm::Type* llvm_get_type(LLVM &llvm, const Token *type_declaration) {
+//  switch(type_declaration->type) {
+//  case TOKEN_IDENTIFIER:
+//    return llvm_get_type_identifier(llvm, type_declaration);
+//  case TOKEN_RAW_LLVM_TYPE:
+//    return llvm_get_llvm_type(llvm, type_declaration);
+//  case TOKEN_POINTER_TYPE:
+//    return llvm_get_pointer_type(llvm, type_declaration);
+//  case TOKEN_ARRAY_TYPE:
+//    return llvm_get_array_type(llvm, type_declaration);
+//  case TOKEN_FUNCTION_TYPE:
+//    return llvm_get_function_type(llvm, type_declaration);
+//  default:
+//    halt();
+//  }
+//
+//  return NULL;
+//}
+
+//llvm::Type *llvm_emit_llvm_type_definition(LLVM &llvm, Token *type_def) {
+//  Token *subtokens[2];
+//  int num_subtokens = expand_tokens(type_def, subtokens, 2);
+//  const Token &identifier = *subtokens[0];
+//  const Token &type_decl = *subtokens[1];
+//
+//  llvm::Type *type = llvm_get_type(llvm, type_decl);
+//  db_set_llvm_type(llvm, identifier, type);
+//  return type;
+//}
+//
+//void emit_global_type_definitions(LLVM &llvm, Token *program) {
+//  for(Token *program_statement = program->start; program_statement != NULL; program_statement = program_statement->next) {
+//    switch(program_statement->type) {
+//    case TOKEN_STRUCT_DEFINITION:
+//      emit_struct_definition(llvm, program_statement);
+//      break;
+//    case TOKEN_LLVM_TYPE_DEFINITION:
+//      emit_llvm_type_definition(llvm, program_statement);
+//      break;
+//    case TOKEN_TYPEDEF_DEFINITION:
+//      emit_typedef_definition(llvm, program_statement);
+//      break;
+//    case TOKEN_IMPORT_STATEMENT:
+//    case TOKEN_VARIABLE_DEFINITION:
+//    case TOKEN_FUNCTION_DEFINITION:
+//    case TOKEN_EXTERNAL_FUNCTION_DECLARATION:
+//      break;
+//    default:
+//      halt();
+//    }
+//  }
+//}
+
+Type *emit_struct_definition(Token *type_definition) {
+  assert(type_definition->type == TOKEN_STRUCT_DEFINITION);
+  // ?? do i need to do something here
+}
+
+void *db_lookup_any(const SubString &substring) {
+  for(auto *variable : g.db.variables) {
+    if (substring_cmp(variable->identifier, substring)) return variable;
+  }
+
+  return NULL;
+}
+
+EmitResult db_add_variable(const SubString &identifier, Value *value) {
+  void *existing = db_lookup_any(identifier);
+  if (existing != NULL) return make_emit_error("Variable already defined");
+  //value->scope = g.db.db_scope;
+  g.db.variables.push_back(value);
+}
+
+
+EmitResult emit_global_variable_definition(Token *program_statement) {
+  assert(program_statement->type == TOKEN_VARIABLE_DEFINITION);
+  Token *subtokens[3];
+  int num_subtokens = expand_tokens(program_statement, subtokens, 3);
+  Token *type_decl = subtokens[0];
+  Token *identifier = subtokens[1];
+  Token *initalizer_value = subtokens[2];
+
+  Type *typedec = emit_type_declaration(type_decl);
+  llvm::Type *type = llvm_get_type(typedec);
+
+  llvm::Constant *constant;
+  if (initalizer_value)
+  {
+    // TODO
+    constant = llvm::Constant::getNullValue(type);
+
+    //uint64_t val64 = 0;
+    //val64 = eval_constexpr(value);
+    //constant = llvm::ConstantInt::get(type, val64);
+  }
+  else 
+  {
+    constant = llvm::Constant::getNullValue(type);
+  }
+
+  llvm::StringRef name = to_string_ref(identifier->substring);
+  llvm::Value *llvm_value = new llvm::GlobalVariable(*g.llvm.module, type, false, llvm::GlobalVariable::ExternalLinkage, constant, name);
+
+  Value *value = new Value;
+  value->type = typedec;
+  value->llvm_value = llvm_value;
+
+  return db_add_variable(identifier->substring, value);
+}
+
+EmitResult emit_function_definition(Token *function_definition) {
+  assert(function_definition.token == TOKEN_COMPOUND_FUNCTION_DEFINITION);
+  assert(program_statement->type == TOKEN_VARIABLE_DEFINITION);
+  Token *subtokens[4];
+  int num_subtokens = expand_tokens(function_definition, subtokens, 4);
+  Token *function_return_type = subtokens[0];
+  Token *function_identifier  = subtokens[1];
+  Token *function_params      = subtokens[2];
+  Token *function_body        = subtokens[3];
+
+  llvm::Function *function;
+  
+  if (function_params.num_subtokens == 0)  {
+    function = db_lookup_function_declaration(llvm, function_identifier, NULL, 0);
+  } else {
+    llvm::Type *param_types[MAX_PARAMS];
+    int num_params = get_param_types(llvm, function_params, param_types, MAX_PARAMS);
+    function = db_lookup_function_declaration(llvm, function_identifier, param_types, num_params);
+  }
+  //llvm::Type *retval_type = get_type(llvm, function_return_type);
+  //llvm::FunctionType *functionType;
+  //if (function_params.num_subtokens == 0) 
+  //{
+  //  functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
+  //}
+  //else
+  //{
+  //  llvm::Type *param_types[MAX_PARAMS];
+  //  int num_params = get_param_types(llvm, function_params, param_types, MAX_PARAMS);
+  //  llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
+  //  functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
+
+  //  //emit_paramater_bindings(llvm, function_params);
+  //}
+
+  //llvm::StringRef name = to_string_ref(function_identifier.substring);
+
+  //llvm::Function *function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, llvm.module);
+  //assert(function);
+
+  db_push_scope(llvm);
+  llvm::BasicBlock *entry = llvm::BasicBlock::Create(*llvm.context, "", function);
+  llvm.builder->SetInsertPoint(entry);
+
+  int i = 0;
+  for (llvm::Function::arg_iterator AI = function->arg_begin(); i < function_params.num_subtokens; ++AI, ++i) {
+    const GGToken &param_type = function_params.subtokens[i].subtokens[0];
+    const GGToken &param_identifier = function_params.subtokens[i].subtokens[1];
+    //AI->setName(name);
+
+    llvm::StringRef name = to_string_ref(param_identifier.substring);
+
+    llvm::Value *alloca = CreateAlloca(llvm, function, param_identifier, param_type);
+    llvm.builder->CreateStore(AI, alloca);
+
+    db_add_variable(llvm, param_identifier, alloca);
+  }
+
+  //llvm::BasicBlock *BB = BasicBlock::Create(*llvm.context, "entry", function);
+  //llvm.builder->SetInsertPoint(BB);
+
+  for(int i = 0; i < function_body.num_subtokens; ++i) {
+    GGToken &subtoken = function_body.subtokens[i];
+    switch(subtoken.token) {
+    case TOKEN_COMPOUND_VARIABLE_DEFINITION:
+      llvm_emit_local_variable(llvm, function, subtoken);
+      break;
+    case TOKEN_COMPOUND_ASSIGNMENT_STATEMENT:
+      llvm_emit_assignment_statement(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_RETURN_STATEMENT:
+      llvm_emit_local_return(llvm, subtoken);
+      break;
+    case TOKEN_COMPOUND_EXPRESSION_STATEMENT:
+      assert(subtoken.num_subtokens == 1);
+      emit_rvalue_expression(llvm, subtoken.subtokens[0]);
+      break;
+    case TOKEN_COMPOUND_INLINE_LLVM:
+      emit_inline_llvm(llvm, function, subtoken);
+      break;
+    default: 
+      halt();
+    }
+  }
+  db_pop_scope(llvm);
+
+  //verifyFunction(*function);
+
+  //llvm::Function *function = lookup_function(function_definition);
+  //llvm_emit_function_body(llvm, function, function_body);
+  //function->addFnAttr("nounwind");
+
+  //db_add_function(llvm, function_identifier, function);
+}
+
+EmitResult emit_program_statement(Token *program_statement) {
     switch(program_statement->type) {
     case TOKEN_STRUCT_DEFINITION:
-      emit_struct_declaration(llvm, program_statement);
+      //emit_struct_definition(program_statement);
       break;
     case TOKEN_LLVM_TYPE_DEFINITION:
-      emit_llvm_type_definition(llvm, program_statement);
+      //emit_llvm_type_definition(program_statement);
       break;
     case TOKEN_TYPEDEF_DEFINITION:
-    case TOKEN_IMPORT_STATEMENT:
+      //emit_typedef_definition(program_statement);
+      break;
     case TOKEN_VARIABLE_DEFINITION:
+      emit_global_variable_definition(program_statement);
+      break;
     case TOKEN_FUNCTION_DEFINITION:
+      emit_function_definition(program_statement);
+      break;
     case TOKEN_EXTERNAL_FUNCTION_DECLARATION:
+      emit_external_function_declaration(program_statement);
+      break;
+    case TOKEN_IMPORT_STATEMENT:
       break;
     default:
       halt();
     }
-  }
 
-  for(Token *program_statement = program->start; program_statement != NULL; program_statement = program_statement->next) {
-    switch(program_statement->token) {
-    case TOKEN_STRUCT_DEFINITION:
-      emit_struct_definition(llvm, program_statement);
-      break;
-    case TOKEN_TYPEDEF_DEFINITION:
-      emit_type_definition(llvm, program_statement);
-      break;
-    case TOKEN_LLVM_TYPE_DEFINITION:
-    case TOKEN_IMPORT_STATEMENT:
-    case TOKEN_VARIABLE_DEFINITION:
-    case TOKEN_FUNCTION_DEFINITION:
-    case TOKEN_EXTERNAL_FUNCTION_DECLARATION:
-      break;
-    default:
-      halt();
-    }
-  }
-}
-LLVM LLVMInit(const char *dest_file) {
-  LLVM llvm = {};
-  llvm.context = &llvm::getGlobalContext();
-  llvm.builder = new llvm::IRBuilder<>(*llvm.context);
-  llvm.module = new llvm::Module(dest_file, *llvm.context);
-  return llvm;
-}
-
-EmitResult emit_program(Token *program, const char *dest_file) {
-  LLVM llvm = LLVMInit(dest_file);
-
-  EmitResult result = emit_global_type_definitions(llvm, program);
-  if(is_success(result) == false) return result;
-  result = emit_global_function_prototypes(llvm, program);
-  if(is_success(result) == false) return result;
-  result = emit_global_variable_definitions(llvm, program);
-  if(is_success(result) == false) return result;
-  result = emit_global_function_definitions(llvm, program);
-  if(is_success(result) == false) return result;
-
-  llvm.module->dump();
-
-  //IRCompile(llvm);
   return EMIT_SUCCESS;
 }
 
 bool is_success(const EmitResult &result) {
   return true;
+}
+
+EmitResult emit_program(Token *program, const char *dest_file) {
+  LLVMInit(dest_file);
+
+  for(Token *program_statement = program->start; program_statement != NULL; program_statement = program_statement->next) {
+    EmitResult result = emit_program_statement(program);
+    if(is_success(result) == false) return result;
+  }
+
+
+  //EmitResult result = emit_global_type_definitions(llvm, program);
+  //if(is_success(result) == false) return result;
+  //result = emit_global_function_prototypes(llvm, program);
+  //if(is_success(result) == false) return result;
+  //result = emit_global_variable_definitions(llvm, program);
+  //if(is_success(result) == false) return result;
+  //result = emit_global_function_definitions(llvm, program);
+  //if(is_success(result) == false) return result;
+
+  g.llvm.module->dump();
+
+  //IRCompile(llvm);
+  return EMIT_SUCCESS;
 }
 
 struct CompileResult {
@@ -2601,6 +3228,7 @@ std::string to_dest_file(const char *source_file) {
 const CompileResult COMPILE_SUCCESS = {};
 
 CompileResult compile_program(const char *source_file) {
+
   ParseResult parse_result = parse_program(source_file);
   if (is_success(parse_result) == false) return make_result(parse_result);
 

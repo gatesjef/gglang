@@ -2124,7 +2124,7 @@ uint64_t substring_to_uint64(const GGSubString &substring) {
   return retval;
 }
 
-bool isWhitespace(char c) {
+static bool isWhitespace(char c) {
   switch(c) {
   case ' ':
   case '\t':
