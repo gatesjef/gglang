@@ -1,0 +1,74 @@
+// main.gg
+// Hello comments!
+
+import "prelude.gg";
+
+struct Vec2I {
+  i32 x;
+  i32 y;
+}
+
+i32 main() {
+  Vec2I rho;
+  rho.x = -2;
+  rho.y = 2;
+
+  Vec2I tau;
+  tau.x = 6;
+  tau.y = 4;
+
+  Vec2I pi = rho + tau;
+
+  Vec2 rho2;
+  rho2.x = 2.0;
+  rho2.y = 2.0;
+
+  Vec2 tau2;
+  tau2.x = 6.0;
+  tau2.y = 4.0;
+
+  Vec2 pi2 = rho2 + tau2;
+
+  putchar(pi.x + pi.y + 65);
+  return 1;
+}
+
+Vec2I operator +(Vec2I a, Vec2I b) {
+  Vec2I retval;
+  retval.x = a.x + b.x;
+  retval.y = a.y + b.y;
+  return retval;
+}
+
+
+//if statement
+//error messages
+//typechecking
+//var args (printf)
+//pass by val/ref, return by val/ref
+//casting 
+//enums
+
+//constexpr
+//for statement
+//case statement
+//pre-main
+//other type literals (suffixess)
+//allocator
+//type inference
+//scoped declarations
+//slices
+//templates
+//std lib
+//reflection
+//full llvm parsing
+//named breaks/continue
+//scoped functions/types
+//capture
+//vector types
+//perf
+//vstudio integration
+//better linker integration
+//global constants
+//non-zero struct defaults
+

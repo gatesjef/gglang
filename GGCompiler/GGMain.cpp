@@ -5,14 +5,20 @@
 #include "GGCompiler.h"
 #include "GGLLVMEmitter.h"
 
-int main(int argc, char* argv[])
-{
+void print_result(const CompileResult &result) {
+
+}
+
+int main(int argc, char* argv[]) {
   const char *source_file = "../main.gg";
 
-  parse_program(source_file);
-  GGToken output = GGCompile(source_file);
-  GGLLVMEmitProgram(output);
-  return 0;
+  //parse_program(source_file);
+  //GGToken output = GGCompile(source_file);
+  //GGLLVMEmitProgram(output);
+  //return 0;
+
+  CompileResult result = compile_program(source_file);
+  print_result(result);
 }
 
 /*

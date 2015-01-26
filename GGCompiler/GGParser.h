@@ -1,17 +1,28 @@
 // GGParser.h
 
-enum ParseResultType {
-  RESULT_SUCCESS,
-  RESULT_ERROR,
-  RESULT_NONE,
+//enum ParseResultType {
+//  RESULT_SUCCESS,
+//  RESULT_ERROR,
+//  RESULT_NONE,
+//};
+//
+//struct Token;
+//struct ParseResult
+//{
+//    ParseResultType type;
+//    Error error;
+//    Token *start;
+//    Token *end;
+//};
+//
+//ParseResult parse_program(const char * source_file);
+
+struct Error {
 };
 
-struct Token;
-struct ParseResult
-{
-    ParseResultType type;
-    Token *start;
-    Token *end;
+struct CompileResult {
+  Error error;
 };
 
-ParseResult parse_program(const char * source_file);
+CompileResult compile_program(const char *source_file);
+

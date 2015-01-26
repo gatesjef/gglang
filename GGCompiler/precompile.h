@@ -45,5 +45,11 @@
 #include "llvm/AsmParser/Parser.h"
 //#include "llvm/Parser.h"
 
+struct LLVMState {
+  llvm::Module *module;
+  llvm::IRBuilder<> *builder;
+  llvm::LLVMContext *context;
+};
+
 
 // TODO: reference additional headers your program requires here

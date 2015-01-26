@@ -44,11 +44,7 @@ struct DBItem {
 const int MAX_DB_ITEMS = 1024;
 const int MAX_FIELDS = 1024;
 
-struct LLVM {
-  llvm::Module *module;
-  llvm::IRBuilder<> *builder;
-  llvm::LLVMContext *context;
-
+struct LLVM : LLVMState {
   DBItem db_items[MAX_DB_ITEMS];
   int num_db_items;
   int db_scope;
@@ -1569,7 +1565,7 @@ int parse_raw_llvm(const LLVMToken *tokens, int num_tokens, LLVMStatement *state
 //builder.add(old_lhs).add(".").add(
 //  + "." + tempN + old_rhs;
 
-std::string to_llvm_type_str(llvm::Type *type)
+static std::string to_llvm_type_str(llvm::Type *type)
 {
   std::string data;
   llvm::raw_string_ostream stream(data);
@@ -1705,7 +1701,7 @@ int lines_replace_tokens(LLVM &llvm, Lines &lines) {
 //  
 //}
 
-void trim(std::string &str)
+static void trim(std::string &str)
 {
   size_t startPos = str.find_first_not_of(" \t\r\n");
   if (startPos != str.npos)
@@ -2544,7 +2540,9 @@ void llvm_emit_global_function_prototypes(LLVM &llvm, const GGToken &program) {
 }
 
 LLVM GGLLVMInit() {
-  LLVM llvm = {};
+  LLVM llvm;
+  memset(&llvm, 0x00, sizeof(LLVM));
+
   llvm.context = &llvm::getGlobalContext();
   llvm.builder = new llvm::IRBuilder<>(*llvm.context);
   llvm.module = new llvm::Module("gg", *llvm.context);
@@ -2577,7 +2575,7 @@ void GGLLVMOptimize(LLVM &llvm) {
 }
 
 static int compileModule(char **argv, llvm::LLVMContext &Context, llvm::Module *module);
-void IRCompile(LLVM &llvm);
+void IRCompile(LLVMState &llvm);
 
 void GGLLVMEmitProgram(const GGToken &program) {
   LLVM llvm = GGLLVMInit();
@@ -3125,7 +3123,8 @@ std::string exec(char* cmd) {
   _pclose(pipe);
   return result;
 }
-void IRCompile(LLVM &llvm)
+
+void IRCompile(LLVMState &llvm)
 {
   sys::PrintStackTraceOnErrorSignal();
   //PrettyStackTraceProgram X(argc, argv);
