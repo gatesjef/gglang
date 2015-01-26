@@ -1055,7 +1055,10 @@ ParseResult parse_member_op(ParserState &parser, Token *lhs) {
 }
 
 ParseResult parse_function_call_params(ParserState &parser) {
-  return parse_zero_or_more_separated(parser, parse_expression, ",");
+  ParseResult result = parse_zero_or_more_separated(parser, parse_expression, ",");
+  if (is_success(result) == false) return result;
+
+  return make_result(parser, TOKEN_FUNCTION_CALL_PARAMS, result);
 }
 
 ParseResult parse_function_call_op(ParserState &parser, Token *lhs) {
@@ -1069,6 +1072,8 @@ ParseResult parse_function_call_op(ParserState &parser, Token *lhs) {
     return make_error(parser, "Invalid function call params");
   }
 
+  lhs->next = params.start;
+
   {
     ParseResult result = parse_exact(parser, ")");
     if (is_success(result) == false)  {
@@ -1077,8 +1082,14 @@ ParseResult parse_function_call_op(ParserState &parser, Token *lhs) {
     }
   }
 
-  ParseResult retval = make_result(parser, TOKEN_OP_FUNCTION_CALL, lhs);
-  append_result(retval, params);
+  ParseResult subtokens;
+  subtokens.type = RESULT_SUCCESS;
+  subtokens.start = lhs;
+  lhs->next = params.start;
+  subtokens.end = params.start;
+
+  ParseResult retval = make_result(parser, TOKEN_OP_FUNCTION_CALL, subtokens);
+  //append_result(retval, params);
   return retval;
 }
 
@@ -3201,6 +3212,11 @@ TypecheckResult typecheck_variable_definition(Token *statement);
 TypecheckResult typecheck_function_call_expression(Token *expression){
   Token *subtokens[2];
   int num_subtokens = expand_tokens(expression, subtokens, 2);
+
+  if (num_subtokens == 1) {
+
+  }
+
 
   Token *function_identifier = subtokens[0];
   Token *function_call_params = subtokens[1];
