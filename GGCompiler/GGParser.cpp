@@ -65,6 +65,7 @@ TOKEN_SUBSTRING_START,
   TOKEN_FLOAT_LITERAL,
 
   TOKEN_IDENTIFIER,
+  TOKEN_OPERATOR_IDENTIFIER,
   //TOKEN_TYPE_IDENTIFIER,
   //TOKEN_FUNCTION_IDENTIFIER,
   //TOKEN_VARIABLE_IDENTIFIER,
@@ -110,6 +111,34 @@ TOKEN_OP_START,
 TOKEN_OP_END,
 };
 
+std::string string_format_arg_list(const char *format, va_list args) {
+  int length = _vscprintf(format, args) + 1;
+  //std::unique_ptr<char[]> formatted;
+  //formatted.reset(new char[length]);
+
+  char *formatted = (char *)malloc(sizeof(char) * length);
+
+  int write_count = _vsnprintf(formatted, length, format, args);
+  assert(write_count >= 0);
+
+  std::string retval = formatted;
+  free(formatted);
+
+  return retval;
+}
+
+std::string string_format(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+
+  std::string retval = string_format_arg_list(format, args);
+
+  va_end(args);
+
+  return retval;
+}
+
+
 struct ParseTable;
 //struct Type;
 
@@ -120,16 +149,16 @@ struct SubString {
 
 struct Token {
   TokenType type;
-  //Type *expr_type;
+  FileLocation location;
 
-  union {
+  //union {
     SubString substring;
-    struct {
+    //struct {
       Token *start;
       Token *end;
-    };
+    //};
     const ParseTable *entry;
-  };
+  //};
 
   Token *next;
 };
@@ -179,6 +208,9 @@ struct ParserState {
 
 enum TypeKind {
   //BASE_TYPE,
+  ARBITRARY_INTEGER,
+  //ARBITRARY_FLOAT,
+  
   LLVM_TYPE,
   //TYPEDEF_TYPE,
   STRUCT_TYPE,
@@ -317,7 +349,7 @@ struct SymbolDatabase {
 //};
 
 struct G {
-  //ParserState parser;
+  ParserState parser;
   SymbolDatabase db;
   LLVMState llvm;
 } g;
@@ -326,14 +358,21 @@ void db_push_scope() {
   g.db.scope++;
 }
 
+bool varaible_out_of_scope(const VariableDef &var) {
+  return var.scope > g.db.scope;
+}
+
 void db_pop_scope() {
   g.db.scope--;
 
-  for(auto &vars : g.db.functions) {
-    if (vars.scope > g.db.scope) {
-      //erase..
-    }
-  }
+  auto remove = std::remove_if(g.db.variables.begin(), g.db.variables.end(), varaible_out_of_scope);
+  g.db.variables.erase(remove, g.db.variables.end());
+
+  //for(auto &vars : g.db.functions) {
+  //  if (vars.scope > g.db.scope) {
+  //    //erase..
+  //  }
+  //}
 
 }
 
@@ -446,7 +485,9 @@ void consume_whitespace(ParserState &parser) {
       break;
 
     case '/':
-      if (parser.current_char[1] == '/') {
+      if (comment_mode == end_of_line) {
+        parser.current_char += 1;
+      } else if (parser.current_char[1] == '/') {
         comment_mode = end_of_line;
         parser.current_char += 2;
       }
@@ -468,18 +509,18 @@ void consume_whitespace(ParserState &parser) {
   }
 }
 
-enum ParseResultType {
-  RESULT_SUCCESS,
-  RESULT_ERROR,
-  RESULT_NONE,
-};
+//enum ParseResultType {
+//  RESULT_SUCCESS,
+//  RESULT_ERROR,
+//  RESULT_NONE,
+//};
 
-struct ParseResult
-{
-    ParseResultType type;
+struct ParseResult {
+    ResultType result;
     Error error;
     Token *start;
     Token *end;
+    int sequence_index;
 };
 
 const ParseResult PARSE_EMPTY = {};
@@ -496,13 +537,13 @@ ParseResult parse_exact(ParserState &parser, const char *str) {
   return PARSE_EMPTY;
 }
 
-enum EmitResultType  {
-  EMIT_OK,
-  EMIT_ERROR,
-};
+//enum EmitResultType  {
+//  EMIT_OK,
+//  EMIT_ERROR,
+//};
 
 struct EmitResult {
-  EmitResultType type;
+  ResultType result;
   Error error;
 };
 
@@ -510,13 +551,35 @@ const EmitResult EMIT_SUCCESS = {};
 
 EmitResult make_emit_error(const char *error_fmt, ...) {
   EmitResult retval;
-  retval.type = EMIT_ERROR;
+  retval.result = RESULT_ERROR;
   return retval;
 }
 
+ParseResult make_sequence_error(ParserState &parser, int i) {
+  ParseResult retval;
+  retval.result = RESULT_ERROR;
+  retval.error.location.file_index = parser.current_file_idx;
+  retval.error.location.line = parser.current_line_number;
+  retval.error.location.column = parser.current_char - parser.current_line_start;
+  retval.error.error_string = "sequence error";
+  retval.sequence_index = i;
+  return retval;
+}
+
+#define FORMAT_ERROR_STRING(dest, format) \
+  va_list args; \
+  va_start(args, format); \
+  dest = string_format_arg_list(format, args); \
+  va_end(args);
+
+
 ParseResult make_error(ParserState &parser, const char *error_fmt, ...) {
   ParseResult retval;
-  retval.type = RESULT_ERROR;
+  retval.result = RESULT_ERROR;
+  retval.error.location.file_index = parser.current_file_idx;
+  retval.error.location.line = parser.current_line_number;
+  retval.error.location.column = parser.current_char - parser.current_line_start;
+  FORMAT_ERROR_STRING(retval.error.error_string, error_fmt); // retval.error.error_string = error_fmt;
   return retval;
 }
 
@@ -569,7 +632,7 @@ Token *token_alloc(ParserState &parser) {
 
 ParseResult make_success(Token *new_token) {
   ParseResult retval;
-  retval.type = RESULT_SUCCESS;
+  retval.result = RESULT_SUCCESS;
   retval.start = new_token;
   retval.end = new_token;
   return retval;
@@ -580,19 +643,23 @@ ParseResult make_result(ParserState &parser, TokenType type, const char *start, 
   new_token->type = type;
   new_token->substring.start = start;
   new_token->substring.length = end - start;
+  new_token->location.file_index = parser.current_file_idx;
+  new_token->location.line = parser.current_line_number;
+  new_token->location.column = start - parser.current_line_start;
+
   return make_success(new_token);
 }
 
 bool is_error(const ParseResult& result) {
-  return (result.type == RESULT_ERROR);
+  return (result.result == RESULT_ERROR);
 }
 
 bool is_success(const ParseResult& result) {
-  return (result.type == RESULT_SUCCESS);
+  return (result.result == RESULT_SUCCESS);
 }
 
 bool is_none(const ParseResult& result) {
-  return (result.type == RESULT_NONE);
+  return (result.result == RESULT_NONE);
 }
 
 ParseResult make_result(ParserState &parser, TokenType type, const ParseResult &result_subtokens) {
@@ -601,6 +668,16 @@ ParseResult make_result(ParserState &parser, TokenType type, const ParseResult &
   new_token->type = type;
   new_token->start = result_subtokens.start;
   new_token->end = result_subtokens.end;
+
+  if (result_subtokens.start) {
+    new_token->location = result_subtokens.start->location;
+  } else {
+    new_token->location.file_index = parser.current_file_idx;
+    new_token->location.line = parser.current_line_number;
+    new_token->location.column = 0;
+  }
+
+
   return make_success(new_token);
 }
 
@@ -610,6 +687,15 @@ ParseResult make_result(ParserState &parser, TokenType type, Token *subtoken) {
   new_token->type = type;
   new_token->start = subtoken;
   new_token->end = subtoken;
+
+  if (subtoken) {
+    new_token->location = subtoken->location;
+  } else {
+    new_token->location.file_index = parser.current_file_idx;
+    new_token->location.line = parser.current_line_number;
+    new_token->location.column = 0;
+  }
+
   return make_success(new_token);
 }
 
@@ -618,6 +704,11 @@ ParseResult make_result(ParserState &parser, TokenType type, const ParseTable *e
   Token *new_token = token_alloc(parser);
   new_token->type = type;
   new_token->entry = entry;
+
+  new_token->location.file_index = parser.current_file_idx;
+  new_token->location.line = parser.current_line_number;
+  new_token->location.column = 0;
+
   return make_success(new_token);
 }
 
@@ -685,9 +776,16 @@ typedef ParseResult (*ParseFn)(ParserState&);
 
 void halt();
 
+void append_result(Token *token, const ParseResult &results) {
+  assert(token->start);
+  assert(token->end);
+  token->end->next = results.start;
+  token->end = results.end;
+}
+
 void append_result(ParseResult &retval, ParseResult &new_result) {
-  assert(retval.type == RESULT_SUCCESS);
-  switch (new_result.type) {
+  assert(retval.result == RESULT_SUCCESS);
+  switch (new_result.result) {
   case RESULT_SUCCESS:
     if (new_result.start == NULL) {
       // nothing
@@ -714,7 +812,7 @@ ParseResult parse_sequence(ParserState &parser, const ParseFn *statements, int n
     ParseResult result = statements[i](parser);
     if (is_error(result)) return result;
     else if (is_none(result)) {
-      if (i != 0) return make_error(parser, "...");
+      if (i != 0) return make_sequence_error(parser, i);
       else return result;
     }
     append_result(retval, result);
@@ -734,9 +832,9 @@ int expand_tokens(const ParseResult &statement, Token *subtokens[], int max_subt
   return num_tokens;
 }
 
-void parser_add_file(ParserState &parser, const SubString &relative_path);
+ParseResult parser_add_file(ParserState &parser, const SubString &relative_path);
 
-void emit_import_statement(ParserState &parser, const ParseResult &import_statement) {
+ParseResult emit_import_statement(ParserState &parser, const ParseResult &import_statement) {
   Token *subtokens[3];
   int num_subtokens = expand_tokens(import_statement, subtokens, 3);
   
@@ -745,14 +843,15 @@ void emit_import_statement(ParserState &parser, const ParseResult &import_statem
 
   switch(num_subtokens) {
   case 1:
-    parser_add_file(parser, subtokens[0]->substring);
-    break;
+    return parser_add_file(parser, subtokens[0]->substring);
   case 2:
   case 3:
     // TODO
   default:
     halt();
   }
+
+  return make_error(parser, "Unknown import statement");
 }
 
 
@@ -768,11 +867,17 @@ ParseResult parse_import_statement(ParserState &parser) {
 
   ParseResult result = parse_sequence(parser, statements, num_statements);
   ParseResult retval = make_result(parser, TOKEN_IMPORT_STATEMENT, result);
-  if (is_success(retval)) {
-    emit_import_statement(parser, retval);
+  if (retval.result == RESULT_SUCCESS) {
+    ParseResult import_result = emit_import_statement(parser, retval);
+    if (is_success(import_result) == false) return import_result;
+    return retval;
   }
 
-  return retval;
+  if (retval.sequence_index == 0) {
+    return PARSE_NONE;
+  } else {
+    return make_error(parser, "Invalid import statement");
+  }
 }
 
 ParseResult parse_pointer_type(ParserState &parser, Token *base_type) {
@@ -866,7 +971,8 @@ ParseResult parse_first_of_deep(ParserState &parser, const ParseFn *fns, int num
     int current_line_number = parser.current_line_number;
     const char *current_line_start = parser.current_line_start;
     ParseResult result = fns[i](parser);
-    if (is_success(result)) return result;
+    if (result.result == RESULT_SUCCESS) return result;
+    //if (result.result == RESULT_ERROR) return result;
     parser.current_char = current_char;
     parser.current_line_number = current_line_number;
     parser.current_line_start = current_line_start;
@@ -874,6 +980,22 @@ ParseResult parse_first_of_deep(ParserState &parser, const ParseFn *fns, int num
 
   return PARSE_NONE;
 }
+
+//ParseResult parse_first_of(ParserState &parser, const ParseFn *fns, int num_fns) {
+//  for(int i = 0; i < num_fns; ++i) {
+//    const char *current_char = parser.current_char;
+//    int current_line_number = parser.current_line_number;
+//    const char *current_line_start = parser.current_line_start;
+//    ParseResult result = fns[i](parser);
+//    if (result.result == RESULT_SUCCESS) return result;
+//    if (result.result == RESULT_ERROR) return result;
+//    parser.current_char = current_char;
+//    parser.current_line_number = current_line_number;
+//    parser.current_line_start = current_line_start;
+//  }
+//
+//  return PARSE_NONE;
+//}
 
 ParseResult parse_first_of(ParserState &parser, const ParseFn *fns, int num_fns) {
   for(int i = 0; i < num_fns; ++i) {
@@ -974,11 +1096,11 @@ ParseResult parse_operator_exact(ParserState &parser) {
   return parse_exact(parser, "operator");
 }
 
-ParseResult parse_binary_operator(ParserState &parser);
+ParseResult parse_any_operator(ParserState &parser);
 ParseResult parse_operator_identifier(ParserState &parser) {
   static const ParseFn fns[] = { 
     parse_operator_exact,
-    parse_binary_operator,
+    parse_any_operator,
   };
   static const int num = ARRAYSIZE(fns);
   ParseResult retval = parse_sequence(parser, fns, num);
@@ -986,12 +1108,19 @@ ParseResult parse_operator_identifier(ParserState &parser) {
 }
 
 ParseResult parse_function_identifier(ParserState &parser) {
-  static const ParseFn fns[] = { 
-    parse_operator_identifier, 
-    parse_identifier, 
-  };
-  static const int num = ARRAYSIZE(fns);
-  return parse_first_of(parser, fns, num);
+  ParseResult op_identifier = parse_operator_identifier(parser);
+  if (is_success(op_identifier)) {
+    return make_result(parser, TOKEN_OPERATOR_IDENTIFIER, op_identifier);
+  }
+
+  return parse_identifier(parser);
+
+  //static const ParseFn fns[] = { 
+  //  parse_operator_identifier, 
+  //  parse_identifier, 
+  //};
+  //static const int num = ARRAYSIZE(fns);
+  //return parse_first_of(parser, fns, num);
 }
 
 ParseResult parse_left_paren(ParserState &parser) {
@@ -1083,7 +1212,7 @@ ParseResult parse_function_call_op(ParserState &parser, Token *lhs) {
   }
 
   ParseResult subtokens;
-  subtokens.type = RESULT_SUCCESS;
+  subtokens.result = RESULT_SUCCESS;
   subtokens.start = lhs;
   lhs->next = params.start;
   subtokens.end = params.start;
@@ -1340,8 +1469,43 @@ ParseResult parse_binary_operator(ParserState &parser) {
   return parse_first_table(parser, table, num_entries);
 }
 
+ParseResult parse_any_operator(ParserState &parser) {
+  static const ParseTable table[] = {
+    "*",  TOKEN_MUL_OP, 5,
+    "/",  TOKEN_DIV_OP, 5,
+    "%",  TOKEN_REM_OP, 5,
+
+    "+",  TOKEN_ADD_OP, 6,
+    "-",  TOKEN_SUB_OP, 6,
+
+    "<<", TOKEN_LSHIFT_OP,  7,
+    ">>", TOKEN_RSHIFT_OP,  7,
+
+    "<=", TOKEN_CMP_LTE_OP, 8,
+    ">=", TOKEN_CMP_GTE_OP, 8,
+    "<",  TOKEN_CMP_LT_OP,  8,
+    ">",  TOKEN_CMP_GT_OP,  8,
+
+    "==", TOKEN_CMP_EQ_OP,  9,
+    "!=", TOKEN_CMP_NEQ_OP, 9,
+
+    "&",  TOKEN_BITWISE_AND_OP, 10,
+    "|",  TOKEN_BITWISE_OR_OP,  11,
+    "^",  TOKEN_BITWISE_XOR_OP, 12,
+    "&&", TOKEN_LOGICAL_AND_OP, 13,
+    "||", TOKEN_LOGICAL_OR_OP,  14,
+  
+    "++", TOKEN_PRE_INC_OP,     3,
+    "--", TOKEN_PRE_DEC_OP,     3,
+    "!",  TOKEN_LOGICAL_NOT_OP, 3,
+    "~",  TOKEN_BITWISE_NOT_OP, 3,
+  };
+  static const int num_entries = ARRAYSIZE(table);
+  return parse_first_table(parser, table, num_entries);
+}
+
 Token *get_token(ParseResult &result) {
-  assert(result.type == RESULT_SUCCESS);
+  assert(result.result == RESULT_SUCCESS);
   assert(result.start == result.end && result.start != NULL);
   return result.start;
 }
@@ -1365,7 +1529,7 @@ ParseResult parse_unary_expression(ParserState &parser) {
   }
 
   ParseResult retval = make_result(parser, TOKEN_UNARY_EXPRESSION, op);
-  append_result(retval, base);
+  append_result(retval.start, base);
   return retval;
 }
 
@@ -1397,7 +1561,7 @@ ParseResult parse_binary_expression(ParserState &parser, int minimum_precedence,
     }
 
     ParseResult rhs = parse_unary_expression(parser);
-    assert(rhs.type >= 0 && rhs.type <= 3);
+    assert(rhs.result >= 0 && rhs.result <= 3);
     if (is_success(rhs) == false) {
       return make_error(parser, "Invalid right hand side in binary expression ");
     }
@@ -1414,8 +1578,8 @@ ParseResult parse_binary_expression(ParserState &parser, int minimum_precedence,
     }
 
     ParseResult new_lhs = make_result(parser, TOKEN_BINARY_EXPRESSION, lhs);
-    append_result(new_lhs, op);
-    append_result(new_lhs, rhs);
+    append_result(new_lhs.start, op);
+    append_result(new_lhs.start, rhs);
     lhs = new_lhs;
   }
 }
@@ -1661,6 +1825,23 @@ ParseResult parse_until(ParserState &parser, const char *str, TokenType type) {
       return make_error(parser, "Unexpected end of file");
     }
 
+    if (*parser.current_char == '\r' ||
+        *parser.current_char == '\n') 
+    {
+      char old_char = *parser.current_char;
+      parser.current_char++;
+      if ((*parser.current_char == '\r' ||
+        *parser.current_char == '\n') &&
+        *parser.current_char != old_char) 
+      {
+        parser.current_char++;
+      }
+
+      parser.current_line_number++;
+      parser.current_line_start = parser.current_line_start = parser.current_char;
+      continue;
+    }
+
     if (strncmp(str, parser.current_char, len) == 0) {
       ParseResult retval = make_result(parser, type, start, parser.current_char);
       //parser.current_char += len;
@@ -1836,25 +2017,43 @@ ParseResult parse_function_definition(ParserState &parser);
 //  foo[32] identifier()
 //}
 
+ParseResult parse_variable_or_function_definition(ParserState &parser);
+
 ParseResult parse_statement(ParserState &parser) {
-  static const ParseFn statements[] = {
-    parse_block_statement,
-    parse_return_statement,
-    //parse_for_statement,
-    parse_if_statement,
-    // parse_switch_statement,
-    parse_inline_llvm,
+  {
+    static const ParseFn statements[] = {
+      parse_block_statement,
+      parse_return_statement,
+      //parse_for_statement,
+      parse_if_statement,
+      // parse_switch_statement,
+      parse_inline_llvm,
 
-    parse_expression_statement,
-    parse_assignment_statement,
+      parse_type_definition,
+    };
+    static const int num_statements = ARRAYSIZE(statements);
 
-    parse_type_definition,
-    //parse_definition,
-    parse_variable_definition,
-    parse_function_definition,
-  };
-  static const int num_statements = ARRAYSIZE(statements);
-  return parse_first_of_deep(parser, statements, num_statements);
+    ParseResult result = parse_first_of(parser, statements, num_statements);
+    if (is_success(result)) return result;
+    if (is_error(result)) return result;
+  }
+
+  {
+    static const ParseFn difficult_statements[] = {
+      parse_variable_or_function_definition,  // 
+      parse_assignment_statement,             // 
+      parse_expression_statement,             // 
+      //parse_function_definition,
+    };
+    static const int num_difficult_statements = ARRAYSIZE(difficult_statements);
+    ParseResult result = parse_first_of_deep(parser, difficult_statements, num_difficult_statements);
+    if (result.result == RESULT_ERROR) {
+      return make_error(parser, "Unknown statement");
+    }
+
+    return result;
+  }
+
 }
 
 ParseResult parse_function_body(ParserState &parser) {
@@ -1878,11 +2077,20 @@ ParseResult parse_function_definition(ParserState &parser) {
   return make_result(parser, TOKEN_FUNCTION_DEFINITION, result);
 }
 
+int count_subtokens(Token *token) {
+  int count = 0;
+  for(Token *cur = token->start; cur != NULL; cur = cur->next) {
+    count++;
+  }
+
+  return count;
+}
+
 // either variable or function definition
-ParseResult parse_definition(ParserState &parser) {
+ParseResult parse_variable_or_function_definition(ParserState &parser) {
   static const ParseFn statements[] = {
     parse_type_declaration,
-    parse_identifier, 
+    parse_function_identifier, 
   };
   static const int num_statements = ARRAYSIZE(statements);
 
@@ -1901,26 +2109,71 @@ ParseResult parse_definition(ParserState &parser) {
     };
     static const int num_statements = ARRAYSIZE(statements);
     ParseResult result = parse_sequence(parser, statements, num_statements);
+    if (is_success(result) == false) return result;
+
     ParseResult retval = make_result(parser, TOKEN_FUNCTION_DEFINITION, partial_results);
-    append_result(retval, result);
+    assert(retval.start == retval.end);
+    assert(count_subtokens(retval.start) == 2);
+    assert(retval.start->type == TOKEN_FUNCTION_DEFINITION);
+
+    append_result(retval.start, result);
+    assert(retval.start == retval.end);
+    assert(count_subtokens(retval.start) == 4);
+    assert(retval.start->type == TOKEN_FUNCTION_DEFINITION);
+
     return retval;
   } else {
     //variable definition
+    if (partial_results.end->type == TOKEN_OPERATOR_IDENTIFIER) {
+      return make_error(parser, "Invalid operator definition");
+    }
+
     return parse_variable_definition_part_2(parser, partial_results);
   }
 }
 
+//ParseResult parse_variable_or_function_definition(ParserState &parser) {
+//  //static const ParseFn statements[] = {
+//  //  parse_variable_definition,          // stuff = stuff;   // has eq
+//  //                                      // type identifier; // no eq
+//  //  parse_function_definition,          // stuff {}     ;   // no eq, has brace
+//  //};
+//
+//  ParseResult type_declaration = parse_type_declaration(parser);  // todo: optional
+//  ParseResult identifier = parse_identifier(parser);
+//
+//  if (is_success(peek(parser, parse_left_paren())) {
+//    // function definition
+//    ParseResult function_params = parse_function_params(parser);
+//    ParseResult function_body = parse_function_body(parser);
+//  }
+//  else {
+//    parse_variable_definition()
+//  }
+//
+//  parse_first_of(
+//    )
+//
+//  parse_type_declaration
+//  parse_identifier
+//  parse_function_params OR semicolon OR assiment;
+//
+//
+//  static const int num_statements = ARRAYSIZE(statements);
+//  ParseResult result = parse_first_of_deep(parser, statements, num_statements);
+//  return result;
+//}
+//
 ParseResult parse_program_statements(ParserState &parser) {
   static const ParseFn statements[] = {
-    parse_import_statement, 
-    parse_extern_function_declaration, 
-    parse_type_definition, 
-    parse_variable_definition, 
-    parse_function_definition, 
-    //parse_definition,
+    parse_import_statement,             // import
+    parse_extern_function_declaration,  // extern void x(int y);
+    parse_type_definition,              // struct ..., type ..., enum ..., llvm type
+    parse_variable_or_function_definition,
   };
   static const int num_statements = ARRAYSIZE(statements);
-  return parse_first_of_deep(parser, statements, num_statements);
+  ParseResult result = parse_first_of(parser, statements, num_statements);
+  return result;
 }
 
 void parser_init(ParserState &parser) {
@@ -1952,7 +2205,8 @@ void error(const char *format, ...);
 char *file_read_all(const char *input_filename) {
   FILE *input_file = fopen(input_filename, "rb");
   if (input_file == NULL) {
-    error("cannot open %s", input_filename);
+    //error("cannot open %s", input_filename);
+    return NULL;
   }
 
   fseek(input_file, 0, SEEK_END);
@@ -1964,20 +2218,25 @@ char *file_read_all(const char *input_filename) {
   file_data[file_size] = 0;
 
   if (read != file_size) {
-    error("cannon read %s", input_filename);
+    //error("cannon read %s", input_filename);
+    return NULL;
   }
 
   return file_data;
 }
 
-void parser_add_file(ParserState &parser, const SubString &relative_path) {
+ParseResult parser_add_file(ParserState &parser, const SubString &relative_path) {
   std::string path = make_full_path(parser.current_directory, relative_path);
   if (parser_lookup_file(parser, path) == false) {
     char *data = file_read_all(path.c_str());
-    assert(data);
+    if (data == NULL) {
+      return make_error(parser, "cannot import file %s", path.c_str());
+    }
     parser.files.push_back(path);
     parser.file_data.push_back(data);
   }
+
+  return make_success(NULL);
 }
 
 void path_split_directory_filename(const char *path, std::string &directory, SubString &filename) {
@@ -2019,20 +2278,23 @@ SubString make_substring(const char *str) {
 }
 
 ParseResult parse_program(const char *source_file) {
-  ParserState parser;
-  parser_init(parser);
-  parser_add_file(parser, make_substring(source_file));
+  parser_init(g.parser);
+  ParseResult result = parser_add_file(g.parser, make_substring(source_file));
+  if (is_success(result) == false) return result;
 
   ParseResult retval = PARSE_EMPTY;
-  for(int i = 0; i < (int)parser.files.size(); ++i) {
-    parser_set_file_index(parser, i);
-    consume_whitespace(parser);
-    ParseResult result = parse_zero_or_more(parser, parse_program_statements);
+  for(int i = 0; i < (int)g.parser.files.size(); ++i) {
+    parser_set_file_index(g.parser, i);
+    consume_whitespace(g.parser);
+    ParseResult result = parse_zero_or_more(g.parser, parse_program_statements);
     if (is_error(result)) return result;
+    if (*g.parser.current_char != 0) {
+      return make_error(g.parser, "Unexpected token - couldn't parse program statement.");
+    }
     append_result(retval, result);
   }
 
-  ParseResult program = make_result(parser, TOKEN_PROGRAM, retval);
+  ParseResult program = make_result(g.parser, TOKEN_PROGRAM, retval);
   return program;
 }
 
@@ -2347,10 +2609,10 @@ TypeDef *db_get_function_type(TypeDef *retval_type, Token *param_list) {
 //  db.functions.push_back(function);
 //}
 
-TokenType operator_identifer_to_op(const SubString &identifier) {
-  halt(); // todo
-  return TOKEN_ADD_OP;
-}
+//TokenType operator_identifer_to_op(const SubString &identifier) {
+//  halt(); // todo
+//  return TOKEN_ADD_OP;
+//}
 
 //Function *db_function_lookup(const SubString &identifier, Token *param_list) {
 //  for(auto *function : db.functions) {
@@ -2468,15 +2730,6 @@ TokenType operator_identifer_to_op(const SubString &identifier) {
 //}
 
 
-int count_subtokens(Token *token) {
-  int count = 0;
-  for(Token *cur = token->start; cur != NULL; cur = cur->next) {
-    count++;
-  }
-
-  return count;
-}
-
 TypeDef **alloc_types(int num_params) {
   return (TypeDef **)malloc(sizeof(TypeDef *) * num_params);
 }
@@ -2505,26 +2758,26 @@ void function_fill_params(Token *function_params, TypeDef **&types, int &num_par
   }
 }
 
-enum DeclarationResultType {
-  DB_ERROR,
-  DB_SUCCESS,
-};
-
+//enum DeclarationResultType {
+//  DB_ERROR,
+//  DB_SUCCESS,
+//};
+//
 struct DeclarationResult {
-  DeclarationResultType type;
-  std::string error;
+  ResultType type;
+  Error error;
 };
 
 DeclarationResult make_db_error(const char *error, const std::string &substr) {
   DeclarationResult retval;
-  retval.type = DB_ERROR;
-  retval.error = error + substr;
+  retval.type = RESULT_ERROR;
+  retval.error.error_string = error + substr;
   return retval;
 }
 
 DeclarationResult make_db_success() {
   DeclarationResult retval;
-  retval.type = DB_SUCCESS;
+  retval.type = RESULT_SUCCESS;
   return retval;
 }
 
@@ -2584,19 +2837,11 @@ bool db_type_exists(SubString &identifier) {
   return true;
 }
 
-enum TypecheckResultType {
-  //TYPECHECK_EMPTY,
-  TYPECHECK_TYPE,
-  TYPECHECK_ERROR,
-};
-
 struct TypecheckResult {
-  TypecheckResultType result;
-
-  union {
-    TypeDef *type;
-    Error error;
-  };
+  FileLocation loaction;
+  ResultType result;
+  Error error;
+  TypeDef *type;
 };
 
 const TypecheckResult TYPECHECK_SUCCESS = {};
@@ -2654,6 +2899,25 @@ FunctionDef *db_function_call_lookup(const SubString &identifier, Token *functio
   return NULL;
 };
 
+FunctionDef *db_operator_definition_lookup(TokenType op, Token *function_params) {
+  assert(function_params->type == TOKEN_FUNCTION_PARAMS);
+  for(auto &function : g.db.functions) {
+    if (function.op != op) continue;
+
+    Token *subtokens[MAX_PARAMS];
+    int num_params = expand_tokens(function_params, subtokens, MAX_PARAMS);
+    if (function.num_params != num_params) continue;
+
+    if (compare_params_types(function.param_types, subtokens, num_params) == false) {
+      continue;
+    }
+
+    return &function;
+  }
+
+  return NULL;
+};
+
 FunctionDef *db_function_definition_lookup(const SubString &identifier, Token *function_params) {
   assert(function_params->type == TOKEN_FUNCTION_PARAMS);
   for(auto &function : g.db.functions) {
@@ -2685,13 +2949,66 @@ FunctionDef *db_unary_operator_lookup(TokenType op, TypeDef *type_lhs) {
   return NULL;
 }
 
+//numeric literals are of the smallest type that contains them and can be auto-upconverted
+//
+//typeof(1) = i8
+//typeof(100000) = i16
+//
+//x := 1      // i8  1
+//i32 y;      // i32 0
+//z := x+y;   // i32 1;
+//i8 w = x+y; // error, truncation
+//
+//
+//i16 operator cast(i8 source) implicit {
+//  i16 dest;
+//  llvm {
+//    $dest = sext $source to i16
+//  }
+//  return dest;
+//}
+//
+//i8 operator cast(i16 source) {
+//  i8 dest;
+//  llvm {
+//    $dest = trunc $source to i8
+//  }
+//  return dest;
+//}
+//
+//auto cast  i32(i16)  {}
+//auto cast  i64(i32)  {}
+//auto cast i128(i64)  {}
+//
+//auto cast  f32(i8)   {}
+//auto cast  f32(i16)  {}
+//auto cast  f32(i32)  {}
+//auto cast  f64(i64)  {}
+//
+//auto cast  f32(f16)  {}
+//auto cast  f64(f32)  {}
+//auto cast f128(f64)  {}
+//
+//
+//i8 -> i16 -> if32 -> i32 -> if64 -> i64 -> i128
+//              |              |               |
+//             f32     ->     f64     ->     f128
+//
+//i32 y = 10;
+//i32 z = 20;
+//f32 x = (f32)y + (f32)z;
+
+
+//f32 operator *(f32, f32) {
+//  f32
+//}
+
 FunctionDef *db_binary_operator_lookup(TokenType op, TypeDef *type_lhs, TypeDef *type_rhs) {
   for(auto &function : g.db.functions) {
-    if (function.op == op &&
-      function.num_params == 2 &&
-      function.param_types[0] == type_lhs &&
-      function.param_types[1] == type_rhs) {
+    if (function.op == op && function.num_params == 2) {
+      if (function.param_types[0] == type_lhs && function.param_types[1] == type_rhs) {
         return &function;
+      }
     }
   }
 
@@ -2736,6 +3053,13 @@ bool variable_exists(const SubString &identifier) {
   return false;
 }
 
+SubString to_substring(const char *str) {
+  SubString retval;
+  retval.start = str;
+  retval.length = strlen(str);
+  return retval;
+}
+
 DeclarationResult db_add_function_definition(Token *function_definition) {
   FunctionDef function;
 
@@ -2752,7 +3076,72 @@ DeclarationResult db_add_function_definition(Token *function_definition) {
   }
 
   function.linkage = LINKAGE_INTERNAL;
-  function.identifier = function_identifier->substring;
+
+  if (function_identifier->type == TOKEN_IDENTIFIER) {
+    function.identifier = function_identifier->substring;
+  } else if (function_identifier->type == TOKEN_OPERATOR_IDENTIFIER) {
+    int num_params = count_subtokens(function_params);
+    TokenType &op = function_identifier->start->type;
+
+    if (op == TOKEN_SUB_OP && num_params == 1) {
+      op = TOKEN_NEGATIVE_OP;
+    }
+
+    if (op == TOKEN_ADD_OP && num_params == 1) {
+      op = TOKEN_POSITIVE_OP;
+    }
+
+    if (op == TOKEN_MUL_OP && num_params == 1) {
+      op = TOKEN_DEREF_OP;
+    }
+
+    if (op == TOKEN_BITWISE_NOT_OP && num_params == 1) {
+      op = TOKEN_ADDRESS_OP;
+    }
+
+    switch(op) {
+    case TOKEN_ADD_OP:
+    case TOKEN_POSITIVE_OP:
+      function.identifier = to_substring("operator +");
+      break;
+    case TOKEN_SUB_OP:
+    case TOKEN_NEGATIVE_OP:
+      function.identifier = to_substring("operator -");
+      break;
+    case TOKEN_MUL_OP:
+    case TOKEN_DEREF_OP:
+      function.identifier = to_substring("operator *");
+      break;
+    case TOKEN_DIV_OP:
+      function.identifier = to_substring("operator /");
+      break;
+    case TOKEN_BITWISE_AND_OP:
+    case TOKEN_ADDRESS_OP:
+      function.identifier = to_substring("operator &");
+      break;
+    case TOKEN_BITWISE_OR_OP:
+      function.identifier = to_substring("operator |");
+      break;
+    case TOKEN_BITWISE_NOT_OP:
+      function.identifier = to_substring("operator ~");
+      break;
+    case TOKEN_LOGICAL_NOT_OP:
+      function.identifier = to_substring("operator !");
+      break;
+    case TOKEN_BITWISE_XOR_OP:
+      function.identifier = to_substring("operator ^");
+      break;
+    case TOKEN_REM_OP:
+      function.identifier = to_substring("operator %");
+      break;
+    default:
+      halt();
+    }
+    function.op = op;
+  } else {
+    halt();
+  }
+
   function_fill_params(function_params, function.param_types, function.num_params);
   function.retval_type = emit_type_declaration(function_retval);
   function.token = function_definition;
@@ -2797,11 +3186,21 @@ DeclarationResult db_add_variable_definition(Token *variable_statement, Variable
   VariableDef var;
 
   Token *variable_type, *variable_identifier, *variable_value;
-  expand_tokens(
-    variable_statement,
-    variable_type,
-    variable_identifier,
-    variable_value);
+
+  if (count_subtokens(variable_statement) == 2) {
+    expand_tokens(
+      variable_statement,
+      variable_type,
+      variable_identifier);
+
+    variable_value = NULL;
+  } else {
+    expand_tokens(
+      variable_statement,
+      variable_type,
+      variable_identifier,
+      variable_value);
+  }
 
   if (variable_exists(variable_identifier->substring)) {
     return make_db_error("Duplication variable: %s", to_cstring(variable_identifier->substring));
@@ -2822,7 +3221,7 @@ DeclarationResult db_add_variable_definition(Token *variable_statement, Variable
 }
 
 bool is_success(const DeclarationResult &result) {
-  return result.type == DB_SUCCESS;
+  return result.type == RESULT_SUCCESS;
 }
 
 //void db_type_add(SubString &identifier, TypeKind kind, void *type) {
@@ -2959,12 +3358,14 @@ DeclarationResult db_add_global_declarations(Token *program) {
 //}
 
 bool is_success(const TypecheckResult &result) {
-  return result.result != TYPECHECK_ERROR;
+  return result.result != RESULT_ERROR;
 }
 
-TypecheckResult make_error(const char *, ...) {
+TypecheckResult make_error(const FileLocation &location, const char *format_str, ...) {
   TypecheckResult  result;
-  result.result = TYPECHECK_ERROR;
+  result.result = RESULT_ERROR;
+  result.error.location = location;
+  result.error.error_string = format_str;
   return result;
 }
 
@@ -2976,9 +3377,34 @@ TypecheckResult make_error(const char *, ...) {
 //  return to_string(result->type
 //}
 
+llvm::Type *llvm_emit_type(TypeDef *type);
+llvm::Type *llvm_get_type(TypeDef *type) {
+  if (type->llvm_type == NULL) {
+    return llvm_emit_type(type);
+  }
+
+  return type->llvm_type;
+}
+
+bool is_integer(TypeDef *type) {
+  if (type->kind == ARBITRARY_INTEGER) return true;
+  if (type->kind != LLVM_TYPE) return false;
+  llvm::Type *llvm_type = llvm_get_type(type);
+  return llvm_type->isIntegerTy();
+  // check against llvm type for integerness
+}
+
 TypecheckResult make_result(const TypecheckResult &result_lhs, const TypecheckResult &result_rhs) {
+  if (result_lhs.type->kind == ARBITRARY_INTEGER) {
+    if (is_integer(result_rhs.type)) return TYPECHECK_SUCCESS;
+    return make_error(result_lhs.loaction, "Type mismatch)");
+  } else if (result_rhs.type->kind == ARBITRARY_INTEGER) {
+    if (is_integer(result_rhs.type)) return TYPECHECK_SUCCESS;
+    return make_error(result_lhs.loaction, "Type mismatch)");
+  }
+
   if (result_lhs.type != result_rhs.type) {
-    return make_error("Type mismatch"); //: %s, %s", to_string(result_lhs), to_string(result_rhs));
+    return make_error(result_lhs.loaction, "Type mismatch"); //: %s, %s", to_string(result_lhs), to_string(result_rhs));
   }
   return TYPECHECK_SUCCESS;
 }
@@ -2997,10 +3423,11 @@ TypecheckResult make_result(const TypecheckResult &result_lhs, const TypecheckRe
 //  return result;
 //}
 
-TypecheckResult make_result(TypeDef *type) {
+TypecheckResult make_result(const FileLocation &location, TypeDef *type) {
   TypecheckResult  result;
-  result.result = TYPECHECK_TYPE;
+  result.result = RESULT_SUCCESS;
   result.type = type;
+  result.loaction = location;
   return result;
 }
 
@@ -3008,14 +3435,20 @@ TypeDef *function_get_retval_type(FunctionDef *function) {
   return function->retval_type;
 }
 
-TypecheckResult make_result(FunctionDef *function) {
+TypecheckResult make_result(const FileLocation &location, FunctionDef *function) {
   if (function == NULL) {
-    return make_error("No function for operator %s with types %s %s");
+    return make_error(location, "No function for operator %s with types %s %s");
   } else {
     TypeDef *retval_type = function_get_retval_type(function);
-    return make_result(retval_type);
+    return make_result(location, retval_type);
   }
 }
+
+struct LLVMTypeResult {
+  ResultType result;
+  llvm::Type *type;
+  Error error;
+};
 
 llvm::Type *llvm_get_type(TypeDef *type);
 
@@ -3028,10 +3461,10 @@ bool is_boolean(TypeDef *type) {
 }
 //
 //
-bool is_integer(TypeDef *type) {
+bool is_void(TypeDef *type) {
   if (type->kind != LLVM_TYPE) return false;
   llvm::Type *llvm_type = llvm_get_type(type);
-  return llvm_type->isIntegerTy();
+  return llvm_type->isVoidTy();
   // check against llvm type for integerness
 }
 
@@ -3148,21 +3581,21 @@ TypeDef *emit_type_declaration(Token *declaration) {
 
 TypecheckResult typecheck_operator_call(TokenType op, const TypecheckResult &lhs, const TypecheckResult &rhs) {
   FunctionDef *function = db_binary_operator_lookup(op, lhs.type, rhs.type);
-  return make_result(function);
+  return make_result(lhs.loaction, function);
 }
 
 TypecheckResult typecheck_operator_call(TokenType op, const TypecheckResult &lhs) {
   FunctionDef *function = db_unary_operator_lookup(op, lhs.type);
-  return make_result(function);
+  return make_result(lhs.loaction, function);
 }
 
 TypecheckResult typecheck_type_declaration(Token *declaration) {
   // really just gets the type
   TypeDef *type = emit_type_declaration(declaration);
   if (type == NULL) {
-    return make_error("Invalid type declaration");
+    return make_error(declaration->location, "Invalid type declaration");
   }
-  return make_result(type);
+  return make_result(declaration->location, type);
 }
 
 TypecheckResult typecheck_binary_expression(Token *expression) {
@@ -3204,7 +3637,7 @@ TypecheckResult typecheck_member_derefernce_expression(Token *expression){
 
   Token *field_identifier = subtokens[1];
   TypeDef *field_type = type_get_field_type(result_lhs.type, field_identifier->substring);
-  return make_result(field_type);
+  return make_result(expression->location, field_type);
 }
 
 TypecheckResult typecheck_variable_definition(Token *statement);
@@ -3214,7 +3647,7 @@ TypecheckResult typecheck_function_call_expression(Token *expression){
   int num_subtokens = expand_tokens(expression, subtokens, 2);
 
   if (num_subtokens == 1) {
-
+    halt();
   }
 
 
@@ -3228,10 +3661,10 @@ TypecheckResult typecheck_function_call_expression(Token *expression){
 
   FunctionDef *function = db_function_call_lookup(function_identifier->substring, function_call_params);
   if (function == NULL) {
-    return make_error("Unknown function");
+    return make_error(expression->location, "Unknown function");
   }
 
-  return make_result(function_get_retval_type(function));
+  return make_result(expression->location, function_get_retval_type(function));
 }
 
 bool is_array(TypeDef *type) {
@@ -3253,19 +3686,17 @@ TypecheckResult typecheck_array_dereference_expression(Token *expression){
   TypecheckResult result_base = typecheck_expression(subtokens[0]);
   if (is_success(result_base) == false) return result_base;
   if (is_array(result_base.type) == false) {
-    return make_error("Expected array");
+    return make_error(expression->location, "Expected array");
   }
 
   TypecheckResult result_index = typecheck_expression(subtokens[1]);
   if (is_success(result_index) == false) return result_index;
   if (is_compile_time_integer(result_index.type) == false) {
-    return make_error("Expected compile time integer");
+    return make_error(expression->location, "Expected compile time integer");
   }
 
-  return make_result(result_base.type->array.base_type);
+  return make_result(expression->location, result_base.type->array.base_type);
 }
-
-
 
 TypeDef *db_lookup_integer_type(int numBits) {
   for(auto &type : g.db.types) {
@@ -3275,15 +3706,80 @@ TypeDef *db_lookup_integer_type(int numBits) {
   }
 
   return NULL;
+}
+
+TypeDef *db_lookup_arbitrary_integer() {
+  for(auto &type : g.db.types) {
+    if (type.kind == ARBITRARY_INTEGER) {
+      return &type;
+    }
+  }
+
+  return NULL;
+}
+
+TypeDef *integer_type_lookup(const char *str) {
+  for(auto &type : g.db.types) {
+    if (type.kind == LLVM_TYPE && substring_cmp(type.token->start->substring, str)) {
+      return &type;
+    }
+  }
+
+  return NULL;
 };
 
-TypecheckResult typecheck_integer_literal(Token *literal){
+TypeDef *calc_integer_literal_type(Token *literal) {
+  return integer_type_lookup("i32");
+  //uint64_t retval = substring_to_uint64(literal->substring);
+  //if (retval < 1 << 7) {
+  //  TypeDef *type = integer_type_lookup("i8");
+  //  if (type) return type;
+  //}
+
+  //if (retval < 1 << 15) {
+  //  TypeDef *type = integer_type_lookup("i16");
+  //  if (type) return type;
+  //}
+
+  //if (retval < 1 << 15) {
+  //  TypeDef *type = integer_type_lookup("i32");
+  //  if (type) return type;
+  //}
+
+  //TypeDef *type = integer_type_lookup("i64");
+  //if (type) return type;
+
+  //return db_lookup_arbitrary_integer();
+}
+
+TypecheckResult typecheck_integer_literal(Token *literal) {
   //llvm::Type *integer_type = llvm::IntegerType(g.llvm.context, 32);
-  TypeDef *type = db_lookup_integer_type(32);
+  //TypeDef *type = db_lookup_integer_type(32);
+  //TypeDef *type = db_lookup_arbitrary_integer();
   //Type *type = new Type();
   //type->kind = BASE_TYPE;
   //type->llvm_type = integer_type;
-  return make_result(type); //make_result(integer_type);
+  TypeDef *type = calc_integer_literal_type(literal);
+  return make_result(literal->location, type); //make_result(integer_type);
+}
+
+VariableDef *db_lookup_variable(SubString &identifier) {
+  for(auto &varaible : g.db.variables) {
+    if (substring_cmp(varaible.identifier, identifier)) {
+      return &varaible;
+    }
+  }
+
+  return NULL;
+}
+
+TypecheckResult typecheck_identifier(Token *expression) {
+  VariableDef *variable = db_lookup_variable(expression->substring);
+  if (variable == NULL) {
+    return make_error(expression->location, "Undefined variable %s", to_cstring(expression->substring).c_str());
+  }
+
+  return make_result(expression->location, variable->type);
 }
 
 TypecheckResult typecheck_expression(Token *expression) {
@@ -3304,16 +3800,34 @@ TypecheckResult typecheck_expression(Token *expression) {
     return typecheck_array_dereference_expression(expression);
   case TOKEN_INTEGER_LITERAL:
     return typecheck_integer_literal(expression);
+  case TOKEN_IDENTIFIER:
+    return typecheck_identifier(expression);
   default:
     halt();
   }
 
-  return make_error("...");
+  return make_error(expression->location, "Unknown expression");
 }
 
 TypecheckResult typecheck_variable_definition(Token *statement) {
   Token *subtokens[3];
   int num_subtokens = expand_tokens(statement, subtokens, 3);
+
+  if (g.db.scope != 0) {
+    VariableDef *unused;
+    DeclarationResult result = db_add_variable_definition(statement, unused);
+    if (is_success(result) == false) {
+      TypecheckResult retval;
+      retval.error = result.error;
+      retval.result = result.type;
+      retval.loaction = statement->location;
+      return retval;
+    }
+  }
+
+  if (num_subtokens == 2) {
+    return TYPECHECK_SUCCESS;
+  }
 
   TypecheckResult result_lhs = typecheck_type_declaration(subtokens[0]);
   TypecheckResult result_rhs = typecheck_expression(subtokens[2]);
@@ -3345,7 +3859,7 @@ TypecheckResult typecheck_boolean_expression(Token *expression) {
   TypecheckResult result = typecheck_expression(expression);
   if (is_success(result) == false) return result;
   if (is_boolean(result.type) == false) {
-    return make_error("Expected boolean.");
+    return make_error(expression->location, "Expected boolean.");
   }
 
   return result;
@@ -3384,16 +3898,20 @@ TypecheckResult typecheck_return_statement(Token *statement, const TypecheckResu
 }
 
 TypecheckResult typecheck_expression_statement(Token *statement) {
-  return typecheck_expression(statement);
+  return typecheck_expression(statement->start);
 }
 
 TypecheckResult typecheck_assignment_statement(Token *statement) {
-  Token *subtokens[4];
-  int num_subtokens = expand_tokens(statement, subtokens, 4);
+  Token *subtokens[3];
+  int num_subtokens = expand_tokens(statement, subtokens, 3);
 
-  TypecheckResult result_lhs = typecheck_type_declaration(subtokens[0]);
-  Token *assigment_operator = subtokens[2];
-  TypecheckResult result_rhs = typecheck_expression(subtokens[3]);
+  TypecheckResult result_lhs = typecheck_expression(subtokens[0]);
+  Token *assigment_operator = subtokens[1];
+  TypecheckResult result_rhs = typecheck_expression(subtokens[2]);
+
+  if (assigment_operator->type == TOKEN_ASSIGNMENT_OP) {
+    return make_result(result_lhs, result_rhs);
+  }
   
   return typecheck_operator_call(assigment_operator->type, result_lhs, result_rhs);
   //return make_result(result_lhs, assigment_operator, result_rhs);
@@ -3413,20 +3931,59 @@ TypecheckResult typecheck_function_statement(Token *statement, const TypecheckRe
       return typecheck_expression_statement(statement);
     case TOKEN_ASSIGMENT_STATEMENT:
       return typecheck_assignment_statement(statement);
+    case TOKEN_VARIABLE_DEFINITION:
+      return typecheck_variable_definition(statement);
+    case TOKEN_INLINE_LLVM:
+      return TYPECHECK_SUCCESS;
     default:
       halt();
   }
 
-  return make_error("...");
+  return make_error(statement->location, "Unknown statement.");
 }
 
-TypecheckResult typecheck_function_body(Token *body, const TypecheckResult &result_retval) {
-  Token *subtokens[1];
-  int num_subtokens = expand_tokens(body, subtokens, 1);
+TypecheckResult typecheck_function_body(Token *function_params, Token *function_body, const TypecheckResult &result_retval) {
+  assert(function_params->type == TOKEN_FUNCTION_PARAMS);
+  assert(function_body->type == TOKEN_FUNCTION_BODY);
+  //Token *subtokens[1];
+  //int num_subtokens = expand_tokens(body, subtokens, 1);
 
-  for(Token *statement = subtokens[0]; statement != NULL; statement = statement->next) {
+  db_push_scope();
+
+  // add params
+  for(Token *param = function_params->start; param!= NULL; param = param->next) {
+    Token *subtokens[2];
+    int num_subtokens = expand_tokens(param, subtokens, 2);
+    Token *param_type = subtokens[0];
+    Token *param_identifier = subtokens[1];
+
+    TypeDef *type = emit_type_declaration(param_type);
+
+    VariableDef var;
+    var.identifier = param_identifier->substring;
+    var.llvm_value = NULL;
+    var.type = type;
+    var.initializer_value = NULL;
+    var.token = param;
+    var.scope = g.db.scope;
+    g.db.variables.push_back(var);
+  }
+
+  bool return_statement_verified = false;
+  for(Token *statement = function_body->start; statement != NULL; statement = statement->next) {
     TypecheckResult result = typecheck_function_statement(statement, result_retval);
     if (is_success(result) == false) return result;
+
+    if (statement->type == TOKEN_RETURN_STATEMENT) {
+      // todo handle multiple returns, "all paths much return"
+      return_statement_verified = true; 
+    }
+  }
+
+  db_pop_scope();
+
+  if (return_statement_verified == false && !is_void(result_retval.type)) {
+      return make_error(function_body->location, "Missing return statement");
   }
 
   return result_retval;
@@ -3444,7 +4001,7 @@ TypecheckResult typecheck_function_definition(Token *statement) {
   if (is_success(result_params) == false) return result_params;
 
   TypecheckResult result_retval = typecheck_type_declaration(function_return_value);
-  TypecheckResult result_body = typecheck_function_body(function_body, result_retval);
+  TypecheckResult result_body = typecheck_function_body(function_param_list, function_body, result_retval);
 
   //db_add_function(statement);
   return result_body;
@@ -3457,17 +4014,25 @@ TypecheckResult typecheck_program(Token *program) {
     case TOKEN_TYPEDEF_DEFINITION:
     case TOKEN_LLVM_TYPE_DEFINITION:
       break;
-    case TOKEN_VARIABLE_DEFINITION:
-      typecheck_variable_definition(program_statement);
-      break;
-    case TOKEN_STRUCT_DEFINITION:
-      typecheck_struct_definition(program_statement);
-      break;
+    case TOKEN_VARIABLE_DEFINITION: {
+      TypecheckResult result = typecheck_variable_definition(program_statement);
+      if (is_success(result) == false) {
+        return result;
+      }
+    }  break;
+    case TOKEN_STRUCT_DEFINITION: {
+      TypecheckResult result = typecheck_struct_definition(program_statement);
+      if (is_success(result) == false) return result;
+    } break;
     //case TOKEN_ENUM_DEFINITION:
     //  typecheck_enum_definition(program_statement);
     //  break;
-    case TOKEN_FUNCTION_DEFINITION:
-      typecheck_function_definition(program_statement);
+    case TOKEN_FUNCTION_DEFINITION: {
+      TypecheckResult result = typecheck_function_definition(program_statement);
+      if (is_success(result) == false) return result;
+    } break;
+
+    case TOKEN_IMPORT_STATEMENT:
       break;
     default:
       halt();
@@ -3542,14 +4107,37 @@ SubString substring_trim(const SubString &substring) {
   return retval;
 }
 
-llvm::Type *llvm_emit_llvm_type(Token *type_definition) {
+LLVMTypeResult make_success(llvm::Type *type) {
+  LLVMTypeResult retval;
+  retval.result = RESULT_SUCCESS;
+  retval.type = type;
+  return retval;
+}
+
+LLVMTypeResult make_llvmtype_error(const FileLocation &location, const char *fmt, ...){
+  LLVMTypeResult retval;
+  retval.result = RESULT_ERROR;
+  retval.error.location = location;
+  FORMAT_ERROR_STRING(retval.error.error_string, fmt);
+  return retval;
+}
+
+bool is_numeric(const SubString &digits) {
+  for(int i = 0; i < digits.length; ++i) {
+    if (isDigit(digits.start[i]) == false) return false;
+  }
+
+  return true;
+}
+
+LLVMTypeResult llvm_emit_llvm_type(Token *type_definition) {
   assert(type_definition->type == TOKEN_LLVM_TYPE_DEFINITION);
   // todo vector types...
-  assert(type_definition->substring.length > 0);
-  assert(type_definition->substring.start != NULL);
 
   Token *raw_llvm = type_definition->end;
   assert(raw_llvm->type == TOKEN_RAW_LLVM_TYPE);
+  //assert(type_definition->substring.length > 0);
+  //assert(type_definition->substring.start != NULL);
 
   SubString trimmed_content = substring_trim(raw_llvm->substring);
 
@@ -3563,27 +4151,31 @@ llvm::Type *llvm_emit_llvm_type(Token *type_definition) {
     digits.start++;
     digits.length--;
 
+    if (is_numeric(digits) == false) {
+      return make_llvmtype_error(type_definition->location, ("Invalid integer size '" + to_cstring(digits) + "'").c_str()); 
+    }
+
     uint32_t size = (uint32_t)substring_to_uint64(digits);
-    return llvm::IntegerType::get(*g.llvm.context, size);
-            }
+    return make_success(llvm::IntegerType::get(*g.llvm.context, size));
+  }
   default:
     if (substring_cmp(trimmed_content, "void")) {
-      return llvm::Type::getVoidTy(*g.llvm.context);
+      return make_success(llvm::Type::getVoidTy(*g.llvm.context));
     } else if (substring_cmp(trimmed_content, "half")) {
-      return llvm::Type::getHalfTy(*g.llvm.context);
+      return make_success(llvm::Type::getHalfTy(*g.llvm.context));
     } else if (substring_cmp(trimmed_content, "float")) {
-      return llvm::Type::getFloatTy(*g.llvm.context);
+      return make_success(llvm::Type::getFloatTy(*g.llvm.context));
     } else if (substring_cmp(trimmed_content, "double")) {
-      return llvm::Type::getDoubleTy(*g.llvm.context);
+      return make_success(llvm::Type::getDoubleTy(*g.llvm.context));
     } else if (substring_cmp(trimmed_content, "fp128")) {
-      return llvm::Type::getFP128Ty(*g.llvm.context);
+      return make_success(llvm::Type::getFP128Ty(*g.llvm.context));
     } else {
-      halt();
+      return make_llvmtype_error(type_definition->location, "Unknown llvm type '%s'", to_cstring(trimmed_content).c_str());
     }
     break;
   }
 
-  return NULL;
+  //return make_llvmtype_error(type_definition->location, "Uknown");
 }
 
 //llvm::Type *llvm_get_type(Type *type);
@@ -3615,7 +4207,7 @@ static llvm::ArrayRef<llvm::Type *> to_array_ref(llvm::Type **types, int num_typ
 const int IS_PACKED = true;
 
 
-llvm::Type *llvm_emit_struct_type(Token *type_definition) {
+LLVMTypeResult llvm_emit_struct_type(Token *type_definition) {
   assert(type_definition->type == TOKEN_STRUCT_DEFINITION);
   Token *subtokens[2];
   int num_subtokens = expand_tokens(type_definition, subtokens, 2);
@@ -3637,30 +4229,43 @@ llvm::Type *llvm_emit_struct_type(Token *type_definition) {
   type->setBody(ref_fields, IS_PACKED); 
 
   //llvm::Type *type = llvm::StructType::get(*llvm.context, ref_fields, IS_PACKED);
-  return type;
+  return make_success(type);
 }
 
+bool is_success(const LLVMTypeResult &result) {
+  return (result.result != RESULT_ERROR);
+}
 
-
-llvm::Type *llvm_emit_base_type(TypeDef *type) {
+LLVMTypeResult llvm_emit_base_type(TypeDef *type) {
   assert(type->llvm_type == NULL);
   //assert(type->kind == BASE_TYPE);
 
+  LLVMTypeResult result;
   switch(type->kind) {
+  case ARBITRARY_INTEGER:
+  //case ARBITRARY_FLOAT:
+    result = make_success((llvm::Type *)NULL);
+    break;
   case LLVM_TYPE:
-    return llvm_emit_llvm_type(type->token);
+    result = llvm_emit_llvm_type(type->token);
+    break;
   //case TOKEN_TYPEDEF_DEFINITION:
   //  return llvm_emit_typedef_type(type->base.type_definition);
   case STRUCT_TYPE:
-    return llvm_emit_struct_type(type->token);
+    result = llvm_emit_struct_type(type->token);
+    break;
   //case TOKEN_ENUM_DEFINITION:
   //  return llvm_emit_enum_type(type->base.type_definition);
     break;
   default:
     halt();
+    result = make_llvmtype_error(type->token->location, "Unknown llvm type error.");
   }
 
-  return NULL;
+  if (is_success(result)) {
+    type->llvm_type = result.type;
+  }
+  return result;
 }
 
 llvm::Type *llvm_emit_pointer_type(TypeDef *pointer_type) {
@@ -3670,7 +4275,7 @@ llvm::Type *llvm_emit_pointer_type(TypeDef *pointer_type) {
   assert(pointer_type->kind == POINTER_TYPE);
   //Token *base_type_declaration = ;
   //Type *base_type = emit_type_declaration(base_type_declaration);
-  llvm::Type *base_llvm_type = llvm_get_type(pointer_type->pointer.base_type);
+  llvm::Type *base_llvm_type = llvm_emit_type(pointer_type->pointer.base_type);
   return llvm::PointerType::get(base_llvm_type, 0);
 }
 
@@ -3681,7 +4286,7 @@ llvm::Type *llvm_emit_array_type(TypeDef *array_type) {
   //const GGToken &array_size = type_token.subtokens[1];
   assert(array_type->kind == ARRAY_TYPE);
 
-  llvm::Type *base_type = llvm_get_type(array_type->array.base_type);
+  llvm::Type *base_type = llvm_emit_type(array_type->array.base_type);
   //uint64_t num_elements = eval_constexpr(array_size);
   return llvm::ArrayType::get(base_type, array_type->array.count);
 }
@@ -3702,7 +4307,7 @@ int get_function_type_param_llvm_types(Token *param_list, llvm::Type **types, in
   int num_params = 0;
   for(Token *param = param_list->start; param != NULL; param = param->next) {
     TypeDef *type_def = emit_type_declaration(param->start);
-    types[num_params++] = llvm_get_type(type_def);
+    types[num_params++] = llvm_emit_type(type_def);
   }
   return num_params;
 }
@@ -3710,7 +4315,7 @@ int get_function_type_param_llvm_types(Token *param_list, llvm::Type **types, in
 int get_function_param_llvm_types(FunctionDef *function, llvm::Type **types, int max_params) {
   //int num_params = 0;
   //for(Token *token = param_list->start; token != NULL; token = token->next) {
-  assert(max_params < function->num_params);
+  assert(max_params >= function->num_params);
   for(int i = 0; i < function->num_params; ++i) {
     types[i] = llvm_get_type(function->param_types[i]);
   }
@@ -3729,50 +4334,59 @@ llvm::Type *llvm_emit_function_type(TypeDef *function_type) {
   //const GGToken &param_type_tokens = type_token.subtokens[1];
   assert(function_type->kind == FUNCTION_TYPE);
 
-  llvm::Type *retval_type = llvm_get_type(function_type->function.retval_type);
+  llvm::Type *retval_type = llvm_emit_type(function_type->function.retval_type);
 
   llvm::Type *param_types[MAX_PARAMS];
   int num_params = get_function_type_param_llvm_types(function_type->function.param_list, param_types, MAX_PARAMS);
   llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, num_params);
+
   return llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
 }
 
+//LLVMTypeResult llvm_emit_base_type(TypeDef *type) {
+//  //assert(type->llvm_type == NULL);
+//  if (type->llvm_type != NULL) {
+//    return make_success(type->llvm_type);
+//  }
+//
+//  return llvm_emit_base_type(type);
+//}
 
 llvm::Type *llvm_emit_type(TypeDef *type) {
-  assert(type->llvm_type == NULL);
+  //assert(type->llvm_type == NULL);
+  if (type->llvm_type != NULL) {
+    return type->llvm_type;
+  }
 
-  llvm::Type *llvm_type;
+  llvm::Type *result;
   switch(type->kind) {
   case STRUCT_TYPE:
   case LLVM_TYPE:
-    llvm_type = llvm_emit_base_type(type);
-    break;
+    //result = llvm_emit_base_type(type);
+    halt();
+    //assert(type->llvm_type != NULL);
+    return type->llvm_type;
   case POINTER_TYPE:
-    llvm_type = llvm_emit_pointer_type(type);
+    result = llvm_emit_pointer_type(type);
     break;
   case ARRAY_TYPE:
-    llvm_type = llvm_emit_array_type(type);
+    result = llvm_emit_array_type(type);
     break;
   case FUNCTION_TYPE:
-    llvm_type = llvm_emit_function_type(type);
+    result = llvm_emit_function_type(type);
     break;
   default:
     halt();
   }
   //Token *type_definition = type->type_definition;
   //llvm::Type *llvm_type = llvm_emit_type_defintiion(type_definition);
-  type->llvm_type = llvm_type;
-  return llvm_type;
+  //if (is_success(result)) {
+  type->llvm_type = result;
+  //}
+
+  return result;
 }
 //
-llvm::Type *llvm_get_type(TypeDef *type) {
-  if (type->llvm_type == NULL) {
-    return llvm_emit_type(type);
-  } else {
-    return type->llvm_type;
-  }
-}
-
 //llvm::Type *llvm_get_type(Token *type_declaration) {
 //
 //  if (type->llvm_type == NULL) {
@@ -4045,20 +4659,12 @@ llvm::Value *emit_lvalue_member_identifier(Token *token) {
   return fieldPointer;
 }
 
-VariableDef *db_lookup_variable(SubString &identifier) {
-  for(auto &varaible : g.db.variables) {
-    if (substring_cmp(varaible.identifier, identifier) == 0) {
-      return &varaible;
-    }
-  }
-
-  return NULL;
-}
-
 llvm::Value *emit_lvalue_identifier(Token *token) {
   assert(token->start == NULL);
   //assert(token.num_subtokens == 0);
-  return db_lookup_variable(token->substring)->llvm_value;
+  llvm::Value *retval = db_lookup_variable(token->substring)->llvm_value;
+  assert(retval);
+  return retval;
 }
 
 llvm::Value *emit_lvalue_expression(Token *expression) {
@@ -4157,6 +4763,9 @@ llvm::Value *emit_rvalue_unary_op(Token *token) {
   return NULL;
 }
 
+void emit_function_declaration(FunctionDef *function);
+
+
 llvm::Value *emit_rvalue_binary_op(Token *token) {
   Token *subtokens[3];
   expand_tokens(token, subtokens, 3);
@@ -4220,6 +4829,11 @@ llvm::Value *emit_rvalue_binary_op(Token *token) {
   llvm_param_expressions[0] = lhs;
   llvm_param_expressions[1] = rhs;
   llvm::ArrayRef<llvm::Value *> ref_params = to_array_ref(llvm_param_expressions, 2);
+
+  if (callee->llvm_function == NULL) {
+    emit_function_declaration(callee);
+  }
+
   llvm::Value *result = g.llvm.builder->CreateCall(callee->llvm_function, ref_params);
   return result;
 }
@@ -4308,15 +4922,24 @@ llvm::Value *emit_rvalue_function_call(Token *function_call) {
   return retval;
 }
 
+int sizeof_type(TypeDef *type) {
+  assert(type->llvm_type);
+  return type->llvm_type->getPrimitiveSizeInBits();
+}
+
 llvm::Value *emit_rvalue_integer_literal(Token *integer_literal) {
   //assert(integer_literal.token == TOKEN_LITERAL_INTEGER);
-  int num_bits = 32; //get_integer_type_num_bits(integer_literal);
+  //int num_bits = 32; //get_integer_type_num_bits(integer_literal);
 
-  llvm::IntegerType *type = llvm::IntegerType::get(*g.llvm.context, num_bits);
+  TypeDef *type = calc_integer_literal_type(integer_literal);
+  int num_bits = sizeof_type(type);
+  llvm::IntegerType *llvm_type = llvm::IntegerType::get(*g.llvm.context, num_bits);
+  assert(type->llvm_type == (llvm::Type *)llvm_type);
+
   llvm::StringRef str = to_string_ref(integer_literal->substring);
 
   const int RADIX = 10;
-  llvm::Value *retval = llvm::ConstantInt::get(type, str, RADIX);
+  llvm::Value *retval = llvm::ConstantInt::get(llvm_type, str, RADIX);
   return retval;
 }
 
@@ -4448,6 +5071,7 @@ EmitResult emit_variable_initalization(FunctionDef *function, VariableDef *varia
   }
 
   CreateStore(value_initaizlier, value_variable);
+  variable->llvm_value = value_variable;
   return EMIT_SUCCESS; //make_success(value_variable);
 }
 
@@ -4494,6 +5118,53 @@ EmitResult emit_local_variable_definition(FunctionDef *function, Token *program_
 //
 //  return db_add_variable(identifier->substring, value);
 //}
+
+
+
+uint64_t eval_constexpr(Token *initalizer_value) {
+  switch(initalizer_value->type) {
+  case TOKEN_INTEGER_LITERAL:
+    return substring_to_uint64(initalizer_value->substring);
+  default:
+    halt();
+  }
+
+  return 0;
+}
+
+EmitResult emit_global_constant_initialization(Token *program_statement) {
+  assert(program_statement->type == TOKEN_VARIABLE_DEFINITION);
+  Token *subtokens[3];
+  int num_subtokens = expand_tokens(program_statement, subtokens, 3);
+  Token *type_decl = subtokens[0];
+  Token *identifier = subtokens[1];
+  Token *initalizer_value = subtokens[2];
+
+  VariableDef *variable = db_lookup_variable(identifier->substring);
+  //FunctionDef *function = db_lookup_premain_initizliation_function();
+  //return emit_variable_initalization(function, variable);
+
+  TypeDef *type = emit_type_declaration(type_decl);
+  llvm::Type *llvm_type = llvm_emit_type(type);
+
+  llvm::Constant *constant;
+  if (num_subtokens == 3)
+  {
+    uint64_t val64 = 0;
+    val64 = eval_constexpr(initalizer_value);
+    constant = llvm::ConstantInt::get(llvm_type, val64);
+  }
+  else 
+  {
+    constant = llvm::Constant::getNullValue(llvm_type);
+  }
+
+  llvm::StringRef name = to_string_ref(identifier->substring);
+  llvm::Value *value = new llvm::GlobalVariable(*g.llvm.module, type->llvm_type, false, llvm::GlobalVariable::ExternalLinkage, constant, name);
+  variable->llvm_value = value;
+
+  return EMIT_SUCCESS;
+}
 
 EmitResult emit_global_variable_initialization(Token *program_statement) {
   //assert(program_statement->type == TOKEN_VARIABLE_DEFINITION);
@@ -4610,7 +5281,8 @@ std::string to_llvm_type_str(llvm::Type *type)
 {
   std::string data;
   llvm::raw_string_ostream stream(data);
-  type->getContainedType(0)->print(stream);
+  //type->getContainedType(0)->print(stream);
+  type->print(stream);
   return stream.str();
 }
 
@@ -4621,27 +5293,6 @@ std::string to_llvm_type_str(llvm::Type *type)
 //  lines2.insert(&lines2[i], 
 //
 //}
-
-static std::string format_string(const std::string fmt, ...) {
-  int size = ((int)fmt.size()) * 2 + 50;   // use a rubric appropriate for your code
-  std::string str;
-  va_list ap;
-  while (1) {     // maximum 2 passes on a POSIX system...
-    str.resize(size);
-    va_start(ap, fmt);
-    int n = vsnprintf((char *)str.data(), size, fmt.c_str(), ap);
-    va_end(ap);
-    if (n > -1 && n < size) {  // everything worked
-      str.resize(n);
-      return str;
-    }
-    if (n > -1)  // needed size returned
-      size = n + 1;   // for null char
-    else
-      size *= 2;      // guess at a larger size (o/s specific)
-  }
-  return str;
-}
 
 typedef std::vector<std::string> Lines;
 
@@ -4717,10 +5368,12 @@ int lines_replace_tokens(Lines &lines) {
     LLVMReplacement replacement = matches_replacement(line, token_str, token_substr, old_lhs, old_rhs);
     switch(replacement) {
     case LLVM_REPLACEMENT_ASSIGNMENT: {
-      llvm::Type *type = db_lookup_variable(token_substr)->llvm_value->getType();
+      VariableDef *variable = db_lookup_variable(token_substr);
+      TypeDef *ggtype = variable->type;
+      llvm::Type *type = ggtype->llvm_type;
       std::string type_str = to_llvm_type_str(type);
-      std::string new_line = format_string("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
-      std::string new_store = format_string("store %s %%%s%d, %s* %%%s", type_str.c_str(), token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
+      std::string new_line = string_format("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+      std::string new_store = string_format("store %s %%%s%d, %s* %%%s", type_str.c_str(), token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
 
       lines.erase(lines.begin() + i); //lines.remove(i); //line);
       lines.insert(lines.begin() + i, new_line);
@@ -4729,11 +5382,13 @@ int lines_replace_tokens(Lines &lines) {
                                       } break;
     case LLVM_REPLACEMENT_FIRST_EXPRESSION: 
     case LLVM_REPLACEMENT_EXPRESSION: {
-      llvm::Type *type = db_lookup_variable(token_substr)->llvm_value->getType();
+      VariableDef *variable = db_lookup_variable(token_substr);
+      TypeDef *ggtype = variable->type;
+      llvm::Type *type = ggtype->llvm_type;
       std::string type_str = to_llvm_type_str(type);
-      std::string new_load  = format_string("%%%s%d = load %s* %%%s", token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
-      std::string new_line        = format_string("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
-      std::string new_line_no_type= format_string("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+      std::string new_load  = string_format("%%%s%d = load %s* %%%s", token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
+      std::string new_line        = string_format("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+      std::string new_line_no_type= string_format("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
       if (replacement == LLVM_REPLACEMENT_EXPRESSION) new_line = new_line_no_type;
 
       lines.erase(lines.begin() + i); //lines.remove(line);
@@ -4938,7 +5593,15 @@ EmitResult emit_function_definition(Token *function_definition) {
   Token *function_params      = subtokens[2];
   Token *function_body        = subtokens[3];
 
-  FunctionDef *function = db_function_definition_lookup(function_identifier->substring, function_params); 
+
+  FunctionDef *function;
+  if (function_identifier->type == TOKEN_IDENTIFIER) {
+    function = db_function_definition_lookup(function_identifier->substring, function_params); 
+  } else if (function_identifier->type == TOKEN_OPERATOR_IDENTIFIER) {
+    function = db_operator_definition_lookup(function_identifier->start->type, function_params); 
+  } else {
+    halt();
+  }
   //llvm::Function *function;
 
 
@@ -5033,6 +5696,10 @@ EmitResult emit_function_definition(Token *function_definition) {
   }
   db_pop_scope();
 
+  if (is_void(function->retval_type)) {
+    g.llvm.builder->CreateRetVoid();
+  }
+
   //verifyFunction(*function);
 
   //llvm::Function *function = lookup_function(function_definition);
@@ -5116,8 +5783,11 @@ EmitResult emit_program_statement(Token *program_statement) {
     case TOKEN_TYPEDEF_DEFINITION:
       //emit_typedef_definition(program_statement);
       break;
+    //case TOKEN_VARIABLE_DEFINITION:
+    //  emit_global_variable_initialization(program_statement);
+    //  break;
     case TOKEN_VARIABLE_DEFINITION:
-      emit_global_variable_initialization(program_statement);
+      emit_global_constant_initialization(program_statement);
       break;
     case TOKEN_FUNCTION_DEFINITION:
       emit_function_definition(program_statement);
@@ -5139,7 +5809,7 @@ bool is_success(const EmitResult &result) {
 }
 
 EmitResult emit_program(Token *program, const char *dest_file) {
-  LLVMInit(dest_file);
+  //LLVMInit(dest_file);
 
   for(Token *program_statement = program->start; program_statement != NULL; program_statement = program_statement->next) {
     EmitResult result = emit_program_statement(program_statement);
@@ -5162,21 +5832,51 @@ EmitResult emit_program(Token *program, const char *dest_file) {
   return EMIT_SUCCESS;
 }
 
+CompileResult make_result(const LLVMTypeResult &result) {
+  CompileResult retval;
+  retval.result = result.result;
+  //retval.error = parse_result.error;
+
+  const std::string &file = g.parser.files[result.error.location.file_index];
+  int line = result.error.location.line;
+  int col = result.error.location.column;
+  retval.error.error_string = string_format("%s(%d:%d): %s\n", file.c_str(), line, col, result.error.error_string.c_str());
+
+  return retval;
+}
+
 CompileResult make_result(const ParseResult &parse_result) {
   CompileResult retval;
-  retval.error = parse_result.error;
+  retval.result = parse_result.result;
+  //retval.error = parse_result.error;
+
+  const std::string &file = g.parser.files[parse_result.error.location.file_index];
+  int line = parse_result.error.location.line;
+  int col = parse_result.error.location.column;
+  retval.error.error_string = string_format("%s(%d:%d): %s\n", file.c_str(), line, col, parse_result.error.error_string.c_str());
+
   return retval;
 }
 
 CompileResult make_result(const TypecheckResult &typecheck_result) {
   CompileResult retval;
-  retval.error = typecheck_result.error;
+  retval.result = typecheck_result.result;
+  //retval.error = typecheck_result.error;
+  const std::string &file = g.parser.files[typecheck_result.error.location.file_index];
+  int line = typecheck_result.error.location.line;
+  int col = typecheck_result.error.location.column;
+  retval.error.error_string = string_format("%s(%d:%d): %s\n", file.c_str(), line, col, typecheck_result.error.error_string.c_str());
   return retval;
 }
 
 CompileResult make_result(const EmitResult &emit_result) {
   CompileResult retval;
-  retval.error = emit_result.error;
+  retval.result = emit_result.result;
+  //retval.error = emit_result.error;
+  const std::string &file = g.parser.files[emit_result.error.location.file_index];
+  int line = emit_result.error.location.line;
+  int col = emit_result.error.location.column;
+  retval.error.error_string = string_format("%s(%d:%d): %s\n", file.c_str(), line, col, emit_result.error.error_string.c_str());
   return retval;
 }
 
@@ -5200,20 +5900,42 @@ std::string to_dest_file(const char *source_file) {
 //    }
 //}
 
+void add_base_type(TypeKind kind) {
+  TypeDef type = {};
+  type.kind = kind;
+  g.db.types.push_back(type);
+}
+
+LLVMTypeResult emit_base_types() {
+  add_base_type(ARBITRARY_INTEGER);
+  //add_base_type(ARBITRARY_FLOAT);
+
+  for(auto &type : g.db.types) {
+    LLVMTypeResult result = llvm_emit_base_type(&type);
+    if (is_success(result) == false) return result;
+  }
+
+  return make_success((llvm::Type *)NULL);
+}
+
 const CompileResult COMPILE_SUCCESS = {};
 
 void IRCompile(LLVMState &llvm);
 
 CompileResult compile_program(const char *source_file) {
+  std::string dest_file = to_dest_file(source_file);
+  LLVMInit(dest_file.c_str());
+
   ParseResult parse_result = parse_program(source_file);
   if (is_success(parse_result) == false) return make_result(parse_result);
 
   db_add_global_declarations(parse_result.start);
 
+  LLVMTypeResult type_result = emit_base_types(); 
+  if (is_success(type_result) == false) return make_result(type_result);
+
   TypecheckResult typecheck_result = typecheck_program(parse_result.start);
   if (is_success(typecheck_result) == false) return make_result(typecheck_result);
-
-  std::string dest_file = to_dest_file(source_file);
 
   EmitResult emit_result = emit_program(parse_result.start, dest_file.c_str());
   if (is_success(emit_result) == false) return make_result(typecheck_result);
@@ -5223,3 +5945,9 @@ CompileResult compile_program(const char *source_file) {
 
   return COMPILE_SUCCESS;
 }
+
+bool is_success(const CompileResult &result) {
+  return (result.result != RESULT_ERROR);
+}
+
+

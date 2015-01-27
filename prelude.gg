@@ -1,0 +1,196 @@
+///////////////////////////////////
+// prelude.gg
+
+
+
+///////////////////////////////////
+// void
+///////////////////////////////////
+llvm_type void {
+  void
+}
+
+//void *null =   0;
+
+///////////////////////////////////
+// bool
+///////////////////////////////////
+//llvm_type bool { 
+//  i8 
+//}
+//
+//bool false =  bool(0);
+//bool true  =  bool(-1);
+//
+//bool operator &(bool a, bool b) {
+//  bool x;
+//  llvm {
+//    $x = and $a, $b
+//  }
+//  return x;
+//}
+//
+//bool operator |(bool a, bool b) {
+//  bool x;
+//  llvm {
+//    $x = or $a, $b
+//  }
+//  return x;
+//}
+//
+//bool operator ^(bool a, bool b) {
+//  bool x;
+//  llvm {
+//    $x = xor $a, $b
+//  }
+//  return x;
+//}
+//
+//bool operator !(bool a) {
+//  return a ^ true;
+//}
+//
+//bool bool(i32 a) {
+//  bool x;
+//  llvm {
+//    $x = trunc $a to i8
+//  }
+//  return x;
+//}
+
+///////////////////////////////////
+// integer
+///////////////////////////////////
+// i8
+//llvm_type i8 { 
+//  i8 
+//}
+//
+//i8 operator +(i8 a, i8 b) {
+//  i8 x;
+//  llvm {
+//    $x = add $a, $b
+//  }
+//  return x;
+//}
+//
+//i8 operator -(i8 a, i8 b) {
+//  i8 x;
+//  llvm {
+//    $x = sub $a, $b
+//  }
+//  return x;
+//}
+//
+//i8 operator *(i8 a, i8 b) {
+//  i8 x;
+//  llvm {
+//    $x = mul $a, $b
+//  }
+//  return x;
+//}
+//
+//i8 operator /(i8 a, i8 b) {
+//  i8 x;
+//  llvm {
+//    $x = sdiv $a, $b
+//  }
+//  return x;
+//}
+//
+//i8 operator %(i8 a, i8 b) {
+//  i8 x;
+//  llvm {
+//    $x = srem $a, $b
+//  }
+//  return x;
+//}
+
+// i32
+llvm_type i32 { 
+  i32 
+}
+
+i32 operator +(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = add $a, $b
+  }
+  return x;
+}
+
+i32 operator -(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = sub $a, $b
+  }
+  return x;
+}
+
+i32 operator *(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = mul $a, $b
+  }
+  return x;
+}
+
+i32 operator /(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = sdiv $a, $b
+  }
+  return x;
+}
+
+i32 operator %(i32 a, i32 b) {
+  i32 x;
+  llvm {
+    $x = srem $a, $b
+  }
+  return x;
+}
+
+i32 operator -(i32 a) {
+  return 0-a;
+}
+
+///////////////////////////////////
+// float
+///////////////////////////////////
+
+//llvm_type f32 { 
+//  float 
+//}
+//
+//f32 operator +(f32 a, f32 b) {
+//  f32 x;
+//  llvm {
+//    $x = fadd $a, $b
+//  }
+//  return x;
+//}
+//
+//f32 operator -(f32 a, f32 b) {
+//  f32 x;
+//  llvm {
+//    $x = fsub $a, $b
+//  }
+//  return x;
+//}
+//
+//f32 operator *(f32 a, f32 b) {
+//  f32 x;
+//  llvm {
+//    $x = fmul $a, $b
+//  }
+//  return x;
+//}
+//
+//f32 operator /(f32 a, f32 b) {
+//  f32 x;
+//  llvm {
+//    $x = fdiv $a, $b
+//  }
+//  return x;
+//}

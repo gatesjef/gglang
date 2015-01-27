@@ -103,19 +103,8 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\f16.gg" />
-    <None Include="..\f32.gg" />
-    <None Include="..\f64.gg" />
-    <None Include="..\i16.gg" />
-    <None Include="..\i32.gg" />
-    <None Include="..\i64.gg" />
-    <None Include="..\i8.gg" />
     <None Include="..\main.gg" />
     <None Include="..\prelude.gg" />
-    <None Include="..\u16.gg" />
-    <None Include="..\u32.gg" />
-    <None Include="..\u64.gg" />
-    <None Include="..\u8.gg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

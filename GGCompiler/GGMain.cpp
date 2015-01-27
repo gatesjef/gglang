@@ -6,7 +6,7 @@
 #include "GGLLVMEmitter.h"
 
 void print_result(const CompileResult &result) {
-
+  printf(result.error.error_string.c_str());
 }
 
 int main(int argc, char* argv[]) {
@@ -18,7 +18,14 @@ int main(int argc, char* argv[]) {
   //return 0;
 
   CompileResult result = compile_program(source_file);
-  print_result(result);
+  if (is_success(result) == false) {
+    print_result(result);
+  } else {
+    printf("success\n");
+  }
+
+  char buffer[128];
+  gets(buffer);
 }
 
 /*

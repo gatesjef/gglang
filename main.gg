@@ -1,14 +1,24 @@
+///////////////////////////
 // main.gg
 // Hello comments!
 
-llvm_type i32 { 
-  i32 
-}
+import "prelude.gg";
 
 i32 a_function() {
-  return 43;
+  return 43 + 2;
+}
+
+void a_void_function() {
+}
+
+void test_functions() {
+  a_void_function();
+  i32 x = a_function();
+  i32 y = x + 2;
+  x = y + 25 - 12 * 32 / 2;
+  x = y % x;
 }
 
 i32 main() {
-  return a_function();
+  return 42;
 }
