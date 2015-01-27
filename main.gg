@@ -19,6 +19,45 @@ void test_functions() {
   x = y % x;
 }
 
+extern void putchar(i32);
+
 i32 main() {
+  putchar(67);
   return 42;
 }
+
+// end of line comments
+// functions definition
+// integer literal
+// return statements
+// compiling
+// linking
+// void return statements
+// function call expression
+// llvm type definition
+// binary expressions
+// unary expressions
+// post op expression
+// global constant definition
+// local variable definition
+// assigement statement
+// function parameters
+// opererator definition
+// inline llvm
+// import statement
+// foreign function declaration
+// link libc
+// putc
+///////////////////////////////////////
+// array type
+// printf 
+// char type
+// pointer type
+// struct type
+
+// global variable definition
+// global variable initialization
+// local constant definition
+// constant expression
+// variable function arguments
+

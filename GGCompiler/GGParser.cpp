@@ -499,6 +499,7 @@ void consume_whitespace(ParserState &parser) {
       }
       break;
     case '\0':
+      return;
     default:
       if (comment_mode == end_of_line) {
         ++parser.current_char;
@@ -1067,8 +1068,16 @@ ParseResult parse_zero_or_more_separated(ParserState &parser, ParseFn fn, const 
   return retval;
 }
 
+ParseResult parse_param_type_declaration(ParserState &parser) {
+  ParseResult result = parse_type_declaration(parser);
+  if (is_success(result) == false) return result;
+  return make_result(parser, TOKEN_FUNCTION_PARAM, result);
+}
+
 ParseResult parse_function_type_params(ParserState &parser) {
-  return parse_zero_or_more_separated(parser, parse_type_declaration, ",");
+  ParseResult result = parse_zero_or_more_separated(parser, parse_param_type_declaration, ",");
+  if (is_success(result) == false) return result;
+  return make_result(parser, TOKEN_FUNCTION_PARAMS, result);
 }
 
 ParseResult parse_function_type(ParserState &parser, Token *retval_type) {
@@ -1088,7 +1097,7 @@ ParseResult parse_function_type(ParserState &parser, Token *retval_type) {
   }
 
   ParseResult retval = make_result(parser, TOKEN_FUNCTION_TYPE, retval_type);
-  append_result(retval, params);
+  append_result(retval.start, params);
   return retval;
 }
 
@@ -2751,10 +2760,19 @@ void function_fill_params(Token *function_params, TypeDef **&types, int &num_par
   {
     assert(function_param != NULL);
 
-    Token *function_param_type, *function_param_identifier;
-    expand_tokens(function_param, function_param_type, function_param_identifier);
-    types[i] = emit_type_declaration(function_param_type);
-    function_param = function_param->next;
+    int param_subtokens = count_subtokens(function_param);
+    if (param_subtokens == 1) {
+      Token *function_param_type;
+      expand_tokens(function_param, function_param_type);
+      types[i] = emit_type_declaration(function_param_type);
+      function_param = function_param->next;
+
+    } else {
+      Token *function_param_type, *function_param_identifier;
+      expand_tokens(function_param, function_param_type, function_param_identifier);
+      types[i] = emit_type_declaration(function_param_type);
+      function_param = function_param->next;
+    }
   }
 }
 
@@ -5747,6 +5765,8 @@ void emit_external_function_declaration(Token *function_declaration) {
 
   llvm::Function *llvm_function = llvm::Function::Create(function_type, llvm::Function::ExternalLinkage, name, g.llvm.module);
   assert(llvm_function);
+
+  function->llvm_function = llvm_function;
 
   //function->addFnAttr("nounwind");
   //Function *function = new Function;
