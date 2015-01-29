@@ -5,36 +5,120 @@
 import "prelude.gg";
 
 i32 a_function() {
-  return 43 + 2;
+  return 43;
+}
+
+i32 another_function() {
+  return a_function();
 }
 
 void a_void_function() {
 }
 
-void test_functions() {
+i32 test_functions() {
   a_void_function();
-  i32 x = a_function();
+  a_function();
+  return another_function();
+}
+
+i32 test_i32() {
+  i32 t;
+  i32 u = 10;
+  i32 v = -4;
+  i32 w = u * v;
+  i32 x = a_function() - 5;
   i32 y = x + 2;
   x = y + 25 - 12 * 32 / 2;
   x = y % x;
+  return x + 23;
 }
 
 extern void putchar(i32);
 
+void test_ffi() {
+  i32 x = 65;
+  putchar(65);
+  putchar(65+1);
+  putchar(x+2);
+  putchar(10);
+}
+
+void test_deref() {
+  i32[10] x;
+  x[3] = 71;
+  x[4] = 72;
+  x[5] = 73;
+
+  i32 *c3 = &x[3];
+  i32 *c4 = &x[3] + 1;
+  i32  c5 = c4[1];
+
+  putchar(*c3);
+  putchar(*c4);
+  putchar(c5);
+  putchar(10);
+}
+
+void test_array() {
+  i32[10] x;
+  x[0] = 68;
+  x[1] = 68+1;
+  x[2] = x[0]+2;
+
+  putchar(x[0]);
+  putchar(x[1]);
+  putchar(x[2]);
+  putchar(10);
+}
+
+llvm_type char {
+  u8
+}
+
+i32 to_i32(char a) {
+  i32 x;
+  llvm {
+    $x = sext $a to i32
+  }
+  return x;
+}
+
+void test_string() {
+
+  char* str = "Hello World!";
+  putchar(to_i32(*str));
+
+  char* str1 = str+1;
+  putchar(to_i32(*str1));
+
+  putchar(to_i32(str[2]));
+
+  //putchar(to_i32("Hello World!"[3]));
+
+  putchar(10);
+
+}
+
 i32 main() {
-  putchar(67);
-  return 42;
+  test_functions();
+  i32 retval = test_i32();
+  test_ffi();
+  test_array();
+  test_deref();
+  test_string();
+  return retval;
 }
 
 // end of line comments
 // functions definition
-// integer literal
+// integer literal (i32)
 // return statements
 // compiling
 // linking
 // void return statements
 // function call expression
 // llvm type definition
+// i32 type
 // binary expressions
 // unary expressions
 // post op expression
@@ -47,17 +131,38 @@ i32 main() {
 // import statement
 // foreign function declaration
 // link libc
-// putc
-///////////////////////////////////////
+// putchar
 // array type
-// printf 
-// char type
+// array assignment
+// array dereference
 // pointer type
+// string literals
+// char* type
+// array -> pointer auto conversion
+// pointer arithmatic
+// pointer deref w/ array syntax
+///////////////////////////////////////
+// variable function arguments
+// printf 
+
+// paren expressions
+// undefined initialization
+// array initialization
+// bool type
+// constant expression
+// global constant initialization
+// if statement
+// for statement
 // struct type
 
+// data array?
+// game jam
+
+// string type
+// char type
 // global variable definition
 // global variable initialization
 // local constant definition
-// constant expression
-// variable function arguments
+// local struct definition
+// local function definition
 
