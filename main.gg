@@ -85,7 +85,7 @@ i32 to_i32(char a) {
 
 void test_string() {
 
-  char* str = "Hello World!";
+  char* str = "Guten Tag World!";
   putchar(to_i32(*str));
 
   char* str1 = str+1;

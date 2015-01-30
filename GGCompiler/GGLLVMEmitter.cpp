@@ -110,7 +110,7 @@ void *db_lookup_any(LLVM &llvm, const GGToken &token) {
   return NULL;
 }
 
-llvm::Value *db_lookup_variable(LLVM &llvm, const GGSubString &substring)
+llvm::Value *old_db_lookup_variable(LLVM &llvm, const GGSubString &substring)
 {
   for(int i = 0; i < llvm.num_db_items; ++i) {
     DBItem &item = llvm.db_items[i];
@@ -123,7 +123,7 @@ llvm::Value *db_lookup_variable(LLVM &llvm, const GGSubString &substring)
   return NULL;
 }
 
-llvm::Value *db_lookup_variable(LLVM &llvm, const GGToken &token)
+llvm::Value *old_db_lookup_variable(LLVM &llvm, const GGToken &token)
 {
   for(int i = 0; i < llvm.num_db_items; ++i) {
     DBItem &item = llvm.db_items[i];
@@ -737,7 +737,7 @@ llvm::Value *field_index(LLVM &llvm, llvm::Type *type, const GGToken &field_iden
 
 llvm::Value *emit_lvalue_identifier(LLVM &llvm, const GGToken &token) {
   assert(token.num_subtokens == 0);
-  return db_lookup_variable(llvm, token);
+  return old_db_lookup_variable(llvm, token);
 }
 
 llvm::Value *emit_rvalue_identifier(LLVM &llvm, const GGToken &identifier) {
@@ -1083,7 +1083,7 @@ int raw_llvm_lex(LLVM &llvm, const GGSubString &raw_llvm, LLVMToken *tokens, int
 
 
 llvm::Value *get_variable(LLVM &llvm, const LLVMToken &lhs) {
-  return db_lookup_variable(llvm, lhs.substring);
+  return old_db_lookup_variable(llvm, lhs.substring);
 }
 
 llvm::Value *llvm_emit_rvalue(LLVM &llvm, const LLVMToken &rhs) {
@@ -1616,7 +1616,7 @@ int lines_replace_tokens(LLVM &llvm, Lines &lines) {
     LLVMReplacement replacement = matches_replacement(line, token_str, token_substr, old_lhs, old_rhs);
     switch(replacement) {
     case LLVM_REPLACEMENT_ASSIGNMENT: {
-      llvm::Type *type = db_lookup_variable(llvm, token_substr)->getType();
+      llvm::Type *type = old_db_lookup_variable(llvm, token_substr)->getType();
       std::string type_str = to_llvm_type_str(type);
       std::string new_line = format_string("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
       std::string new_store = format_string("store %s %%%s%d, %s* %%%s", type_str.c_str(), token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
@@ -1628,7 +1628,7 @@ int lines_replace_tokens(LLVM &llvm, Lines &lines) {
     } break;
     case LLVM_REPLACEMENT_FIRST_EXPRESSION: 
     case LLVM_REPLACEMENT_EXPRESSION: {
-      llvm::Type *type = db_lookup_variable(llvm, token_substr)->getType();
+      llvm::Type *type = old_db_lookup_variable(llvm, token_substr)->getType();
       std::string type_str = to_llvm_type_str(type);
       std::string new_load  = format_string("%%%s%d = load %s* %%%s", token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
       std::string new_line        = format_string("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
