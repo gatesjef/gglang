@@ -2863,7 +2863,11 @@ enum IntrinsicOperationType {
 
   OP_ADDRESS_OF,
 
-  OP_CAST,
+  //OP_CAST,
+  OP_EXTEND_INTEGER,
+  OP_EXTEND_FLOAT,
+  OP_CAST_POINTER,
+  OP_CAST_ARRAY_TO_POINTER,
 
   //OP_MEMBER_DEREFERENCE,
 
@@ -2924,6 +2928,7 @@ struct FunctionCall {
   ExternFunctionDeclaration *extern_function;
   //IntrinsicOperation  intrinsic;
   IntrinsicOperationType    intrinsic;
+  TypeDef                   *dest_type;
 
 };
 
@@ -3256,8 +3261,22 @@ struct Program {
   int num_statements;
 };
 
+bool is_void_pointer(TypeDef *type) {
+  if (type->kind != POINTER_TYPE) return false;
+  llvm::Type *llvm_type = llvm_get_type(type->pointer.base_type);
+  if (llvm_type->isVoidTy()) return true;
+  return false;
+}
+
 bool is_pointer(TypeDef *type) {
   return type->kind == POINTER_TYPE;
+}
+
+bool is_float(TypeDef *type) {
+  if (type->kind != LLVM_TYPE) return false;
+  llvm::Type *llvm_type = llvm_get_type(type);
+  return llvm_type->isFloatTy();
+  // check against llvm type for integerness
 }
 
 bool is_integer(TypeDef *type) {
@@ -3457,7 +3476,83 @@ TypeDef *emit_type_declaration(Token *declaration) {
 //*/
 TypecheckResult typecheck_variable_definition(VariableDefinition &variable, bool add_variable);
 
-bool compare_function_param_types(Expression *call_params, ParamDefinition *function_params, int num_params) {
+enum ConversionType {
+  array_to_pointer,
+  up_convert_integer,
+  up_convert_float,
+  pointer_to_void_pointer,
+};
+
+const int MAX_CONVERSIONS = 8;
+
+struct ConversionChain {
+  int tier;
+  ConversionType chain[MAX_CONVERSIONS];
+  int num_conversions;
+};
+
+TypeDef *apply_conversion(ConversionType type, TypeDef *source, TypeDef *dest= NULL) {
+  switch(type) {
+  case array_to_pointer: 
+    return db_get_pointer_type(source->array.base_type);
+  case up_convert_integer:
+    return dest;
+  case up_convert_float:
+    return dest;
+  case pointer_to_void_pointer:
+    return dest;
+  default:
+    halt();
+  }
+
+  return NULL;
+}
+
+int type_size(TypeDef *type) {
+  if (type->kind == LLVM_TYPE) {
+    llvm::Type *llvm_type = llvm_get_type(type);
+    uint32_t size = llvm_type->getScalarSizeInBits();
+    return (int)size;
+  }
+
+  halt();
+  return 0;
+}
+
+bool is_array(TypeDef *type) {
+  return type->kind == ARRAY_TYPE;
+}
+
+bool can_convert(TypeDef *source, TypeDef *dest, ConversionChain &conversion) {
+  conversion.num_conversions = 0;
+
+  if (is_array(source) && is_pointer(dest)) {
+    conversion.chain[conversion.num_conversions++] = array_to_pointer;
+    source = apply_conversion(array_to_pointer, source);
+  }
+
+  if (is_integer(source) && is_integer(dest) && type_size(source) < type_size(dest)) {
+    conversion.chain[conversion.num_conversions++] = up_convert_integer;
+    source = apply_conversion(up_convert_integer, source, dest);
+  }
+
+  if (is_float(source) && is_float(dest) && type_size(source) < type_size(dest)) {
+    conversion.chain[conversion.num_conversions++] = up_convert_float;
+    source = apply_conversion(up_convert_float, source, dest);
+  }
+
+  if (is_pointer(source) && is_void_pointer(dest)) {
+    conversion.chain[conversion.num_conversions++] = pointer_to_void_pointer;
+    source = apply_conversion(pointer_to_void_pointer, source);
+  }
+
+  // TODO: user defined
+
+  if (source == dest) return true;
+  return false;
+}
+
+bool compare_function_param_types(Expression *call_params, ParamDefinition *function_params, int num_params, ConversionChain *conversions) {
   for(int i = 0; i < num_params; ++i) {
     assert(function_params[i].type != PD_VARARGS);
     TypeDef *t0 = expression_get_type(call_params[i]);
@@ -3470,7 +3565,10 @@ bool compare_function_param_types(Expression *call_params, ParamDefinition *func
       t1 = function_params[i].variable.type->type;
     }
     assert(t1);
-    if (t0 != t1) return false;
+
+    if (can_convert(t0, t1, conversions[i]) == false) {
+      return false;
+    }
   }
 
   return true;
@@ -3508,6 +3606,7 @@ TypeDef *array_type_get(TypeDef *base_type, int count) {
 }
 
 enum FunctionLookupResultType {
+  LOOKUP_NONE,
   LOOKUP_ERROR,
   LOOKUP_FUNCTION,
   LOOKUP_EXTERN_FUNCTION,
@@ -3524,27 +3623,116 @@ struct FunctionLookupResult {
   };
 };
 
+//TypeDef *apply_conversion(ConversionType type, Expression *params) {
+//}
+
+const int MAX_MATCHES = 256;
+
+struct FunctionMatch {
+  FunctionLookupResult result;
+  ConversionChain conversions[MAX_PARAMS];
+};
+
+#define Max(x, y) (((x) > (y)) ? (x) : (y))
+
+bool compare_conversions(ConversionChain *conversions0, ConversionChain *conversions1, int num_params) {
+  int max0Conversion = 0;
+  int max1Conversion = 0;
+
+  for(int i = 0; i < num_params; ++i) {
+    max0Conversion = Max(max0Conversion, conversions0[i].tier);
+    max1Conversion = Max(max1Conversion, conversions1[i].tier);
+  }
+
+  if (max0Conversion > max1Conversion) return true;
+  return false;
+}
+
+void function_match_add(FunctionMatch &best_match, const FunctionLookupResult &result, ConversionChain *conversions, int num_params) {
+  if (best_match.result.type == LOOKUP_NONE || compare_conversions(best_match.conversions, conversions, num_params)) {
+    best_match.result = result;
+    memcpy(best_match.conversions, conversions, sizeof(ConversionChain) * MAX_PARAMS);
+  }
+}
+
+void create_conversion_expression(ConversionType type, Expression &expression, Expression &original_expression, TypeDef *dest_type) {
+  switch(type) {
+  case array_to_pointer: 
+    expression.type = EXPR_FUNCTION_CALL;
+    expression.function_call.intrinsic = OP_CAST_ARRAY_TO_POINTER;
+    expression.function_call.params = &original_expression;
+    expression.function_call.num_params = 1;
+    break;
+  case up_convert_integer:
+    expression.type = EXPR_FUNCTION_CALL;
+    expression.function_call.intrinsic = OP_EXTEND_INTEGER;
+    expression.function_call.params = &original_expression;
+    expression.function_call.num_params = 1;
+    expression.function_call.dest_type = dest_type;
+    break;
+  case up_convert_float:
+    expression.type = EXPR_FUNCTION_CALL;
+    expression.function_call.intrinsic = OP_EXTEND_FLOAT;
+    expression.function_call.params = &original_expression;
+    expression.function_call.num_params = 1;
+    expression.function_call.dest_type = dest_type;
+    break;
+  case pointer_to_void_pointer:
+    expression.type = EXPR_FUNCTION_CALL;
+    expression.function_call.intrinsic = OP_EXTEND_FLOAT;
+    expression.function_call.params = &original_expression;
+    expression.function_call.num_params = 1;
+    expression.function_call.dest_type = dest_type;
+    break;
+  default:
+    halt();
+  }
+}
+
+void apply_conversion(const ConversionChain &conversion, Expression &expression, ParamDefinition &dest_param) {
+  if (conversion.num_conversions == 0) return;
+  
+  for(int i = 0; i < conversion.num_conversions; ++i) {
+    Expression *new_expression = expressions_alloc(1);
+    *new_expression = expression;
+
+    assert(dest_param.type == PD_VARIABLE);
+    TypeDef *dest_type = dest_param.variable.type->type;
+    create_conversion_expression(conversion.chain[i], expression, *new_expression, dest_type);
+  }
+}
+
+void apply_conversions(ConversionChain *conversions, Expression *call_params, ParamDefinition *function_params, int num_params) {
+  for(int i = 0; i < num_params; ++i) {
+    apply_conversion(conversions[i], call_params[i], function_params[i]);
+  }
+}
+
+
 FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenType op, Expression *params, int num_params) {
   FunctionLookupResult error = {LOOKUP_ERROR};
+  FunctionMatch best_match = {};
+  ConversionChain conversions[MAX_PARAMS] = {};
 
   for(FunctionDefinitionDBEntry &entry : g.db.functions) {
     if (entry.function) {
       if (entry.function->num_params && entry.function->params[entry.function->num_params-1].type == PD_VARARGS) {
         if (substring_cmp(entry.function->identifier, identifier) && entry.function->num_params-1 <= num_params) {
-          if (compare_function_param_types(params, entry.function->params, entry.function->num_params-1) == true) {
+          if (compare_function_param_types(params, entry.function->params, entry.function->num_params-1, conversions) == true) {
             FunctionLookupResult retval;
             retval.type = LOOKUP_FUNCTION;
             retval.function = entry.function;
-            return retval;
+            function_match_add(best_match, retval, conversions, num_params);
           }
         }
       } else {
         if (substring_cmp(entry.function->identifier, identifier) && entry.function->num_params == num_params) {
-          if (compare_function_param_types(params, entry.function->params, num_params) == true) {
+          if (compare_function_param_types(params, entry.function->params, num_params, conversions) == true) {
             FunctionLookupResult retval;
             retval.type = LOOKUP_FUNCTION;
             retval.function = entry.function;
-            return retval;
+            //return retval;
+            function_match_add(best_match, retval, conversions, num_params);
           }
         }
       }
@@ -3552,25 +3740,39 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
       assert(entry.extern_function);
       if (entry.extern_function->num_params && entry.extern_function->params[entry.extern_function->num_params-1].type == PD_VARARGS) {
         if (substring_cmp(entry.extern_function->identifier, identifier) && entry.extern_function->num_params-1 <= num_params) {
-          if (compare_function_param_types(params, entry.extern_function->params, entry.extern_function->num_params-1) == true) {
+          if (compare_function_param_types(params, entry.extern_function->params, entry.extern_function->num_params-1, conversions) == true) {
             FunctionLookupResult retval;
             retval.type = LOOKUP_EXTERN_FUNCTION;
             retval.extern_function = entry.extern_function;
-            return retval;
+            //return retval;
+            function_match_add(best_match, retval, conversions, num_params);
           }
         }
       }
       else {
         if (substring_cmp(entry.extern_function->identifier, identifier) && entry.extern_function->num_params == num_params) {
-          if (compare_function_param_types(params, entry.extern_function->params, num_params) == true) {
+          if (compare_function_param_types(params, entry.extern_function->params, num_params, conversions) == true) {
             FunctionLookupResult retval;
             retval.type = LOOKUP_EXTERN_FUNCTION;
             retval.extern_function = entry.extern_function;
-            return retval;
+            //return retval;
+            function_match_add(best_match, retval, conversions, num_params);
           }
         }
       }
     }
+  }
+
+  if (best_match.result.type != LOOKUP_NONE) {
+    ParamDefinition *function_params;
+    if (best_match.result.type == LOOKUP_EXTERN_FUNCTION) {
+      function_params = best_match.result.extern_function->params;
+    } else {
+      function_params = best_match.result.function->params;
+    }
+
+    apply_conversions(best_match.conversions, params, function_params, num_params);
+    return best_match.result;
   }
 
   if (op == TOKEN_NONE) {
@@ -3752,10 +3954,6 @@ TypecheckResult typecheck_function_call_expression(FunctionCall &call) {
   }
 
   return TYPECHECK_SUCCESS;
-}
-
-bool is_array(TypeDef *type) {
-  return type->kind == ARRAY_TYPE;
 }
 
 bool is_compile_time(TypeDef *) {
@@ -4061,7 +4259,7 @@ bool try_auto_cast(TypeDef *rhs_type, TypeDef *lhs_type, Expression *&expression
   {
     Expression *cast = expressions_alloc(1);
     cast->type = EXPR_FUNCTION_CALL;
-    cast->function_call.intrinsic = OP_CAST;
+    cast->function_call.intrinsic = OP_CAST_ARRAY_TO_POINTER;
     cast->function_call.params = expression;
     cast->function_call.num_params = 1;
     cast->function_call.identifier = to_substring("auto_cast");
@@ -5083,7 +5281,22 @@ llvm::Value *emit_rvalue_pointer_add(Expression &pointer, Expression &integer) {
 
 llvm::Value *emit_rvalue_intrinsic_function_call(FunctionCall &call) {
   switch(call.intrinsic) {
-  case OP_CAST: {
+  case OP_EXTEND_INTEGER: {
+    llvm::Value *rhs = emit_rvalue_expression(call.params[0]);
+    llvm::Type  *dest_type = llvm_get_type(call.dest_type);
+      return g.llvm.builder->CreateSExt(rhs, dest_type);
+  }
+  case OP_EXTEND_FLOAT: {
+    llvm::Value *rhs = emit_rvalue_expression(call.params[0]);
+    llvm::Type  *dest_type = llvm_get_type(call.dest_type);
+    return g.llvm.builder->CreateFPExt(rhs, dest_type);
+  }
+  case OP_CAST_POINTER: {
+    llvm::Value *rhs = emit_rvalue_expression(call.params[0]);
+    llvm::Type  *dest_type = llvm_get_type(call.dest_type);
+    return g.llvm.builder->CreateBitCast(rhs, dest_type);
+  }
+  case OP_CAST_ARRAY_TO_POINTER: {
     llvm::Value *rhs = emit_rvalue_expression(call.params[0]);
     llvm::Value *zero = llvm::ConstantInt::get(llvm::IntegerType::get(*g.llvm.context, 32), 0, SIGNED);
     llvm::Value *zeros[] = {zero, zero};

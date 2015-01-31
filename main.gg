@@ -9,7 +9,8 @@ void test_printf() {
   char *fmt = "A var string: %s\n";
   char *str = "varstring";
   printf(fmt, str);
-  //printf("Hello world!\n");
+  
+  printf("Hello world!\n");
 
   //printf("A string: %s\n", "Hi!");
   //printf("An int: %d\n", 22);
