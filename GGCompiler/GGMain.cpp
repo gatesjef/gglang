@@ -2,8 +2,8 @@
 
 #include "precompile.h"
 #include "GGParser.h"
-#include "GGCompiler.h"
-#include "GGLLVMEmitter.h"
+#include "LLVMIRCompiler.h"
+//#include "GGLLVMEmitter.h"
 
 void print_result(const CompileResult &result) {
   printf(result.error.error_string.c_str());

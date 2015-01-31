@@ -4,6 +4,28 @@
 
 import "prelude.gg";
 
+extern i32  printf(char*, ...);
+void test_printf() {
+  char *fmt = "A var string: %s\n";
+  char *str = "varstring";
+  printf(fmt, str);
+  //printf("Hello world!\n");
+
+  //printf("A string: %s\n", "Hi!");
+  //printf("An int: %d\n", 22);
+  //i32 n = 44;
+  //printf("An int: %d\n", n);
+
+   //printf ("Characters: %c %c \n", 'a', 65);
+   //printf ("Decimals: %d %ld\n", 1977, 650000L);
+   //printf ("Preceding with blanks: %10d \n", 1977);
+   //printf ("Preceding with zeros: %010d \n", 1977);
+   //printf ("Some different radices: %d %x %o %#x %#o \n", 100, 100, 100, 100, 100);
+   //printf ("floats: %4.2f %+.0e %E \n", 3.1416, 3.1416, 3.1416);
+   //printf ("Width trick: %*d \n", 5, 10);
+   //printf ("%s \n", "A string");
+}
+
 i32 a_function() {
   return 43;
 }
@@ -106,6 +128,7 @@ i32 main() {
   test_array();
   test_deref();
   test_string();
+  test_printf();
   return retval;
 }
 
@@ -141,8 +164,10 @@ i32 main() {
 // array -> pointer auto conversion
 // pointer arithmatic
 // pointer deref w/ array syntax
-///////////////////////////////////////
 // variable function arguments
+///////////////////////////////////////
+// auto conversion of arrays passed to var args
+// properly handle \n in string literals
 // printf 
 
 // paren expressions

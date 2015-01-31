@@ -1,0 +1,3 @@
+// GGUtils.h
+
+void halt();
