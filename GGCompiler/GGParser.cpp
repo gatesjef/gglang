@@ -217,11 +217,11 @@ struct TypeDef {
 
   union {
     struct LlvmType {
-      LLVMTypeDef type_definition;
+      //LLVMTypeDef type_definition;
       LLVMTypeDefinition *new_type_definition;
     } llvm_def;
     struct StructType {
-      StructDef *type_definition;
+      //StructDef *type_definition;
       StructDefinition *new_type_definition;
     } struct_def;
     struct PointerType {
@@ -712,6 +712,12 @@ ParseResult parse_string_literal(ParserState &parser) {
         return make_error(parser, "Unexpected end-of-line in string");
       case '\\':
         consume_escape_sequence(c);
+        if (*c == 'n') {
+          break;
+        } else {
+          return make_error(parser, "Unknown escape sequence");
+        }
+
         break;
       case '"':
         parser.current_char = c+1;
@@ -1157,15 +1163,18 @@ ParseResult parse_member_identifier(ParserState &parser) {
 }
 
 ParseResult parse_member_op(ParserState &parser, Token *lhs) {
-  ParseResult result = parse_exact(parser, ".");
-  if (is_success(result) == false) return result;
+  ParseResult result_op = parse_exact(parser, ".");
+  if (is_success(result_op) == false) return result_op;
 
   ParseResult member = parse_member_identifier(parser);
   if (is_success(member) == false) {
     return make_error(parser, "Invalid member identifier");
   }
 
-  return make_result(parser, TOKEN_OP_MEMBER, member);
+  ParseResult result = make_result(parser, TOKEN_OP_MEMBER, lhs);
+  if (is_success(result) == false) return result;
+  append_result(result.start, member);
+  return result;
 }
 
 ParseResult parse_function_call_params(ParserState &parser) {
@@ -1397,6 +1406,17 @@ ParseResult parse_unary_operator(ParserState &parser) {
   return parse_first_table(parser, table, num_entries);
 }
 
+ParseResult peek(ParserState &parser, ParseFn fn) {
+  const char *current_char = parser.current_char;
+  int current_line_number = parser.current_line_number;
+  const char *current_line_start = parser.current_line_start;
+  ParseResult result = fn(parser);
+  parser.current_char = current_char;
+  parser.current_line_number = current_line_number;
+  parser.current_line_start = current_line_start;
+  return result;
+}
+
 ParseResult parse_binary_operator(ParserState &parser) {
   static const ParseTable table[] = {
     "*",  TOKEN_MUL_OP, 5,
@@ -1423,6 +1443,10 @@ ParseResult parse_binary_operator(ParserState &parser) {
     "&&", TOKEN_LOGICAL_AND_OP, 13,
     "||", TOKEN_LOGICAL_OR_OP,  14,
   };
+
+  ParseResult assignment_result = peek(parser, parse_assignment_operator);
+  if (is_success(assignment_result)) return PARSE_NONE;
+
   static const int num_entries = ARRAYSIZE(table);
   return parse_first_table(parser, table, num_entries);
 }
@@ -1492,17 +1516,6 @@ ParseResult parse_unary_expression(ParserState &parser) {
 }
 
 
-ParseResult peek(ParserState &parser, ParseFn fn) {
-  const char *current_char = parser.current_char;
-  int current_line_number = parser.current_line_number;
-  const char *current_line_start = parser.current_line_start;
-  ParseResult result = fn(parser);
-  parser.current_char = current_char;
-  parser.current_line_number = current_line_number;
-  parser.current_line_start = current_line_start;
-  return result;
-}
-
 ParseResult parse_binary_expression(ParserState &parser, int minimum_precedence, const ParseResult &arg_lhs) {
   ParseResult lhs = arg_lhs;
 
@@ -1521,7 +1534,7 @@ ParseResult parse_binary_expression(ParserState &parser, int minimum_precedence,
     ParseResult rhs = parse_unary_expression(parser);
     assert(rhs.result >= 0 && rhs.result <= 3);
     if (is_success(rhs) == false) {
-      return make_error(parser, "Invalid right hand side in binary expression ");
+      return make_error(parser, "Invalid right hand side in unary expression ");
     }
 
     ParseResult next_op = peek(parser, parse_binary_operator);
@@ -2252,24 +2265,55 @@ void expand_tokens(Token *token, Token *&subtokens0, Token *&subtokens1, Token *
   subtokens3 = subtokens[3];
 }
 
+struct TypeDeclaration;
+struct Expression;
+
+struct VariableDefinition {
+  //Token *tok_type;
+  //TypeDef2  *type;
+  TypeDeclaration *type;
+
+  SubString identifier;
+
+  //Token *tok_initial_value;
+  Expression *initial_value;
+
+  llvm::Value *llvm_value;
+};
+
+typedef VariableDefinition FieldDefinition;
+
+struct StructDefinition {
+  SubString identifier;
+
+  //Token *tok_fields;
+  FieldDefinition *fields;
+  int num_fields;
+};
+
+struct LLVMTypeDefinition {
+  SubString identifier;
+  SubString raw_llvm;
+};
+
 //
 //Type *emit_type_declaration(Token *declaration);
 //
-TypeDef *type_get_field_type(TypeDef *type, const SubString &name) {
-  assert(type->kind == STRUCT_TYPE);
-  //assert(type->base.type_definition->type == TOKEN_STRUCT_DEFINITION);
-  StructDef *struct_def = type->struct_def.type_definition;
-
-  //for(Token *field = type->base.type_definition->start; field != NULL; field = field->next) {
-  for(int i = 0; i < struct_def->num_fields; ++i) {
-    FieldDef &field = struct_def->fields[i];
-    if (substring_cmp(field.identifier, name))
-      return field.type;
-  }
-
-  halt();
-  return NULL;
-}
+//TypeDef *type_get_field_type(TypeDef *type, const SubString &name) {
+//  assert(type->kind == STRUCT_TYPE);
+//  //assert(type->base.type_definition->type == TOKEN_STRUCT_DEFINITION);
+//  StructDefinition *struct_def = type->struct_def.new_type_definition;
+//
+//  //for(Token *field = type->base.type_definition->start; field != NULL; field = field->next) {
+//  for(int i = 0; i < struct_def->num_fields; ++i) {
+//    FieldDefinition &field = struct_def->fields[i];
+//    if (substring_cmp(field.identifier, name))
+//      return field.type->type;
+//  }
+//
+//  halt();
+//  return NULL;
+//}
 
 //
 //Type *db_get_field_type(Type *type, const SubString &identifier) {
@@ -2600,10 +2644,10 @@ DeclarationResult struct_fill_fields(Token *struct_fields, FieldDef *&fields, in
 
 TypeDef *db_lookup_type_by_identifier(const SubString &identifier) {
   for(auto &type : g.db.types) {
-    if (type.kind == LLVM_TYPE && substring_cmp(type.llvm_def.type_definition.identifier, identifier) == true) {
+    if (type.kind == LLVM_TYPE && substring_cmp(type.llvm_def.new_type_definition->identifier, identifier) == true) {
       return &type;
     }
-    else if (type.kind == STRUCT_TYPE && substring_cmp(type.struct_def.type_definition->identifier, identifier) == true) {
+    else if (type.kind == STRUCT_TYPE && substring_cmp(type.struct_def.new_type_definition->identifier, identifier) == true) {
       return &type;
     }
     //else if (type.kind == TYPEDEF_TYPE) {
@@ -2629,22 +2673,21 @@ struct TypecheckResult {
 
 const TypecheckResult TYPECHECK_SUCCESS = {};
 
-struct Expression;
 //TypecheckResult typecheck_expression(Expression &expr);
-TypeDef *temp_expression_token_to_typedef(Token *expression_token);
+//TypeDef *temp_expression_token_to_typedef(Token *expression_token);
 
 
-bool compare_params_types_to_value_types(TypeDef **function_param_types, Token **call_values, int num_params) {
-  for(int i = 0; i < num_params; ++i) {
-    TypeDef *param_type = function_param_types[i];
-    Token *call_value = call_values[i];
-
-    TypeDef *call_type = temp_expression_token_to_typedef(call_value);
-    if (param_type != call_type) return false;
-  }
-
-  return true;
-}
+//bool compare_params_types_to_value_types(TypeDef **function_param_types, Token **call_values, int num_params) {
+//  for(int i = 0; i < num_params; ++i) {
+//    TypeDef *param_type = function_param_types[i];
+//    Token *call_value = call_values[i];
+//
+//    TypeDef *call_type = temp_expression_token_to_typedef(call_value);
+//    if (param_type != call_type) return false;
+//  }
+//
+//  return true;
+//}
 
 bool compare_params_types(TypeDef **function_param_types, Token **declaration_params, int num_params) {
   for(int i = 0; i < num_params; ++i) {
@@ -2792,7 +2835,6 @@ enum TypeDeclarationKind {
   TYPE_POINTER,
   TYPE_ARRAY,
 };
-struct TypeDeclaration;
 
 struct BaseType {
   SubString identifier;
@@ -2826,19 +2868,6 @@ struct TypeDeclaration {
   TypeDef *type;
 };
 
-
-struct VariableDefinition {
-  //Token *tok_type;
-  //TypeDef2  *type;
-  TypeDeclaration *type;
-
-  SubString identifier;
-
-  //Token *tok_initial_value;
-  Expression *initial_value;
-
-  llvm::Value *llvm_value;
-};
 
 enum ParamDefinitionType {
   PD_VARIABLE,
@@ -3053,6 +3082,9 @@ TypeDef *expression_get_type(Expression &expr) {
   case EXPR_NUMERIC_LITERAL:
     assert(expr.numeric_literal.type);
     return expr.numeric_literal.type;
+  case EXPR_FIELD_DEREFERENCE:
+    assert(expr.field_dereference.type);
+    return expr.field_dereference.type;
   default:
     halt();
   }
@@ -3172,21 +3204,6 @@ enum FunctionStatementType {
   //FS_FOR,
 };
 
-typedef VariableDefinition FieldDefinition;
-
-struct StructDefinition {
-  SubString identifier;
-
-  //Token *tok_fields;
-  FieldDefinition *fields;
-  int num_fields;
-};
-
-struct LLVMTypeDefinition {
-  SubString identifier;
-  SubString raw_llvm;
-};
-
 struct ReturnStatement {
   Expression *retval;
 };
@@ -3266,6 +3283,10 @@ bool is_void_pointer(TypeDef *type) {
   llvm::Type *llvm_type = llvm_get_type(type->pointer.base_type);
   if (llvm_type->isVoidTy()) return true;
   return false;
+}
+
+bool is_struct(TypeDef *type) {
+  return type->kind == STRUCT_TYPE;
 }
 
 bool is_pointer(TypeDef *type) {
@@ -3991,7 +4012,7 @@ TypecheckResult typecheck_array_dereference_expression(FunctionCall &expr){
 
 TypeDef *db_lookup_integer_type(int numBits) {
   for(auto &type : g.db.types) {
-    if (type.kind == LLVM_TYPE && substring_cmp(type.llvm_def.type_definition.identifier, "i32") == true) {
+    if (type.kind == LLVM_TYPE && substring_cmp(type.llvm_def.new_type_definition->identifier, "i32") == true) {
         return &type;
     }
   }
@@ -4067,6 +4088,46 @@ TypecheckResult typecheck_identifier(VariableReference &variable) {
   return TYPECHECK_SUCCESS;
 }
 
+int field_idx_lookup(TypeDef *type, const SubString &identifier) {
+  assert(type->kind == STRUCT_TYPE);
+  StructDefinition *struct_def = type->struct_def.new_type_definition;
+  for(int i = 0; i < struct_def->num_fields; ++i) {
+    FieldDefinition &field = struct_def->fields[i];
+    if (substring_cmp(field.identifier, identifier))
+      return i;
+  }
+
+  return -1;
+}
+
+TypecheckResult typecheck_field_dereference(FieldDereference &field_deref) {
+  TypecheckResult result_object = typecheck_expression(*field_deref.object);
+  if (is_success(result_object) == false) {
+    return result_object;
+  }
+
+  TypeDef *type_obj = expression_get_type(*field_deref.object);
+
+  // allow field deref via pointer.  ie turn . into ->
+  if (is_pointer(type_obj)) {
+    type_obj = type_obj->pointer.base_type;
+  }
+
+  if (is_struct(type_obj) == false) {
+    return make_error(UNKNOWN_LOCATION, "Expected struct type");
+  }
+
+  int index = field_idx_lookup(type_obj, field_deref.field_identifier);
+  if (index == -1) {
+    return make_error(UNKNOWN_LOCATION, "Unknown field");
+  }
+
+  field_deref.type = type_obj->struct_def.new_type_definition->fields[index].type->type;
+  assert(field_deref.type);
+
+  return TYPECHECK_SUCCESS;
+}
+
 TypecheckResult typecheck_expression(Expression &expr) {
   switch(expr.type) {
   //case EXPR_OPERATOR:
@@ -4079,6 +4140,8 @@ TypecheckResult typecheck_expression(Expression &expr) {
     return typecheck_string_literal(expr.string_literal);
   case EXPR_VARIABLE:
     return typecheck_identifier(expr.variable);
+  case EXPR_FIELD_DEREFERENCE:
+    return typecheck_field_dereference(expr.field_dereference);
   default:
     halt();
   }
@@ -4237,7 +4300,7 @@ TypecheckResult typecheck_struct_definition(StructDefinition &struct_def) {
   for(int i = 0; i < struct_def.num_fields; ++i) {
     VariableDefinition &field_def = struct_def.fields[i];
     TypecheckResult result = typecheck_variable_definition(field_def, false);
-    if (is_success(result)) return result;
+    if (is_success(result) == false) return result;
   }
 
   return TYPECHECK_SUCCESS;
@@ -4604,16 +4667,16 @@ bool is_numeric(const SubString &digits) {
   return true;
 }
 
-LLVMTypeResult llvm_emit_llvm_type(Token *type_definition) {
-  assert(type_definition->type == TOKEN_LLVM_TYPE_DEFINITION);
-  // todo vector types...
+LLVMTypeResult llvm_emit_llvm_type(LLVMTypeDefinition &llvm_def) {
+  //assert(type_definition->type == TOKEN_LLVM_TYPE_DEFINITION);
+  //// todo vector types...
 
-  Token *raw_llvm = type_definition->end;
-  assert(raw_llvm->type == TOKEN_RAW_LLVM_TYPE);
+  //Token *raw_llvm = type_definition->end;
+  //assert(raw_llvm->type == TOKEN_RAW_LLVM_TYPE);
   //assert(type_definition->substring.length > 0);
   //assert(type_definition->substring.start != NULL);
 
-  SubString trimmed_content = substring_trim(raw_llvm->substring);
+  SubString trimmed_content = substring_trim(llvm_def.raw_llvm);
 
   assert(trimmed_content.length > 0);
   assert(trimmed_content.start != NULL);
@@ -4626,7 +4689,7 @@ LLVMTypeResult llvm_emit_llvm_type(Token *type_definition) {
     digits.length--;
 
     if (is_numeric(digits) == false) {
-      return make_llvmtype_error(type_definition->location, ("Invalid integer size '" + to_cstring(digits) + "'").c_str()); 
+      return make_llvmtype_error(UNKNOWN_LOCATION, ("Invalid integer size '" + to_cstring(digits) + "'").c_str()); 
     }
 
     uint32_t size = (uint32_t)substring_to_uint64(digits);
@@ -4644,7 +4707,7 @@ LLVMTypeResult llvm_emit_llvm_type(Token *type_definition) {
     } else if (substring_cmp(trimmed_content, "fp128")) {
       return make_success(llvm::Type::getFP128Ty(*g.llvm.context));
     } else {
-      return make_llvmtype_error(type_definition->location, "Unknown llvm type '%s'", to_cstring(trimmed_content).c_str());
+      return make_llvmtype_error(UNKNOWN_LOCATION, "Unknown llvm type '%s'", to_cstring(trimmed_content).c_str());
     }
     break;
   }
@@ -4681,25 +4744,28 @@ static llvm::ArrayRef<llvm::Type *> to_array_ref(llvm::Type **types, int num_typ
 const int IS_PACKED = true;
 
 
-LLVMTypeResult llvm_emit_struct_type(Token *type_definition) {
-  assert(type_definition->type == TOKEN_STRUCT_DEFINITION);
-  Token *subtokens[2];
-  int num_subtokens = expand_tokens(type_definition, subtokens, 2);
-  Token *identifier = subtokens[0];
-  Token *struct_fields = subtokens[1];
+LLVMTypeResult llvm_emit_struct_type(StructDefinition &struct_def) {
+  //assert(type_definition->type == TOKEN_STRUCT_DEFINITION);
+  //Token *subtokens[2];
+  //int num_subtokens = expand_tokens(type_definition, subtokens, 2);
+  //Token *identifier = subtokens[0];
+  //Token *struct_fields = subtokens[1];
 
-  llvm::StringRef name = to_string_ref(identifier->substring);
+  llvm::StringRef name = to_string_ref(struct_def.identifier);
   llvm::StructType *type = llvm::StructType::create(*g.llvm.context, name);
 
   llvm::Type *fields[MAX_PARAMS];
   //for(int i = 0; i < struct_body.num_subtokens; ++i) {
-  int num_fields = 0;
-  for(Token *field = struct_fields->start->start; field != NULL; field = field->next) {
-    llvm::Type *field_type = llvm_emit_struct_field(field);
-    fields[num_fields++] = field_type;
+  //int num_fields = 0;
+  //for(Token *field = struct_fields->start->start; field != NULL; field = field->next) {
+  for(int i = 0; i < struct_def.num_fields; ++i) {
+    TypeDef *type = struct_def.fields[i].type->type;
+    llvm::Type *field_type = llvm_emit_type(type);
+    //llvm::Type *field_type = llvm_emit_struct_field(field);
+    fields[i] = field_type;
   }
 
-  llvm::ArrayRef<llvm::Type *> ref_fields = to_array_ref(fields, num_fields);
+  llvm::ArrayRef<llvm::Type *> ref_fields = to_array_ref(fields, struct_def.num_fields);
   type->setBody(ref_fields, IS_PACKED); 
 
   //llvm::Type *type = llvm::StructType::get(*llvm.context, ref_fields, IS_PACKED);
@@ -4721,12 +4787,12 @@ LLVMTypeResult llvm_emit_base_type(TypeDef *type) {
     result = make_success((llvm::Type *)NULL);
     break;
   case LLVM_TYPE:
-    result = llvm_emit_llvm_type(type->token);
+    result = llvm_emit_llvm_type(*type->llvm_def.new_type_definition);
     break;
   //case TOKEN_TYPEDEF_DEFINITION:
   //  return llvm_emit_typedef_type(type->base.type_definition);
   case STRUCT_TYPE:
-    result = llvm_emit_struct_type(type->token);
+    result = llvm_emit_struct_type(*type->struct_def.new_type_definition);
     break;
   //case TOKEN_ENUM_DEFINITION:
   //  return llvm_emit_enum_type(type->base.type_definition);
@@ -4964,19 +5030,6 @@ llvm::Value *emit_lvalue_intrinsic_function_call(FunctionCall &call) {
 
 }
 
-int field_idx_lookup(TypeDef *type, const SubString &identifier) {
-  assert(type->kind == STRUCT_TYPE);
-  StructDef *struct_def = type->struct_def.type_definition;
-  for(int i = 0; i < struct_def->num_fields; ++i) {
-    FieldDef *field = &struct_def->fields[i];
-    if (substring_cmp(field->identifier, identifier))
-      return field->index;
-  }
-
-  halt();
-  return -1;
-}
-
 llvm::Value *field_index(TypeDef *type, const SubString &identifier) {
   int field_idx = field_idx_lookup(type, identifier);
   return llvm::ConstantInt::get(llvm::IntegerType::get(*g.llvm.context, 32), field_idx, SIGNED);
@@ -5119,6 +5172,7 @@ llvm::Value *CreateSRem(llvm::Value *rhs_value, llvm::Value *lhs_value) {
 //}
 
 void emit_function_declaration(FunctionDefinition &function);
+EmitResult emit_external_function_declaration(ExternFunctionDeclaration &function);
 
 
 //llvm::Value *emit_rvalue_binary_op(Token *token) {
@@ -5372,10 +5426,13 @@ llvm::Value *emit_rvalue_function_call(FunctionCall &call) {
     }
   } else if (call.extern_function) {
     llvm_function = call.extern_function->llvm_function;
+    if (llvm_function == NULL) {
+      emit_external_function_declaration(*call.extern_function);
+      llvm_function = call.extern_function->llvm_function;
+    }
   } else {
     halt();
   }
-
 
   assert(llvm_function);
 
@@ -5425,8 +5482,33 @@ llvm::Value *emit_rvalue_float_literal(Token *float_literal) {
   return retval;
 }
 
+std::string emit_string_literal(SubString &literal) {
+  std::string str;
+  str.reserve(literal.length);
+
+  for(int i = 0; i < literal.length; ++i) {
+    if (literal.start[i] == '\\') {
+      assert(i+1 < literal.length);
+      switch(literal.start[i+1]) {
+      case 'n':
+        i++;
+        str += '\n';
+        break;
+      default:
+        halt();
+      }
+    } else {
+      str += literal.start[i];
+    }
+
+  }
+
+  return str;
+}
+
 llvm::Value *emit_rvalue_string_literal(StringLiteral &literal) {
-  llvm::StringRef stringRef = to_string_ref(literal.literal);
+  std::string str = emit_string_literal(literal.literal);
+  llvm::StringRef stringRef = str;
   llvm::Value *array_value = g.llvm.builder->CreateGlobalString(stringRef);
   return array_value;
 }
@@ -5820,7 +5902,7 @@ void emit_inline_llvm(llvm::Function *function, LLVMStatement &llvm_statement) {
   llvm::StringRef llvmAssembly(replaced_llvm_buffer);
   llvm::MemoryBuffer *memory = llvm::MemoryBuffer::getMemBuffer(llvmAssembly, "<string>", true);
   llvm::SMDiagnostic error;
-  g.llvm.module->dump();
+  //g.llvm.module->dump();
   bool retval = ParseAssembly2(memory, *g.llvm.module, error, function, g.llvm.builder->GetInsertBlock());
   assert(retval);
 }
@@ -5928,6 +6010,10 @@ EmitResult emit_function_definition(FunctionDefinition &function) {
 }
 
 EmitResult emit_external_function_declaration(ExternFunctionDeclaration &function) {
+  if (function.llvm_function != NULL) {
+    return EMIT_SUCCESS;
+  }
+
   db_push_scope();
 
   llvm::Type *retval_type = llvm_get_type(function.retval_type->type);
@@ -5994,7 +6080,7 @@ EmitResult emit_program(Program &program, const char *dest_file) {
     if(is_success(result) == false) return result;
   }
 
-  g.llvm.module->dump();
+  //g.llvm.module->dump();
 
   return EMIT_SUCCESS;
 }
@@ -6162,8 +6248,8 @@ DigestResult digest_struct_definition(Token *struct_declaration, ProgramStatemen
   statement.struct_def.fields = fields_alloc(statement.struct_def.num_fields);
 
   int i = 0;
-  for(Token *field_definition = tok_fields; field_definition != NULL; field_definition = field_definition->next) {
-    VariableDefinition &field_def = statement.struct_def.fields[i];
+  for(Token *field_definition = tok_fields->start; field_definition != NULL; field_definition = field_definition->next) {
+    VariableDefinition &field_def = statement.struct_def.fields[i++];
     DigestResult result = digest_field_definition(field_definition, field_def);
     if (is_success(result) == false) return result;
   }
@@ -6659,7 +6745,7 @@ CompileResult compile_program(const char *source_file) {
   EmitResult emit_result = emit_program(program, dest_file.c_str());
   if (is_success(emit_result) == false) return make_result(typecheck_result);
   
-  g.llvm.module->dump();
+  //g.llvm.module->dump();
   IRCompile(g.llvm);
 
   return COMPILE_SUCCESS;

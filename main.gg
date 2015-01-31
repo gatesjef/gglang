@@ -4,7 +4,25 @@
 
 import "prelude.gg";
 
-extern i32  printf(char*, ...);
+
+struct AStruct {
+  i32 a_field;
+  i32 another_field;
+}
+
+void test_struct() {
+  AStruct a_struct;
+  a_struct.a_field = 20;
+  a_struct.another_field = 30;
+
+  i32* a_struct_ptr = &a_struct.another_field;
+  *a_struct_ptr += a_struct.a_field;
+
+  printf("a_struct: %d, %d - %d\n", a_struct.a_field, a_struct.another_field, *a_struct_ptr);
+}
+
+extern i32 printf(char*, ...);
+
 void test_printf() {
   char *fmt = "A var string: %s\n";
   char *str = "varstring";
@@ -12,19 +30,19 @@ void test_printf() {
   
   printf("Hello world!\n");
 
-  //printf("A string: %s\n", "Hi!");
-  //printf("An int: %d\n", 22);
-  //i32 n = 44;
-  //printf("An int: %d\n", n);
+  printf("An int: %d\n", 22);
+  i32 n = 44;
+  printf("Another int: %d\n", n);
 
-   //printf ("Characters: %c %c \n", 'a', 65);
-   //printf ("Decimals: %d %ld\n", 1977, 650000L);
-   //printf ("Preceding with blanks: %10d \n", 1977);
-   //printf ("Preceding with zeros: %010d \n", 1977);
-   //printf ("Some different radices: %d %x %o %#x %#o \n", 100, 100, 100, 100, 100);
-   //printf ("floats: %4.2f %+.0e %E \n", 3.1416, 3.1416, 3.1416);
-   //printf ("Width trick: %*d \n", 5, 10);
-   //printf ("%s \n", "A string");
+  // from the c++ printf page
+  //printf ("Characters: %c %c \n", 'a', 65);
+  printf ("Decimals: %d %ld\n", 2, 1977435);
+  printf ("Preceding with blanks: %10d \n", 1977);
+  printf ("Preceding with zeros: %010d \n", 1977);
+  printf ("Some different radices: %d %x %o %#x %#o \n", 100, 100, 100, 100, 100);
+  //printf ("floats: %4.2f %+.0e %E \n", 3.1416, 3.1416, 3.1416);
+  printf ("Width trick: %*d \n", 5, 10);
+  printf ("%s \n", "A string");
 }
 
 i32 a_function() {
@@ -130,6 +148,7 @@ i32 main() {
   test_deref();
   test_string();
   test_printf();
+  test_struct();
   return retval;
 }
 
@@ -166,11 +185,14 @@ i32 main() {
 // pointer arithmatic
 // pointer deref w/ array syntax
 // variable function arguments
-///////////////////////////////////////
-// auto conversion of arrays passed to var args
 // properly handle \n in string literals
 // printf 
+// struct definition
+// struct field dereference
+///////////////////////////////////////
 
+// character literals
+// float literals
 // paren expressions
 // undefined initialization
 // array initialization
