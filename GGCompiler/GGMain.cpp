@@ -10,7 +10,7 @@ void print_result(const CompileResult &result) {
 }
 
 int main(int argc, char* argv[]) {
-  const char *source_file = "../main.gg";
+  const char *source_file = "..\\main.gg";
 
   //parse_program(source_file);
   //GGToken output = GGCompile(source_file);

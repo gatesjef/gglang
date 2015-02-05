@@ -44,5 +44,8 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/AsmParser/Parser.h"
 //#include "llvm/Parser.h"
+#include "llvm/Support/Casting.h"
+#include "llvm/ExecutionEngine/JIT.h"
+
 
 #include "GGUtils.h"

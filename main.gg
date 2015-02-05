@@ -4,6 +4,7 @@
 
 import "prelude.gg";
 
+i32 a_constant = 1+1;
 
 struct AStruct {
   i32 a_field;

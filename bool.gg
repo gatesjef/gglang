@@ -1,0 +1,59 @@
+// bool.gg
+
+llvm_type bool {
+  i8
+}
+
+bool false = to_bool(0);
+bool true  = !false;
+
+bool to_bool(i32 a) {
+  bool retval; 
+  llvm {
+    $retval = trunc $a to i8
+  }
+  return retval;
+}
+
+//bool operator ==(bool a, bool b) {
+//  bool retval; 
+//  llvm {
+//    %cmp_result = icmp eq $a, $b
+//    $retval = sext i1 cmp_result to i8
+//  }
+//  return retval;
+//}
+
+//bool operator !=(bool a, bool b) {
+//  bool retval; 
+//  llvm {
+//    %cmp_result = icmp neq $a, $b
+//    $retval = sext i1 cmp_result to i8
+//  }
+//  return retval;
+//}
+
+bool operator !(bool a) {
+  bool retval; 
+  llvm {
+    $retval = xor $a, -1
+  }
+  return retval;
+}
+
+bool operator &&(bool a, bool b) {
+  bool retval; 
+  llvm {
+    $retval = and $a, $b
+  }
+  return retval;
+}
+
+bool operator ||(bool a, bool b) {
+  bool retval; 
+  llvm {
+    $retval = or $a, $b
+  }
+  return retval;
+}
+

@@ -11,14 +11,14 @@ Current features (beyond c) include:
 * any order declaration
 * inline llvm
 * c foreign function interface
+* operator overloading
 
 Planned features include:
+* default initialization
+* type inference
 * incorperated build process
 * pass/return by reference
-* operator overloading
 * algebraic types
-* type inference
-* default initialization
 * named breaks
 * support for vector types (ie: 4 x i32)
  

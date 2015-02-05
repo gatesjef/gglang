@@ -1,7 +1,7 @@
 // GGParser.h
 
 struct FileLocation {
-  int file_index;
+  //int file_index;
   int line;
   int column;
 };
@@ -13,6 +13,7 @@ struct Error {
 
 enum ResultType {
   RESULT_SUCCESS,
+  RESULT_DEPENDANCY,
   RESULT_ERROR,
   RESULT_NONE,
 };
