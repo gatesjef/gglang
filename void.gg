@@ -1,0 +1,5 @@
+// void.gg
+
+llvm_type void {
+  void
+}

@@ -113,6 +113,25 @@ void test_array() {
   putchar(10);
 }
 
+void test_const_expr() {
+  i32[2+3] x;
+  x[3] = 76;
+  x[4] = 77;
+
+  putchar(x[1+2]);
+  putchar(x[2+2]);
+  putchar(10);
+
+  //i32 y = 20;
+  //i32[y] z;
+  //z[10] = 78;
+  //z[11] = 79;
+  //putchar(z[78]);
+  //putchar(z[y + 59]);
+  //putchar(10);
+ }
+
+
 llvm_type char {
   u8
 }
@@ -126,7 +145,6 @@ i32 to_i32(char a) {
 }
 
 void test_string() {
-
   char* str = "Guten Tag World!";
   putchar(to_i32(*str));
 
@@ -138,7 +156,6 @@ void test_string() {
   //putchar(to_i32("Hello World!"[3]));
 
   putchar(10);
-
 }
 
 i32 main() {
@@ -150,6 +167,7 @@ i32 main() {
   test_string();
   test_printf();
   test_struct();
+  test_const_expr();
   return retval;
 }
 
@@ -190,10 +208,18 @@ i32 main() {
 // printf 
 // struct definition
 // struct field dereference
-///////////////////////////////////////
+// const expression in array declaration
+// pass/return >64 bit structure type by reference
+// const expr that return structure types (const expr that return functions?)
 
-// character literals
+///////////////////////////////////////
 // float literals
+// const varaibles in array declaration
+// run directive enviroments
+// link sdl equivalent
+
+// do scope properly
+// character literals
 // paren expressions
 // undefined initialization
 // array initialization

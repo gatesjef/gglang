@@ -1,7 +1,9 @@
 // GGParser.h
 
+struct ParserState;
 struct FileLocation {
   //int file_index;
+  ParserState *parser;
   int line;
   int column;
 };

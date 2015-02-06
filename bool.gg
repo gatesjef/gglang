@@ -15,23 +15,23 @@ bool to_bool(i32 a) {
   return retval;
 }
 
-//bool operator ==(bool a, bool b) {
-//  bool retval; 
-//  llvm {
-//    %cmp_result = icmp eq $a, $b
-//    $retval = sext i1 cmp_result to i8
-//  }
-//  return retval;
-//}
+bool operator ==(bool a, bool b) {
+  bool retval; 
+  llvm {
+    %cmp_result = icmp eq $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
 
-//bool operator !=(bool a, bool b) {
-//  bool retval; 
-//  llvm {
-//    %cmp_result = icmp neq $a, $b
-//    $retval = sext i1 cmp_result to i8
-//  }
-//  return retval;
-//}
+bool operator !=(bool a, bool b) {
+  bool retval; 
+  llvm {
+    %cmp_result = icmp ne $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
 
 bool operator !(bool a) {
   bool retval; 

@@ -104,8 +104,13 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\bool.gg" />
+    <None Include="..\float.gg" />
+    <None Include="..\int.gg" />
     <None Include="..\main.gg" />
     <None Include="..\prelude.gg" />
+    <None Include="..\vec2.gg" />
+    <None Include="..\vec2i.gg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

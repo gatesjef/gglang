@@ -1,0 +1,116 @@
+// vec2i.gg
+
+struct vec2i {
+  i32 x;
+  i32 y;
+}
+
+vec2i V2I0 = V2I(0, 0);
+vec2i V2I1 = V2I(1, 1);
+vec2i V2IX = V2I(1, 0);
+vec2i V2IY = V2I(0, 1);
+
+vec2i V2I(i32 x, i32 y) {
+  vec2i retval;
+  retval.x = x;
+  retval.y = y;
+  return retval;
+}
+
+vec2i operator +(vec2i v1, vec2i v2) {
+  vec2i retval; // = undefined
+  retval.x = v1.x + v2.x;
+  retval.y = v1.y + v2.y;
+  return retval;
+}
+
+vec2i operator -(vec2i v1, vec2i v2) {
+  vec2i retval; // = undefined
+  retval.x = v1.x - v2.x;
+  retval.y = v1.y - v2.y;
+  return retval;
+}
+
+vec2i operator -(vec2i v) {
+  return V2I0 - v;
+}
+
+vec2i operator *(vec2i v1, i32 s) {
+  vec2i retval; // = undefined
+  retval.x = v1.x * s;
+  retval.y = v1.y * s;
+  return retval;
+}
+
+// TODO: error with function redefinition
+//vec2i operator *(i32 s, vec2i v1) {
+//  vec2i retval; // = undefined
+//  retval.x = v1.x * s;
+//  retval.y = v1.y * s;
+//  return retval;
+//}
+
+vec2i operator /(vec2i v1, i32 s) {
+  vec2i retval; // = undefined
+  retval.x = v1.x / s;
+  retval.y = v1.y / s;
+  return retval;
+}
+
+vec2i operator %(vec2i v1, i32 s) {
+  vec2i retval; // = undefined
+  retval.x = v1.x % s;
+  retval.y = v1.y % s;
+  return retval;
+}
+
+vec2i MulEl2(vec2i v1, vec2i v2) {
+  vec2i retval; // = undefined
+  retval.x = v1.x * v1.x;
+  retval.y = v1.y * v1.y;
+  return retval;
+}
+
+vec2i DivEl2(vec2i v1, vec2i v2) {
+  vec2i retval; // = undefined
+  retval.x = v1.x / v1.x;
+  retval.y = v1.y / v1.y;
+  return retval;
+}
+
+//i32 Dot(vec2i v1, vec2i v2) {
+//  return v1.x*v2.x + v1.y*v2.y;
+//}
+
+//bool operator ==(vec2i v1, vec2i v2) {
+//  return v1.x == v2.x && v1.y == v2.y;
+//}
+
+//bool operator !=(vec2i v1, vec2i v2) {
+//  return v1.x != v2.x || v1.y != v2.y;
+//}
+
+
+//void operator +=(vec2i& v1, const vec2i& v2);
+//vec2i operator +(const vec2i& v1, const vec2i& v2);
+//void operator -=(vec2i& v1, const vec2i& v2);
+//vec2i operator -(const vec2i& v1, const vec2i& v2);
+//void operator *=(vec2i& v, int f);
+//vec2i operator *(const vec2i& v, int f);
+//vec2i operator*(float f, const vec2i& v);
+////void operator /=(vec2i& v, float f); 
+////vec2i operator /(const vec2i& v, int f);
+//vec2i operator -(const vec2i& v);
+//vec2i MulEl2(const vec2i& v0, const vec2i& v1);
+//
+//int   Dot(const vec2i& v0,const vec2i& v1);
+//int   SqrLen(const vec2i& v0);
+//float Len(const vec2i& v0);
+//int   SqrDist(const vec2i& v0, const vec2i& v1);
+//float Dist(const vec2i& v0, const vec2i& v1);
+//vec2i Perp(const vec2i& v);
+//bool  RangeContains(const vec2i &r, float p);
+//void  RangeInflate(vec2i &v, float p);
+//vec2i RangeIntersect(const vec2i &r0, const vec2i &r1);
+//vec2i RangeUnion(const vec2i &r0, const vec2i &r1);
+//vec2i LerpInt(const vec2i& v1, const vec2i& v2, float t);

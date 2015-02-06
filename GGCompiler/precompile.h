@@ -20,7 +20,6 @@
 #include "llvm/CodeGen/LinkAllCodegenComponents.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/IRPrintingPasses.h"
-//#include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IRReader/IRReader.h"
 #include "llvm/MC/SubtargetFeature.h"
@@ -43,9 +42,8 @@
 #include "llvm/Target/TargetLibraryInfo.h"
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/AsmParser/Parser.h"
-//#include "llvm/Parser.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/ExecutionEngine/JIT.h"
-
+#include "llvm/ExecutionEngine/ExecutionEngine.h"
 
 #include "GGUtils.h"

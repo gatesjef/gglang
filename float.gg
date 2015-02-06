@@ -1,0 +1,107 @@
+// float.gg
+
+// f32
+llvm_type f32 { 
+  float 
+}
+
+f32 operator +(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fadd $a, $b
+  }
+  return x;
+}
+
+f32 operator -(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fsub $a, $b
+  }
+  return x;
+}
+
+f32 operator *(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fmul $a, $b
+  }
+  return x;
+}
+
+f32 operator /(f32 a, f32 b) {
+  f32 x;
+  llvm {
+    $x = fdiv $a, $b
+  }
+  return x;
+}
+
+// TODO: link in fmodf
+//f32 operator %(f32 a, f32 b) {
+//  f32 x;
+//  llvm {
+//    $x = frem $a, $b
+//  }
+//  return x;
+//}
+
+// TODO: need floating point literals
+// f32 operator -(f32 a) {
+//   return 0-a;
+// }
+
+bool operator ==(f32 a, f32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = fcmp oeq $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+bool operator !=(f32 a, f32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = fcmp one $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+bool operator <(f32 a, f32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = fcmp olt $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+bool operator <=(f32 a, f32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = fcmp ole $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+bool operator >(f32 a, f32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = fcmp ogt $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+bool operator >=(f32 a, f32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = fcmp oge $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
