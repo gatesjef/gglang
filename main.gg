@@ -19,12 +19,24 @@ statement goto(identifier lbl) {
 statement if (bool expr) {
   bool result = expr;
   llvm {
-    %i1 = trunc $result to i1
-    br i1 %i1, label %Then, label %Else
-    Then:
+    %i1# = trunc $result to i1
+    br i1 %i1#, label %Then#, label %Else#
+    Then#:
   }
+
   yield;
-  label(Else) {}
+
+  llvm {
+    br label %Resume#
+      Else#:
+  }
+
+  //yield elseClause;
+
+  llvm {
+    br label %Resume#
+    Resume#:
+  }
 }
 
 import "prelude.gg";
@@ -49,11 +61,11 @@ void test_if() {
   printf("post if-true\n");
 
   // TODO: multiple statements in same scope
-  //printf("pre if-false\n");
-  //if (false) {
-  //  printf("false!\n");
-  //}
-  //printf("post if-false\n");
+  printf("pre if-false\n");
+  if (false) {
+    printf("false!\n");
+  }
+  printf("post if-false\n");
 }
 
 void test_goto_raw() {
