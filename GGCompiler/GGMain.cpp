@@ -15,7 +15,7 @@ int main(int argc, char* argv[]) {
 
   if (argc == 2)
   {
-	  source_file = argv[1];
+    source_file = argv[1];
     exe_file = to_exe_file(source_file);
   }
 
