@@ -6938,14 +6938,38 @@ PipelineResult compile_pipelined(const char* source_file, const char *dest_file)
   return PIPELINE_SUCCESS;
 }
 
-CompileResult compile_program(const char *source_file) {
+std::string path_remove_extension(std::string source_file) {
+  std::string directory;
+  SubString filename;
+  path_split_directory_filename(source_file.c_str(), directory, filename);
+  std::string retval = directory.append(filename.start, filename.length);
+  size_t endPos = retval.find_last_of(".");
+  retval = retval.substr(0, endPos);
+  return retval;
+}
+
+std::string to_dest_file(std::string source_file) {
+  return path_remove_extension(source_file) + ".out";
+}
+
+std::string to_exe_file(std::string source_file) {
+  return path_remove_extension(source_file) + ".exe";
+}
+
+std::string to_obj_file(std::string source_file) {
+  return path_remove_extension(source_file) + ".obj";
+}
+
+CompileResult compile_program(std::string source_file, std::string exe_file) {
   std::string dest_file = to_dest_file(source_file);
   LLVMInit(dest_file.c_str());
 
-  PipelineResult result = compile_pipelined(source_file, dest_file.c_str());
+  PipelineResult result = compile_pipelined(source_file.c_str(), dest_file.c_str());
   if (is_success(result) == false) return make_result(result);
 
-  IRCompile(g.llvm);
+  std::string obj_file = to_obj_file(exe_file);
+
+  IRCompile(g.llvm, obj_file.c_str(), exe_file.c_str());
 
   return COMPILE_SUCCESS;
 }

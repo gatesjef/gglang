@@ -10,14 +10,21 @@ void print_result(const CompileResult &result) {
 }
 
 int main(int argc, char* argv[]) {
-  const char *source_file = "..\\main.gg";
+  std::string source_file = "..\\main.gg";
+  std::string exe_file = "..\\me.exe";
+
+  if (argc == 2)
+  {
+    source_file = argv[1];
+    exe_file = to_exe_file(source_file);
+  }
 
   //parse_program(source_file);
   //GGToken output = GGCompile(source_file);
   //GGLLVMEmitProgram(output);
   //return 0;
 
-  CompileResult result = compile_program(source_file);
+  CompileResult result = compile_program(source_file, exe_file);
   if (is_success(result) == false) {
     print_result(result);
   } else {

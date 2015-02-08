@@ -346,7 +346,7 @@ std::string exec(char* cmd) {
   return result;
 }
 
-void IRCompile(LLVMState &llvm)
+void IRCompile(LLVMState &llvm, const char* obj_file, const char* exe_file)
 {
   sys::PrintStackTraceOnErrorSignal();
   //PrettyStackTraceProgram X(argc, argv);
@@ -383,13 +383,14 @@ void IRCompile(LLVMState &llvm)
   //StartAfter = 
 
   FileType = TargetMachine::CGFT_ObjectFile;
-  OutputFilename = "../me.obj";
+  OutputFilename = obj_file;
 
   const char *name = "gg.exe";
   compileModule((char **)&name, *llvm.context, llvm.module);
 
   //system("link me.obj /ENTRY:main");
-  system("..\\mylink.bat");
+  std::string link_command = std::string("..\\mylink.bat ") + std::string(obj_file) + std::string(" ") + std::string(exe_file);
+  system(link_command.c_str());
 
   //exec("vcvars32.bat");
   //exec("link me.obj /ENTRY:main");

@@ -25,5 +25,6 @@ struct CompileResult {
   Error error;
 };
 
-CompileResult compile_program(const char *source_file);
+CompileResult compile_program(std::string source_file, std::string exe_file);
 bool is_success(const CompileResult &result);
+std::string to_exe_file(std::string source_file);
