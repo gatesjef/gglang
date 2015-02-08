@@ -132,10 +132,6 @@ void test_const_expr() {
  }
 
 
-llvm_type char {
-  u8
-}
-
 i32 to_i32(char a) {
   i32 x;
   llvm {
