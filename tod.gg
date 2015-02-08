@@ -1,11 +1,68 @@
 // tod.gg
 
 import "prelude.gg";
+link_library "SDL2/lib/x86/SDL2.lib";
 
 extern i32 printf(char*, ...);
+//extern i32 SDL_Init(u32 flags);
+extern i32 strcmp(char*, char*);
 
 i32 main() {
-  printf("Hello tod!\n");
-
-  return 0;
+  printf("Hello strcmp!\n");
 }
+
+//struct SDL_Rect {
+//    i32 x;
+//    i32 y;
+//    i32 w;
+//    i32 h;
+//}
+//
+//extern dllimport i32 SDL_Init(u32);
+//extern dllimport i32* SDL_CreateWindow(char*, i32, i32, i32, i32, u32);
+//extern dllimport i32* SDL_CreateRenderer(i32*, i32, u32);
+//extern dllimport i32 SDL_RenderFillRect(i32*, SDL_Rect*);
+//extern dllimport i32 SDL_RenderClear(i32*);
+//extern dllimport void SDL_RenderPresent(i32*);
+//extern dllimport void SDL_Delay(u32);
+//extern dllimport void SDL_DestroyRenderer(i32*);
+//extern dllimport void SDL_DestroyWindow(i32*);
+//extern dllimport void SDL_Quit(void);
+//
+////i32 SDL_INIT_VIDEO = 0x00000020;
+//i32 SDL_INIT_VIDEO = 32;
+//i32 SDL_WINDOW_SHOWN = 4;
+//i32 SDL_RENDERER_ACCELERATED = 2;
+//i32 SDL_RENDERER_PRESENTVSYNC = 4;
+//
+//i32 main() {
+//  printf("Hello tod!\n");
+//
+//	i32 result = SDL_Init(SDL_INIT_VIDEO);
+//
+//  i32* window = SDL_CreateWindow("smooth line", 100, 100, 640, 480, SDL_WINDOW_SHOWN);
+//
+//  //i32* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+//  i32* ren = SDL_CreateRenderer(win, -1, SDL_RENDERER_ACCELERATED + SDL_RENDERER_PRESENTVSYNC);
+//
+//  SDL_RenderClear(ren);
+//
+//  SDL_Rect rect;
+//  rect.x = 10;
+//  rect.y = 10;
+//  rect.w = 100;
+//  rect.h = 100;
+//  SDL_RenderFillRect(ren, &rect);
+//
+//  SDL_RenderPresent(ren);
+//
+//  SDL_Delay(2000);
+//
+//  SDL_DestroyRenderer(ren);
+//  SDL_DestroyWindow(window);
+//  SDL_Quit();
+//
+//	//SDL_assert(result >= 0);
+//
+//  return 0;
+//}

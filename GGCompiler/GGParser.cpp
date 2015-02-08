@@ -13,6 +13,8 @@ TOKEN_LIST_START,
   TOKEN_PROGRAM,
   TOKEN_FUNCTION_BODY,
   TOKEN_FUNCTION_PARAMS,
+  TOKEN_FUNCTION_DECLSPEC_LIST,
+  TOKEN_FUNCTION_DECLSPEC_DLL_IMPORT,
   TOKEN_FUNCTION_TYPE_PARAMS,
   TOKEN_FUNCTION_CALL_PARAMS,
   TOKEN_STRUCT_FIELDS,
@@ -21,6 +23,7 @@ TOKEN_LIST_END,
 
 TOKEN_TUPLE_START,
   TOKEN_IMPORT_STATEMENT,
+  TOKEN_LINK_LIBRARY_STATEMENT,
 
   TOKEN_STATEMENT_DEFINITION,
   TOKEN_STATEMENT_PARAMS,
@@ -284,6 +287,11 @@ enum TypeDefintitionKind {
 struct LLVMTypeDefinition {
   SubString identifier;
   SubString raw_llvm;
+};
+
+struct LinkLibraryDefinition {
+  SubString library_name;
+  ParserState *parser;
 };
 
 struct VariableDefinition {
@@ -558,6 +566,7 @@ enum ProgramStatementType {
   PS_STATEMENT,
   PS_STRUCT,
   PS_LLVM_TYPE,
+  PS_LINK_LIBRARY,
 };
 
 enum FunctionStatementType {
@@ -612,6 +621,7 @@ struct AssignmentStatement {
 
 struct ExternFunctionDeclaration {
   SubString identifier;
+  bool dll_import;
 
   TypeDeclaration *retval_type;
   ParamDefinition *params;
@@ -702,6 +712,7 @@ struct ProgramStatement {
     StatementDefinition statement;
     StructDefinition struct_def;
     LLVMTypeDefinition llvm_type;
+    LinkLibraryDefinition link_library;
   };
 };
 
@@ -714,6 +725,7 @@ struct G {
   //ParserState parser;
   SymbolDatabase db;
   LLVMState llvm;
+  std::string extra_link_options;
 } g;
 
 void db_push_scope() {
@@ -737,6 +749,11 @@ void db_pop_scope() {
   //  }
   //}
 
+}
+
+void add_extra_link_option(std::string link_option) {
+  g.extra_link_options += " ";
+  g.extra_link_options += link_option;
 }
 
 void LLVMInit(const char *dest_file) {
@@ -900,6 +917,10 @@ ParseResult parse_exact_error(ParserState &parser, const char *str, const char *
 
 ParseResult parse_import_exact(ParserState &parser) {
   return parse_exact(parser, "import");
+}
+
+ParseResult parse_link_library_exact(ParserState &parser) {
+  return parse_exact(parser, "link_library");
 }
 
 ParseResult parse_extern_exact(ParserState &parser) {
@@ -1139,6 +1160,19 @@ ParseResult parse_import_statement(ParserState &parser) {
   //}
 }
 
+ParseResult parse_link_library_statement(ParserState &parser) {
+  static const ParseFn statements[] = {
+    parse_link_library_exact,
+    parse_string_literal,
+    parse_semicolon,
+  };
+  static const int num_statements = ARRAYSIZE(statements);
+
+  ParseResult result = parse_sequence(parser, statements, num_statements);
+  ParseResult retval = make_result(parser, TOKEN_LINK_LIBRARY_STATEMENT, result);
+  return retval;
+}
+
 ParseResult parse_pointer_type(ParserState &parser, Token *base_type) {
   ParseResult result = parse_exact(parser, "*");
   if (is_success(result) == false) return result;
@@ -1335,6 +1369,18 @@ ParseResult parse_function_type_params(ParserState &parser) {
   ParseResult result = parse_zero_or_more_separated(parser, parse_param_type_declaration, ",");
   if (is_success(result) == false) return result;
   return make_result(parser, TOKEN_FUNCTION_PARAMS, result);
+}
+
+ParseResult parse_one_declspec_declaration(ParserState &parser) {
+  ParseResult result = parse_exact(parser, "dllimport");
+  if (is_success(result) == false) return result;
+  return make_result(parser, TOKEN_FUNCTION_DECLSPEC_DLL_IMPORT, result);
+}
+
+ParseResult parse_declspec_declaration(ParserState &parser) {
+  ParseResult result = parse_zero_or_more_separated(parser, parse_one_declspec_declaration, ",");
+  if (is_success(result) == false) return result;
+  return make_result(parser, TOKEN_FUNCTION_DECLSPEC_LIST, result);
 }
 
 ParseResult parse_statement_param(ParserState &parser) {
@@ -1912,6 +1958,7 @@ ParseResult parse_function_params(ParserState &parser) {
 ParseResult parse_extern_function_declaration(ParserState &parser) {
   ParseFn statments[] = {
     parse_extern_exact,
+    parse_declspec_declaration,
     parse_type_declaration,
     parse_function_identifier,
     parse_left_paren,
@@ -2419,6 +2466,7 @@ ParseResult parse_variable_or_function_definition(ParserState &parser) {
 ParseResult parse_program_statements(ParserState &parser) {
   static const ParseFn statements[] = {
     parse_import_statement,             // import
+    parse_link_library_statement,       // link_library
     parse_extern_function_declaration,  // extern void x(int y);
     parse_type_definition,              // struct ..., type ..., enum ..., llvm type
     parse_statement_definition,         // 
@@ -2522,12 +2570,12 @@ ParseResult parse_program(ParserState &parser, const char *source_file) {
   ParseResult retval = PARSE_EMPTY;
   //for(int i = 0; i < (int)g.parser.files.size(); ++i) {
     parser.file_data = file_read_all(source_file);
-    if (parser.file_data == NULL) {
-      return make_error(parser, "cannot open file %s", source_file);
-    }
     parser.current_char = parser.file_data;
     parser.current_line_start = parser.current_char;
     parser.current_line_number = 0;
+    if (parser.file_data == NULL) {
+      return make_error(parser, "cannot open file %s", source_file);
+    }
 
 
     //parser_set_file_index(g.parser, i);
@@ -4631,6 +4679,12 @@ PipelineResult emit_llvm_type_definition(LLVMTypeDefinition &llvm_def) {
   //return make_llvmtype_error(type_definition->location, "Uknown");
 }
 
+PipelineResult emit_link_library_statement(LinkLibraryDefinition &link_library_def) {
+  std::string link_option = std::string("\"") + link_library_def.parser->current_directory + to_cstring(link_library_def.library_name) + std::string("\"");
+  add_extra_link_option(link_option);
+  return PIPELINE_SUCCESS;
+}
+
 const int IS_PACKED = true;
 
 
@@ -5920,6 +5974,10 @@ PipelineResult emit_external_function_declaration(ExternFunctionDeclaration &fun
 
     llvm::StringRef name = to_string_ref(function.identifier);
     function.llvm_function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, g.llvm.module);
+    if (function.dll_import)
+    {
+      function.llvm_function->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLImportStorageClass);
+    }
   }
 
 
@@ -6545,11 +6603,30 @@ DigestResult digest_function_definition(Token *function_definition, ProgramState
   return DIGEST_SUCCESS;
 }
 
+DigestResult digest_declspec_declaration(Token *tok_declspec_list, ExternFunctionDeclaration &extern_function) {
+  for(Token *tok_declspec = tok_declspec_list->start; tok_declspec != NULL; tok_declspec = tok_declspec->next) {
+    switch (tok_declspec->type)
+    {
+    case TOKEN_FUNCTION_DECLSPEC_DLL_IMPORT:
+      extern_function.dll_import = true;
+      break;
+    default:
+      return make_digest_error(tok_declspec->location, "illegal declspec type");
+    }
+  }
+
+  return DIGEST_SUCCESS;
+}
+
 DigestResult digest_extern_function_declaration(Token *extern_function_declaration, ProgramStatement &statement) {
-  Token *tok_retval_type, *tok_identifier, *tok_params;
-  expand_tokens(extern_function_declaration, tok_retval_type, tok_identifier, tok_params);
+  Token *tok_retval_type, *tok_declspec_list, *tok_identifier, *tok_params;
+  expand_tokens(extern_function_declaration, tok_declspec_list, tok_retval_type, tok_identifier, tok_params);
 
   statement.type = PS_EXTERN_FUNCTION;
+
+  DigestResult declspec_result = digest_declspec_declaration(tok_declspec_list, statement.extern_function);
+  if (is_success(declspec_result) == false) return declspec_result;
+
   statement.extern_function.retval_type = type_decl_alloc(1);
   DigestResult retval_result = digest_type_declaration(tok_retval_type, *statement.extern_function.retval_type);
   if (is_success(retval_result) == false) return retval_result;
@@ -6567,6 +6644,17 @@ DigestResult digest_extern_function_declaration(Token *extern_function_declarati
       return make_digest_error(tok_param->location, "Varargs must be last parameter");
     }
   }
+
+  return DIGEST_SUCCESS;
+}
+
+DigestResult digest_link_library_declaration(ParserState &parser, Token *link_library_declaration, ProgramStatement &statement) {
+  Token *type_identifier;
+  expand_tokens(link_library_declaration, type_identifier);
+
+  statement.type = PS_LINK_LIBRARY;
+  statement.link_library.library_name = type_identifier->substring;
+  statement.import.parser = &parser;
 
   return DIGEST_SUCCESS;
 }
@@ -6623,6 +6711,10 @@ DigestResult digest_program(ParserState &parser, Token *program_token, Program &
       cur_statement.import.parser    = &parser;
       //cur_statement.import.
       break;
+    case TOKEN_LINK_LIBRARY_STATEMENT: {
+      DigestResult result = digest_link_library_declaration(parser, program_statement, cur_statement);
+      if (is_success(result) == false) return result;
+    }  break;
     default:
       halt();
     }
@@ -6776,6 +6868,8 @@ PipelineResult pipelined_emit(ProgramStatement &statement, CompilationProject &p
     return emit_global_variable_initialization(statement.varaible);
   case PS_IMPORT: 
     return emit_import_statement(statement.import, project, active_set);
+  case PS_LINK_LIBRARY: 
+    return emit_link_library_statement(statement.link_library);
   default:
     halt();
   }
@@ -6836,6 +6930,8 @@ PipelineResult pipelined_declaration(ProgramStatement &statement) {
     return emit_variable_declaration(statement.varaible);
   case PS_IMPORT:
     break;
+  case PS_LINK_LIBRARY:
+    break;
   default:
     halt();
   }
@@ -6858,6 +6954,8 @@ PipelineResult pipelined_typecheck(ProgramStatement &statement) {
   case PS_VARIABLE:
     return typecheck_variable_definition(statement.varaible);
   case PS_IMPORT:
+    break;
+  case PS_LINK_LIBRARY:
     break;
   default:
     halt();
@@ -7046,7 +7144,9 @@ CompileResult compile_program(std::string source_file, std::string exe_file) {
 
   std::string obj_file = to_obj_file(exe_file);
 
-  IRCompile(g.llvm, obj_file.c_str(), exe_file.c_str());
+  add_extra_link_option("\"C:\\Program Files (x86)\\Microsoft Visual Studio 11.0\\VC\\lib\\libcmtd.lib\"");
+
+  IRCompile(g.llvm, obj_file.c_str(), exe_file.c_str(), g.extra_link_options.c_str());
 
   return COMPILE_SUCCESS;
 }

@@ -7,4 +7,4 @@ struct LLVMState {
   llvm::ExecutionEngine *engine;
 };
 
-void IRCompile(LLVMState &llvm, const char* obj_file, const char* exe_file);
+void IRCompile(LLVMState &llvm, const char* obj_file, const char* exe_file, const char* extra_link_options);
