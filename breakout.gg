@@ -1,0 +1,88 @@
+// breakout.gg
+
+struct box2 {
+  vec2 p0;
+  vec2 p1;
+}
+
+box2 Box2(vec2 p0, vec2 p1) {
+  box2 retval;  
+  retval.p0 = p0;
+  retval.p1 = p1;
+  return retval;
+}
+
+vec2  SCREEN_SIZE= V2(800, 600);
+box2  SCREEN_BOX = Box2(V20, SCREEN_SIZE);
+
+vec2i BOARD_SIZE = V2I(10, 5);
+i32   NUM_TILES  = BOARD_SIZE.x * BOARD_SIZE.y;
+
+i32[NUM_TILES] gBoard;
+vec2  gPlayerPos = V2(500, SCREEN_SIZE.y/2);
+
+// TODO ENUM
+i32 TILE_FULL   = 0;
+i32 TILE_BROKEN = 1;
+
+void breakout_init() {
+}
+
+void breakout_update() {
+}
+
+void breakout_draw() {
+  //BOARD_SIZE := vec2i(10, 2);
+  //for (vec2i pos : BOARD_SIZE) {
+  //}
+}
+
+//range32 operator ..(i32 start, i32 end) {
+//  assert(start < end)
+//  return range32(start, end);
+//}
+//
+//statement for(i32 val : range32 r) {
+//  val = range.min;
+//  while(1) {
+//    if (val > range.max) {
+//      return;
+//    }
+//    yield;
+//  }
+//}
+//
+//statement for(vec2i val : vec2i size) {
+//  for(j : 0..size.y-1) {
+//    for(i : 0..size.x-1) {
+//      val = vec2i(i, j);
+//      yield;
+//    }
+//  }
+//}
+//
+//statement while(bool expr) c1 else c2 {
+//
+//}
+//
+//statement if(bool expr) c1 else c2 {
+//  llvm {
+//    %i1 = trunc $expr to i1
+//    br i1 %i1, label %Then, lable %Else
+//Then:
+//  }
+//  yield c1;
+//
+//  llvm {
+//  br %Continue;
+//Else:
+//  }
+//  yield c2;
+//  llvm {
+//  br %Continue;
+//Continue:
+//  }
+//
+//}
+//
+//

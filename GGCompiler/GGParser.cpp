@@ -22,9 +22,22 @@ TOKEN_LIST_END,
 TOKEN_TUPLE_START,
   TOKEN_IMPORT_STATEMENT,
 
-  TOKEN_IF_STATEMENT,
-  TOKEN_FOR_STATEMENT,
-  TOKEN_SWITCH_STATEMENT,
+  TOKEN_STATEMENT_DEFINITION,
+  TOKEN_STATEMENT_PARAMS,
+  TOKEN_STATEMENT_PARAM,
+  TOKEN_STATEMENT_BODY,
+  TOKEN_STATEMENT_CALL,
+  TOKEN_STATEMENT_CALL_PARAM,
+    TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER,
+    TOKEN_STATEMENT_CALL_PARAM_EXPRESSION,
+  TOKEN_STATEMENT_CALL_BODY,
+  TOKEN_YIELD_STATEMENT,
+
+  TOKEN_CONTINUE_STATEMENT,
+  TOKEN_BREAK_STATEMENT,
+  //TOKEN_IF_STATEMENT,
+  //TOKEN_FOR_STATEMENT,
+  //TOKEN_SWITCH_STATEMENT,
   TOKEN_RETURN_STATEMENT,
   TOKEN_EXPRESSION_STATEMENT,
   TOKEN_ASSIGMENT_STATEMENT,
@@ -319,6 +332,8 @@ enum Linkage {
 struct VariableDefinition;
 struct FunctionDefinition;
 struct ExternFunctionDeclaration;
+struct StatementDefinition;
+struct StatementCallParam;
 
 struct TypeDefinitionDBEntry {
   int scope;
@@ -327,9 +342,23 @@ struct TypeDefinitionDBEntry {
  //TypeDef *varaible;
 };
 
+struct StatementDefinitionDBEntry {
+  int scope;
+  StatementDefinition *statement;
+};
+
+enum VariableType {
+  VT_VARIABLE,
+  VT_STATEMENT_PARAM,
+};
+
 struct VaraibleDefinitionDBEntry {
   int scope;
+  SubString identifier;
+  VariableType type;
+
   VariableDefinition *variable;
+  StatementCallParam *statement_param;
 };
 
 struct FunctionDefinitionDBEntry {
@@ -342,6 +371,7 @@ struct SymbolDatabase {
   Table<FunctionDefinitionDBEntry> functions;
   Table<VaraibleDefinitionDBEntry> variables;
   Table<TypeDefinitionDBEntry> types;
+  Table<StatementDefinitionDBEntry> statements;
 
   int scope;
 };
@@ -354,6 +384,11 @@ enum ParamDefinitionType {
 struct ParamDefinition {
   ParamDefinitionType type;
   VariableDefinition variable;
+};
+
+struct StatementParam {
+  TypeDeclaration type;
+  SubString identifier;
 };
 
 struct FunctionStatement;
@@ -372,6 +407,7 @@ enum IntrinsicOperationType {
   //OP_CAST,
   OP_EXTEND_INTEGER,
   OP_EXTEND_FLOAT,
+  OP_EXTEND_INT_TO_FLOAT,
   OP_CAST_POINTER,
   OP_CAST_ARRAY_TO_POINTER,
 
@@ -399,6 +435,7 @@ struct FunctionDefinition {
 
   llvm::Function *llvm_function;
 };
+
 
 struct FunctionCall {
   SubString identifier;
@@ -449,6 +486,7 @@ enum ExpressionType {
   EXPR_VARIABLE,
   EXPR_STRING_LITERAL,
   EXPR_NUMERIC_LITERAL,
+  EXPR_FLOAT_LITERAL,
   //EXPR_BINARY,
 
   EXPR_DEFAULT_VALUE,
@@ -482,6 +520,7 @@ enum DependancyType {
   DEPENDANCY_TYPE,
   DEPENDANCY_FUNCTION,
   DEPENDANCY_VARIABLE,
+  DEPENDANCY_STATEMENT,
 };
 
 struct CompilationDependancy {
@@ -507,13 +546,15 @@ enum ProgramStatementType {
   PS_EXTERN_FUNCTION,
   PS_FUNCTION,
   PS_VARIABLE,
+  PS_STATEMENT,
   PS_STRUCT,
   PS_LLVM_TYPE,
 };
 
 enum FunctionStatementType {
+  FS_STATEMENT_CALL,
   FS_EXTERN_FUNCTION,
-  FS_FUNCTION,
+  //FS_FUNCTION,
   FS_EXPRESSION,
   FS_VARIABLE,
   FS_STRUCT,
@@ -569,6 +610,28 @@ struct ExternFunctionDeclaration {
   llvm::Function *llvm_function;
 };
 
+enum StatementCallParamType {
+  SCP_IDENTIFIER,
+  SCP_EXPRESSION,
+};
+
+struct StatementCallParam {
+  StatementCallParamType type;
+
+  union {
+    SubString identifier;
+  };
+};
+
+struct StatementCall {
+  SubString identifier;
+  StatementCallParam *params;
+  int num_params;
+
+  FunctionStatement *body;
+  int num_statement_body;
+};
+
 struct FunctionStatement {
   FunctionStatementType type;
 
@@ -576,6 +639,7 @@ struct FunctionStatement {
     ExternFunctionDeclaration extern_function;
     FunctionDefinition function;
     VariableDefinition varaible;
+    StatementCall statement_call;
     StructDefinition struct_def;
     LLVMTypeDefinition llvm_type;
     Expression *expression;
@@ -592,6 +656,30 @@ struct ImportStatement {
   ParserState *parser;
 };
 
+//struct StatementParam {
+//};
+
+//struct StatementBody {
+//};
+
+struct StatementYieldParam {
+  SubString keyword;
+  SubString identifier;
+};
+
+struct StatementDefinition {
+  SubString identifier;
+
+  StatementParam *statement_params;
+  int num_statement_params;
+
+  StatementYieldParam *statement_yield_params;
+  int num_statement_yield_params;
+
+  FunctionStatement *body;
+  int num_body_statements;
+};
+
 struct ProgramStatement {
   Token *token;
   ProgramStatementType type;
@@ -600,6 +688,7 @@ struct ProgramStatement {
     ExternFunctionDeclaration extern_function;
     FunctionDefinition function;
     VariableDefinition varaible;
+    StatementDefinition statement;
     StructDefinition struct_def;
     LLVMTypeDefinition llvm_type;
   };
@@ -804,6 +893,10 @@ ParseResult parse_import_exact(ParserState &parser) {
 
 ParseResult parse_extern_exact(ParserState &parser) {
   return parse_exact(parser, "extern");
+}
+
+ParseResult parse_statement_exact(ParserState &parser) {
+  return parse_exact(parser, "statement");
 }
 
 ParseResult parse_semicolon(ParserState &parser) {
@@ -1233,6 +1326,22 @@ ParseResult parse_function_type_params(ParserState &parser) {
   return make_result(parser, TOKEN_FUNCTION_PARAMS, result);
 }
 
+ParseResult parse_statement_param(ParserState &parser) {
+  static const ParseFn fns[] = { 
+    parse_type_declaration,
+    parse_identifier,
+  };
+  static const int num = ARRAYSIZE(fns);
+  ParseResult result = parse_sequence(parser, fns, num);
+  return make_result(parser, TOKEN_STATEMENT_PARAM, result);
+}
+
+ParseResult parse_statement_params(ParserState &parser) {
+  ParseResult result = parse_zero_or_more_separated(parser, parse_statement_param, ",");
+  if (is_success(result) == false) return result;
+  return make_result(parser, TOKEN_STATEMENT_PARAMS, result);
+}
+
 ParseResult parse_function_type(ParserState &parser, Token *retval_type) {
   {
     ParseResult result = parse_exact(parser, "(");
@@ -1267,6 +1376,10 @@ ParseResult parse_operator_identifier(ParserState &parser) {
   static const int num = ARRAYSIZE(fns);
   ParseResult retval = parse_sequence(parser, fns, num);
   return retval;
+}
+
+ParseResult parse_statement_identifier(ParserState &parser) {
+  return parse_identifier(parser);
 }
 
 ParseResult parse_function_identifier(ParserState &parser) {
@@ -1556,6 +1669,23 @@ ParseResult parse_assignment_operator(ParserState &parser) {
   return parse_first_table(parser, table, num_entries);
 }
 
+ParseResult parse_2char_assignment_operator(ParserState &parser) {
+  static const ParseTable table[] = {
+    "+=", TOKEN_ADD_ASSIGNMENT_OP,16,
+    "-=", TOKEN_SUB_ASSIGNMENT_OP,16,
+    "*=", TOKEN_MUL_ASSIGNMENT_OP,16,
+    "/=", TOKEN_DIV_ASSIGNMENT_OP,16,
+    "%=", TOKEN_REM_ASSIGNMENT_OP,16,
+    "&=", TOKEN_AND_ASSIGNMENT_OP,16,
+    "|=", TOKEN_OR_ASSIGNMENT_OP, 16,
+    "^=", TOKEN_XOR_ASSIGNMENT_OP,16,
+    "~=", TOKEN_NOT_ASSIGNMENT_OP,16,
+  };
+  static const int num_entries = ARRAYSIZE(table);
+
+  return parse_first_table(parser, table, num_entries);
+}
+
 ParseResult parse_unary_operator(ParserState &parser) {
   static const ParseTable table[] = {
     "++", TOKEN_PRE_INC_OP,     3,
@@ -1603,14 +1733,14 @@ ParseResult parse_binary_operator(ParserState &parser) {
     "==", TOKEN_CMP_EQ_OP,  9,
     "!=", TOKEN_CMP_NEQ_OP, 9,
 
-    "&",  TOKEN_BITWISE_AND_OP, 10,
-    "|",  TOKEN_BITWISE_OR_OP,  11,
+    //"&",  TOKEN_BITWISE_AND_OP, 10,
+    //"|",  TOKEN_BITWISE_OR_OP,  11,
     "^",  TOKEN_BITWISE_XOR_OP, 12,
     "&&", TOKEN_LOGICAL_AND_OP, 13,
     "||", TOKEN_LOGICAL_OR_OP,  14,
   };
 
-  ParseResult assignment_result = peek(parser, parse_assignment_operator);
+  ParseResult assignment_result = peek(parser, parse_2char_assignment_operator);
   if (is_success(assignment_result)) return PARSE_NONE;
 
   static const int num_entries = ARRAYSIZE(table);
@@ -1660,6 +1790,16 @@ int get_precedence(ParseResult &result) {
 }
 
 ParseResult parse_unary_expression(ParserState &parser) {
+  ParseResult lparen = parse_left_paren(parser);
+  if (is_success(lparen)) {
+    ParseResult expr   = parse_expression(parser);
+    if (!is_success(expr)) return expr;
+
+    ParseResult rparen = parse_right_paren(parser);
+    if (!is_success(rparen)) return make_error(parser, "expected ')'");
+    return expr;
+  }
+
   ParseResult op = parse_unary_operator(parser);
   if (is_error(op)) return op;
   if (is_none(op)) {
@@ -1681,17 +1821,21 @@ ParseResult parse_binary_expression(ParserState &parser, int minimum_precedence,
   ParseResult lhs = arg_lhs;
 
   while(1) {
+    int precedence;
+    {
+      ParseResult op = peek(parser, parse_binary_operator);
+      if (is_error(op)) return op;
+      if (is_none(op)) {
+        return lhs;
+      }
+
+      precedence = get_precedence(op);
+      if (precedence < minimum_precedence) {
+        return lhs;
+      }
+    }
+
     ParseResult op = parse_binary_operator(parser);
-    if (is_error(op)) return op;
-    if (is_none(op)) {
-      return lhs;
-    }
-
-    int precedence = get_precedence(op);
-    if (precedence < minimum_precedence) {
-      return lhs;
-    }
-
     ParseResult rhs = parse_unary_expression(parser);
     assert(rhs.result >= 0 && rhs.result <= 3);
     if (is_success(rhs) == false) {
@@ -1719,6 +1863,12 @@ ParseResult parse_binary_expression(ParserState &parser, int minimum_precedence,
 //ParseResult parse_binary_expression(Parser &parser) {
 //  parse_binary_expression(Parser &parser, 0, ) {
 //}
+
+//unary_expr = unary_op expr
+//
+//expr = (expr)
+//       unary_expr
+//       unary_expr bin_op expr
 
 ParseResult parse_expression(ParserState &parser) {
   ParseResult lhs = parse_unary_expression(parser);
@@ -1764,6 +1914,65 @@ ParseResult parse_extern_function_declaration(ParserState &parser) {
   return make_result(parser, TOKEN_EXTERNAL_FUNCTION_DECLARATION, result);
 }
 
+ParseResult parse_yield_exact(ParserState &parser) {
+  return parse_exact(parser, "yield");
+}
+
+ParseResult parse_yield_statement(ParserState &parser) {
+  ParseResult yield_result = parse_yield_exact(parser);
+  if (is_success(yield_result) == false) return yield_result;
+
+  ParseResult identifier_result = parse_identifier(parser);
+  if (is_error(identifier_result)) return identifier_result;
+
+  ParseResult semicolon_result = parse_semicolon(parser);
+  if (is_success(semicolon_result) == false) {
+    make_error(parser, "Expected ';' in yield statement");
+  }
+
+  return make_result(parser, TOKEN_YIELD_STATEMENT, identifier_result);
+}
+
+ParseResult parse_statement(ParserState &parser);
+
+ParseResult parse_statement_statement(ParserState &parser) {
+  ParseResult parse_yield = parse_yield_statement(parser);
+  if (is_success(parse_yield)) return parse_yield;
+  if (is_error(parse_yield)) return parse_yield;
+
+  return parse_statement(parser);
+}
+
+ParseResult parse_statement_body(ParserState &parser) {
+  ParseResult result = parse_zero_or_more(parser, parse_statement_statement);
+  return make_result(parser, TOKEN_STATEMENT_BODY, result);
+}
+
+ParseResult parse_left_brace(ParserState &parser) {
+  return parse_exact(parser, "{");
+}
+
+ParseResult parse_right_brace(ParserState &parser) {
+  return parse_exact(parser, "}");
+}
+
+ParseResult parse_statement_definition(ParserState &parser) {
+  ParseFn statments[] = {
+    parse_statement_exact,
+    parse_statement_identifier,
+    parse_left_paren,
+    parse_statement_params,
+    parse_right_paren,
+    parse_left_brace,
+    parse_statement_body,
+    parse_right_brace,
+  };
+  static const int num_statements = ARRAYSIZE(statments);
+
+  ParseResult result = parse_sequence(parser, statments, num_statements);
+  return make_result(parser, TOKEN_STATEMENT_DEFINITION, result);
+}
+
 ParseResult parse_typedef_exact(ParserState &parser) {
   return parse_exact(parser, "typedef");
 }
@@ -1796,14 +2005,6 @@ ParseResult parse_typedef_definition(ParserState &parser) {
 
 ParseResult parse_struct_exact(ParserState &parser) {
   return parse_exact(parser, "struct");
-}
-
-ParseResult parse_left_brace(ParserState &parser) {
-  return parse_exact(parser, "{");
-}
-
-ParseResult parse_right_brace(ParserState &parser) {
-  return parse_exact(parser, "}");
 }
 
 ParseResult parse_variable_definition_part_2(ParserState &parser, ParseResult &partial_results) {
@@ -2007,32 +2208,30 @@ ParseResult parse_inline_llvm(ParserState &parser) {
   return make_result(parser, TOKEN_INLINE_LLVM, result);
 }
 
-ParseResult parse_statement(ParserState &parser);
-
-ParseResult parse_if_statement (ParserState &parser) {
-  static const ParseFn statements[] = {
-    parse_if_exact,
-    parse_left_paren,
-    parse_expression,
-    parse_right_paren,
-    parse_statement,
-  };
-  static const int num_statements = ARRAYSIZE(statements);
-
-  ParseResult result = parse_sequence(parser, statements, num_statements);
-  if (is_success(result) == false) return result;
-
-  if (is_success(parse_exact(parser, "else"))) {
-    ParseResult else_statement = parse_statement(parser);
-    if (is_error(result)) return result;
-    else if (is_none(result)) {
-      return make_error(parser, "Missing statement for else clause");
-    }
-    append_result(result.start, else_statement);
-  }
-
-  return make_result(parser, TOKEN_IF_STATEMENT, result);
-}
+//ParseResult parse_if_statement (ParserState &parser) {
+//  static const ParseFn statements[] = {
+//    parse_if_exact,
+//    parse_left_paren,
+//    parse_expression,
+//    parse_right_paren,
+//    parse_statement,
+//  };
+//  static const int num_statements = ARRAYSIZE(statements);
+//
+//  ParseResult result = parse_sequence(parser, statements, num_statements);
+//  if (is_success(result) == false) return result;
+//
+//  if (is_success(parse_exact(parser, "else"))) {
+//    ParseResult else_statement = parse_statement(parser);
+//    if (is_error(result)) return result;
+//    else if (is_none(result)) {
+//      return make_error(parser, "Missing statement for else clause");
+//    }
+//    append_result(result.start, else_statement);
+//  }
+//
+//  return make_result(parser, TOKEN_IF_STATEMENT, result);
+//}
 
 ParseResult parse_assignment_statement(ParserState &parser) {
   static const ParseFn statements[] = {
@@ -2047,6 +2246,48 @@ ParseResult parse_assignment_statement(ParserState &parser) {
   return make_result(parser, TOKEN_ASSIGMENT_STATEMENT, result);
 }
 
+ParseResult parse_statement_call_param_identifier(ParserState &parser) {
+  ParseResult result = parse_identifier(parser);
+  if (is_success(result) == false) return result;
+  
+  return make_result(parser, TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER, result);
+}
+
+
+ParseResult parse_statement_call_params(ParserState &parser) {
+  static const ParseFn statements[] = {
+    //parse_expression,
+    parse_statement_call_param_identifier, 
+    //varaible_declaration,
+    //statement,
+  };
+  static const int num_statements = ARRAYSIZE(statements);
+
+  ParseResult result = parse_first_of_deep(parser, statements, num_statements);
+  return make_result(parser, TOKEN_STATEMENT_CALL_PARAM, result);
+}
+
+ParseResult parse_statement_call_body(ParserState &parser) {
+  ParseResult result = parse_zero_or_more(parser, parse_statement);
+  return make_result(parser, TOKEN_STATEMENT_CALL_BODY, result);
+}
+
+ParseResult parse_statement_call(ParserState &parser) {
+  static const ParseFn statements[] = {
+    parse_identifier,
+    parse_left_paren,
+    parse_statement_call_params,
+    parse_right_paren,
+    parse_left_brace,
+    parse_statement_call_body,
+    parse_right_brace,
+  };
+  static const int num_statements = ARRAYSIZE(statements);
+
+  ParseResult result = parse_sequence(parser, statements, num_statements);
+  return make_result(parser, TOKEN_STATEMENT_CALL, result);
+}
+
 ParseResult parse_function_definition(ParserState &parser);
 
 ParseResult parse_variable_or_function_definition(ParserState &parser);
@@ -2056,11 +2297,10 @@ ParseResult parse_statement(ParserState &parser) {
     static const ParseFn statements[] = {
       parse_block_statement,
       parse_return_statement,
-      //parse_for_statement,
-      parse_if_statement,
+      // parse_for_statement,
+      // parse_if_statement,
       // parse_switch_statement,
       parse_inline_llvm,
-
       parse_type_definition,
     };
     static const int num_statements = ARRAYSIZE(statements);
@@ -2072,6 +2312,7 @@ ParseResult parse_statement(ParserState &parser) {
 
   {
     static const ParseFn difficult_statements[] = {
+      parse_statement_call,
       parse_variable_or_function_definition,  // 
       parse_assignment_statement,             // 
       parse_expression_statement,             // 
@@ -2169,6 +2410,7 @@ ParseResult parse_program_statements(ParserState &parser) {
     parse_import_statement,             // import
     parse_extern_function_declaration,  // extern void x(int y);
     parse_type_definition,              // struct ..., type ..., enum ..., llvm type
+    parse_statement_definition,         // 
     parse_variable_or_function_definition,
   };
   static const int num_statements = ARRAYSIZE(statements);
@@ -2423,16 +2665,6 @@ TypeDeclaration *make_pointer_type(TypeDeclaration *base_type) {
   return pointer_type;
 }
 
-bool variable_exists(const SubString &identifier) {
-  for(auto &var : g.db.variables) {
-    if (substring_cmp(var.variable->identifier, identifier) == true) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 SubString to_substring(const char *str) {
   SubString retval;
   retval.start = str;
@@ -2621,6 +2853,7 @@ enum ConversionType {
   array_to_pointer,
   up_convert_integer,
   up_convert_float,
+  up_convert_int_to_float,
   pointer_to_void_pointer,
 };
 
@@ -2639,6 +2872,8 @@ TypeDeclaration *apply_conversion(ConversionType type, TypeDeclaration *source, 
   case up_convert_integer:
     return dest;
   case up_convert_float:
+    return dest;
+  case up_convert_int_to_float:
     return dest;
   case pointer_to_void_pointer:
     return dest;
@@ -2737,6 +2972,11 @@ bool can_convert(TypeDeclaration *source, TypeDeclaration *dest, ConversionChain
   if (is_float(source) && is_float(dest) && type_size(source) < type_size(dest)) {
     conversion.chain[conversion.num_conversions++] = up_convert_float;
     source = apply_conversion(up_convert_float, source, dest);
+  }
+
+  if (is_integer(source) && is_float(dest) && type_size(source) <= type_size(dest)) {
+    conversion.chain[conversion.num_conversions++] = up_convert_int_to_float;
+    source = apply_conversion(up_convert_int_to_float, source, dest);
   }
 
   if (is_pointer(source) && is_void_pointer(dest)) {
@@ -2846,9 +3086,16 @@ void create_conversion_expression(ConversionType type, Expression &expression, E
     expression.function_call.num_params = 1;
     expression.function_call.dest_type = dest_type;
     break;
+  case up_convert_int_to_float:
+    expression.type = EXPR_FUNCTION_CALL;
+    expression.function_call.intrinsic = OP_EXTEND_INT_TO_FLOAT;
+    expression.function_call.params = &original_expression;
+    expression.function_call.num_params = 1;
+    expression.function_call.dest_type = dest_type;
+    break;
   case pointer_to_void_pointer:
     expression.type = EXPR_FUNCTION_CALL;
-    expression.function_call.intrinsic = OP_EXTEND_FLOAT;
+    expression.function_call.intrinsic = OP_CAST_POINTER;
     expression.function_call.params = &original_expression;
     expression.function_call.num_params = 1;
     expression.function_call.dest_type = dest_type;
@@ -2869,9 +3116,30 @@ void apply_conversion(const ConversionChain &conversion, Expression &expression,
   }
 }
 
-void apply_conversions(ConversionChain *conversions, Expression *call_params, ParamDefinition *function_params, int num_params) {
+void apply_auto_varargs_conversion(TypeDeclaration *type, Expression &param) {
+  if (is_integer(type) && type_size(type) < 32) {
+    TypeDeclaration *i32_type = db_lookup_type_by_identifier(to_substring("i32"))->decl;
+    ConversionChain chain;
+    chain.chain[0] = up_convert_integer;
+    chain.num_conversions = 1;
+    apply_conversion(chain, param, i32_type);
+  }
+  if (is_float(type) && type_size(type) < 64) {
+    TypeDeclaration *f64_type = db_lookup_type_by_identifier(to_substring("f64"))->decl;
+    ConversionChain chain;
+    chain.chain[0] = up_convert_float;
+    chain.num_conversions = 1;
+    apply_conversion(chain, param, f64_type);
+  }
+}
+
+void apply_conversions(ConversionChain *conversions, TypeDeclaration **call_param_types, Expression *call_params, ParamDefinition *function_params, int num_params, int num_function_params) {
   for(int i = 0; i < num_params; ++i) {
-    if (conversions[i].num_conversions == 0) continue;
+
+    if (i >= num_function_params || (i == num_function_params-1 && function_params[i].type == PD_VARARGS)) {
+      apply_auto_varargs_conversion(call_param_types[i], call_params[i]);
+      continue;
+    } else if (conversions[i].num_conversions == 0) continue;
 
     assert(function_params[i].type == PD_VARIABLE);
     TypeDeclaration *dest_type = function_params[i].variable.type;
@@ -2884,7 +3152,8 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
   FunctionLookupResult error = {LOOKUP_ERROR};
   FunctionMatch best_match = {};
   ConversionChain conversions[MAX_PARAMS] = {};
-
+  int num_function_params;
+  
   for(FunctionDefinitionDBEntry &entry : g.db.functions) {
     if (entry.function) {
       if (entry.function->num_params && entry.function->params[entry.function->num_params-1].type == PD_VARARGS) {
@@ -2893,6 +3162,7 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
             FunctionLookupResult retval;
             retval.type = LOOKUP_FUNCTION;
             retval.function = entry.function;
+            num_function_params = entry.function->num_params;
             function_match_add(best_match, retval, conversions, num_params);
           }
         }
@@ -2902,6 +3172,7 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
             FunctionLookupResult retval;
             retval.type = LOOKUP_FUNCTION;
             retval.function = entry.function;
+            num_function_params = entry.function->num_params;
             //return retval;
             function_match_add(best_match, retval, conversions, num_params);
           }
@@ -2936,13 +3207,16 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
 
   if (best_match.result.type != LOOKUP_NONE) {
     ParamDefinition *function_params;
+    int num_function_params;
     if (best_match.result.type == LOOKUP_EXTERN_FUNCTION) {
       function_params = best_match.result.extern_function->params;
+      num_function_params = best_match.result.extern_function->num_params;
     } else {
       function_params = best_match.result.function->params;
+      num_function_params = best_match.result.function->num_params;
     }
 
-    apply_conversions(best_match.conversions, params, function_params, num_params);
+    apply_conversions(best_match.conversions, call_param_types, params, function_params, num_params, num_function_params);
     return best_match.result;
   }
 
@@ -3070,10 +3344,10 @@ PipelineResult db_lookup_function(const SubString &identifier, ParamDefinition *
   return PIPELINE_SUCCESS;
 }
 
-VariableDefinition *db_lookup_variable(const SubString &identifier) {
+VaraibleDefinitionDBEntry *db_lookup_variable(const SubString &identifier) {
   for(auto &varaible : g.db.variables) {
-    if (substring_cmp(varaible.variable->identifier, identifier)) {
-      return varaible.variable;
+    if (substring_cmp(varaible.identifier, identifier)) {
+      return &varaible;
     }
   }
   
@@ -3102,6 +3376,15 @@ PipelineResult make_variable_dependancy(SubString &identifier) {
   PipelineResult result;
   result.result = RESULT_DEPENDANCY;
   result.dependancy.type = DEPENDANCY_VARIABLE;
+  result.dependancy.identifier = identifier;
+  printf("dependancy %s\n", to_cstring(identifier).c_str());
+  return result;
+}
+
+PipelineResult make_statement_dependancy(SubString &identifier) {
+  PipelineResult result;
+  result.result = RESULT_DEPENDANCY;
+  result.dependancy.type = DEPENDANCY_STATEMENT;
   result.dependancy.identifier = identifier;
   printf("dependancy %s\n", to_cstring(identifier).c_str());
   return result;
@@ -3244,6 +3527,16 @@ PipelineResult typecheck_string_literal(StringLiteral &literal, TypeDeclaration 
 }
 
 
+PipelineResult typecheck_float_literal(NumericLiteral &literal, TypeDeclaration *&type) {
+  // TODO
+  type = integer_type_lookup("f32");
+  if (type == NULL) {
+    return make_type_dependancy(to_substring("f32"));
+  }
+
+  return PIPELINE_SUCCESS;
+}
+
 PipelineResult typecheck_integer_literal(NumericLiteral &literal, TypeDeclaration *&type) {
   // TODO
   type = integer_type_lookup("i32");
@@ -3256,9 +3549,20 @@ PipelineResult typecheck_integer_literal(NumericLiteral &literal, TypeDeclaratio
 
 PipelineResult typecheck_identifier(VariableReference &variable, TypeDeclaration *&type) {
   if (variable.variable == NULL) {
-    variable.variable = db_lookup_variable(variable.identifier);
-    if (variable.variable == NULL) {
+    VaraibleDefinitionDBEntry *entry = db_lookup_variable(variable.identifier);
+    if (entry == NULL) {
       return make_variable_dependancy(variable.identifier);
+    }
+
+    switch(entry->type) {
+    case VT_VARIABLE:
+      variable.variable = entry->variable;
+      break;
+    case VT_STATEMENT_PARAM:
+      halt();
+      break;
+    default:
+      halt();
     }
   }
 
@@ -3311,6 +3615,8 @@ PipelineResult typecheck_expression(Expression &expr, TypeDeclaration *&type) {
     return typecheck_function_call_expression(expr.function_call, type);
   case EXPR_NUMERIC_LITERAL:
     return typecheck_integer_literal(expr.numeric_literal, type);
+  case EXPR_FLOAT_LITERAL:
+    return typecheck_float_literal(expr.numeric_literal, type);
   case EXPR_STRING_LITERAL:
     return typecheck_string_literal(expr.string_literal, type);
   case EXPR_VARIABLE:
@@ -3365,8 +3671,24 @@ llvm::Constant *marshall_retval_into_base_constant(TypeDeclaration *type, void *
     assert(is_success(result));
     return llvm::ConstantInt::get(llvm_type, value);
   } else if (is_float(type)) {
-    //TODO
-    halt();
+    int size = type_size(type);
+    //int words = size+7 / 8;
+    llvm::Type *llvm_type;
+    PipelineResult result = emit_type_declaration(*type, llvm_type);
+    assert(is_success(result));
+    if (size == 32) {
+      float f = *(float *)retval;
+      return llvm::ConstantFP::get(llvm_type, (double)f);
+    } else if (size == 64) {
+      return llvm::ConstantFP::get(llvm_type, *(double *)retval);
+    } else {
+      halt();
+    }
+
+    //llvm::APInt value(size, words, (uint64_t*) retval);
+    //llvm::Type *llvm_type;
+    //PipelineResult result = emit_type_declaration(*type, llvm_type);
+    //assert(is_success(result));
   } else if (is_structure(type)) {
     llvm::Type *llvm_type;
     PipelineResult result = emit_type_declaration(*type, llvm_type);
@@ -3477,6 +3799,7 @@ PipelineResult emit_dependant_varaibles(Expression &expression) {
     //return emit_local_variable_definition(*expression.variable.variable);
     return emit_variable_initalization(*expression.variable.variable);
   } 
+  case EXPR_FLOAT_LITERAL:
   case EXPR_NUMERIC_LITERAL:
   case EXPR_FIELD_DEREFERENCE:
   case EXPR_STRING_LITERAL:
@@ -3626,9 +3949,11 @@ bool is_auto_type(TypeDeclaration *type) {
 
 PipelineResult typecheck_assignment(TypeDeclaration *type, Expression &expression);
 
-PipelineResult db_try_add_variable(VaraibleDefinitionDBEntry &new_variable) {
-  VariableDefinition *existing_variable = db_lookup_variable(new_variable.variable->identifier);
-  if (existing_variable) {
+PipelineResult db_try_add_variable(VaraibleDefinitionDBEntry &new_variable, const SubString &identifier) {
+  new_variable.identifier = identifier;
+
+  VaraibleDefinitionDBEntry *entry = db_lookup_variable(identifier);
+  if (entry) {
     return make_error(UNKNOWN_LOCATION, "Variable redefinition");
   }
 
@@ -3642,7 +3967,7 @@ PipelineResult db_add_variable_declaration(VariableDefinition &variable) {
   new_entry.scope = g.db.scope;
   new_entry.variable = &variable;
 
-  return db_try_add_variable(new_entry);
+  return db_try_add_variable(new_entry, variable.identifier);
 }
 
 PipelineResult typecheck_variable_definition(VariableDefinition &variable) {
@@ -3762,6 +4087,11 @@ ParamDefinition *params_alloc(int num_params) {
   return (ParamDefinition *)calloc(sizeof(ParamDefinition) * num_params, 1);
 }
 
+StatementParam *statement_params_alloc(int num_params) {
+  if (num_params == 0) return NULL;
+  return (StatementParam *)calloc(sizeof(StatementParam) * num_params, 1);
+}
+
 FunctionStatement *function_body_alloc(int num_params) {
   return (FunctionStatement *)calloc(sizeof(FunctionStatement) * num_params, 1);
 }
@@ -3780,6 +4110,139 @@ PipelineResult typecheck_function_params(ParamDefinition *params, int num_params
   return PIPELINE_SUCCESS;
 }
 
+StatementDefinition *db_lookup_statement(const SubString &identifier) {
+  for(auto &statement : g.db.statements) {
+    if (substring_cmp(statement.statement->identifier, identifier)) {
+      return statement.statement;
+    }
+  }
+  
+  return NULL;
+}
+
+PipelineResult typecheck_statement_call(StatementCall  &call) {
+  StatementDefinition *def = db_lookup_statement(call.identifier);
+  if (def == NULL) return make_statement_dependancy(call.identifier);
+
+  // TODO, check params
+
+  return PIPELINE_SUCCESS;
+}
+
+//PipelineResult emit_statement_statement(FunctionStatement &body_statement, StatementParam *params, int num_params) {
+//  switch(body_statement.type) {
+//    case FS_LLVM:
+//      emit_inline_llvm();
+//      break;
+//    default:
+//      halt();
+//  }
+//}
+
+PipelineResult emit_statement_call_param(StatementCallParam &call_param, StatementParam &statement_param) {
+  VaraibleDefinitionDBEntry entry = {};
+  entry.scope = g.db.scope;
+  entry.type = VT_STATEMENT_PARAM;
+  entry.statement_param = &call_param;
+  return db_try_add_variable(entry, statement_param.identifier);
+}
+
+class DBScope {
+public:
+  DBScope() {
+    db_push_scope();
+  }
+
+  ~DBScope() {
+    db_pop_scope();
+  }
+};
+
+PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param);
+
+
+PipelineResult emit_statement_call(llvm::Function *function, StatementCall &call, llvm::Value *retval_param) {
+  StatementDefinition *def = db_lookup_statement(call.identifier);
+  assert(def);
+
+  {
+    DBScope scope;
+
+    for(int i = 0; i < call.num_params; ++i) {
+      PipelineResult result = emit_statement_call_param(call.params[i], def->statement_params[i]);
+      if (is_success(result) == false) return result;
+    }
+
+    for(int i = 0; i < def->num_body_statements; ++i) {
+      FunctionStatement &body_statement = def->body[i];
+      PipelineResult result = emit_function_statement(function, body_statement, retval_param);
+      if (is_success(result) == false) return result;
+    }
+  }
+
+
+  return PIPELINE_SUCCESS;
+  
+
+  //halt();
+  //return make_error(UNKNOWN_LOCATION, "todo");
+}
+
+PipelineResult db_add_statement_declaration(StatementDefinition &def) {
+  StatementDefinitionDBEntry new_entry = {};
+  new_entry.scope = g.db.scope;
+  new_entry.statement = &def;
+
+  StatementDefinition *existing_variable = db_lookup_statement(def.identifier);
+  if (existing_variable) {
+    return make_error(UNKNOWN_LOCATION, "Statement redefinition");
+  }
+
+  g.db.statements.push_back(new_entry);
+
+  return PIPELINE_SUCCESS;
+}
+
+PipelineResult emit_statement_declaration(StatementDefinition &statement) {
+  return db_add_statement_declaration(statement);
+  //halt();
+  //return make_error(UNKNOWN_LOCATION, "todo");
+}
+
+PipelineResult emit_statement_definition(StatementDefinition &statement) {
+  //halt();
+  //return make_error(UNKNOWN_LOCATION, "todo");
+  return PIPELINE_SUCCESS;
+}
+
+PipelineResult typecheck_statement_param(StatementParam &param) {
+  return PIPELINE_SUCCESS;
+}
+
+PipelineResult typecheck_statement_statement(FunctionStatement &statement) {
+  return typecheck_function_statement(NULL, statement);
+}
+
+PipelineResult typecheck_statement_definition(StatementDefinition &statement) {
+
+  for(int i = 0; i < statement.num_statement_params; ++i) {
+    PipelineResult result = typecheck_statement_param(statement.statement_params[i]);
+    if (is_success(result) == false) return result;
+  }
+
+  for(int i = 0; i < statement.num_statement_yield_params; ++i) {
+    //typecheck_yield_param();
+    // TODO
+  }
+
+  for(int i = 0; i < statement.num_body_statements; ++i) {
+    PipelineResult result = typecheck_statement_statement(statement.body[i]);
+    if (is_success(result) == false) return result;
+  }
+
+  return PIPELINE_SUCCESS;
+}
+
 PipelineResult typecheck_function_statement(TypeDeclaration *retval_type, FunctionStatement &statement) {
   switch(statement.type) {
     //case TOKEN_IF_STATEMENT:
@@ -3788,6 +4251,8 @@ PipelineResult typecheck_function_statement(TypeDeclaration *retval_type, Functi
     //  return typecheck_for_statement(statement, result_retval);
     //case TOKEN_SWITCH_STATEMENT:
     //  return typecheck_switch_statement(statement, result_retval);
+  case FS_STATEMENT_CALL:
+    return typecheck_statement_call(statement.statement_call);
   case FS_RETURN:
     return typecheck_return_statement(retval_type, statement.return_statement);
   case FS_EXPRESSION: {
@@ -3880,17 +4345,6 @@ PipelineResult db_add_function_declaration(FunctionDefinition &function) {
   return db_try_add_function(new_entry);
 }
 
-class DBScope {
-public:
-  DBScope() {
-    db_push_scope();
-  }
-
-  ~DBScope() {
-    db_pop_scope();
-  }
-};
-
 PipelineResult typecheck_function_definition(FunctionDefinition &function) {
   //TypecheckResult result_retval = typecheck_type_declaration(*function.retval_type);
   //if (is_success(result_retval) == false) return result_retval;
@@ -3953,45 +4407,49 @@ PipelineResult typecheck_extern_function_declaration(ExternFunctionDeclaration &
   return PIPELINE_SUCCESS;
 }
 
-PipelineResult typecheck_program(Program &program) {
-  for(int i = 0; i < program.num_statements; ++i) {
-    ProgramStatement &cur_statement = program.statement[i];
-
-    switch(cur_statement.type) {
-    case PS_EXTERN_FUNCTION: {
-      PipelineResult result = typecheck_extern_function_declaration(cur_statement.extern_function);
-      if (is_success(result) == false) return result;
-    }  break;
-    //case TOKEN_TYPEDEF_DEFINITION:
-    case PS_LLVM_TYPE: {
-      //TypecheckResult result = typecheck_variable_definition(program_statement);
-      //if (is_success(result) == false) return result;
-    }  break;
-    case PS_VARIABLE: {
-      PipelineResult result = typecheck_variable_definition(cur_statement.varaible);
-      if (is_success(result) == false) return result;
-    }  break;
-    case PS_STRUCT: {
-      PipelineResult result = typecheck_struct_definition(cur_statement.struct_def);
-      if (is_success(result) == false) return result;
-    } break;
-    //case TOKEN_ENUM_DEFINITION:
-    //  typecheck_enum_definition(program_statement);
-    //  break;
-    case PS_FUNCTION: {
-      PipelineResult result = typecheck_function_definition(cur_statement.function);
-      if (is_success(result) == false) return result;
-    } break;
-
-    case PS_IMPORT:
-      break;
-    default:
-      halt();
-    }
-  }
-
-  return PIPELINE_SUCCESS;
-}
+//PipelineResult typecheck_program(Program &program) {
+//  for(int i = 0; i < program.num_statements; ++i) {
+//    ProgramStatement &cur_statement = program.statement[i];
+//
+//    switch(cur_statement.type) {
+//    case PS_EXTERN_FUNCTION: {
+//      PipelineResult result = typecheck_extern_function_declaration(cur_statement.extern_function);
+//      if (is_success(result) == false) return result;
+//    }  break;
+//    //case TOKEN_TYPEDEF_DEFINITION:
+//    case PS_LLVM_TYPE: {
+//      //TypecheckResult result = typecheck_variable_definition(program_statement);
+//      //if (is_success(result) == false) return result;
+//    }  break;
+//    case PS_VARIABLE: {
+//      PipelineResult result = typecheck_variable_definition(cur_statement.varaible);
+//      if (is_success(result) == false) return result;
+//    }  break;
+//    case PS_STRUCT: {
+//      PipelineResult result = typecheck_struct_definition(cur_statement.struct_def);
+//      if (is_success(result) == false) return result;
+//    } break;
+//    //case TOKEN_ENUM_DEFINITION:
+//    //  typecheck_enum_definition(program_statement);
+//    //  break;
+//    case PS_FUNCTION: {
+//      PipelineResult result = typecheck_function_definition(cur_statement.function);
+//      if (is_success(result) == false) return result;
+//    } break;
+//    case PS_STATEMENT: {
+//      PipelineResult result = typecheck_statment_definition(cur_statement.function);
+//      if (is_success(result) == false) return result;
+//    } break;
+//
+//    case PS_IMPORT:
+//      break;
+//    default:
+//      halt();
+//    }
+//  }
+//
+//  return PIPELINE_SUCCESS;
+//}
 
 llvm::StringRef to_string_ref(const SubString &substring) {
   return llvm::StringRef(substring.start, substring.length);
@@ -4521,6 +4979,16 @@ PipelineResult emit_rvalue_intrinsic_function_call(FunctionCall &call, llvm::Val
     value = g.llvm.builder->CreateFPExt(rhs, dest_type);
     return EMIT_SUCCESS;
   }
+  case OP_EXTEND_INT_TO_FLOAT: {
+    llvm::Value *rhs;
+    PipelineResult result = emit_rvalue_expression(call.params[0], rhs);
+    if (is_success(result) == false) return result;
+    llvm::Type  *dest_type;
+    PipelineResult result_type = emit_type_declaration(*call.dest_type, dest_type);
+    if (is_success(result_type) == false) return result_type;
+    value = g.llvm.builder->CreateSIToFP(rhs, dest_type);
+    return EMIT_SUCCESS;
+  }
   case OP_CAST_POINTER: {
     llvm::Value *rhs;
     PipelineResult result = emit_rvalue_expression(call.params[0], rhs);
@@ -4650,6 +5118,16 @@ PipelineResult emit_rvalue_function_call(FunctionCall &call, llvm::Value *&value
   return EMIT_SUCCESS;
 }
 
+PipelineResult emit_rvalue_float_literal(NumericLiteral &literal, llvm::Value *&value) {
+  TypeDeclaration *type = integer_type_lookup("f32"); //calc_integer_literal_type(integer_literal);
+  llvm::Type *llvm_type;
+  PipelineResult result = emit_type_declaration(*type, llvm_type);
+  if (is_success(result) == false) return result;
+  llvm::StringRef str = to_string_ref(literal.literal);
+  value = llvm::ConstantFP::get(llvm_type, str);
+  return EMIT_SUCCESS;
+}
+
 PipelineResult emit_rvalue_integer_literal(NumericLiteral &literal, llvm::Value *&value) {
   TypeDeclaration *type = integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
   int num_bits = type_size(type);
@@ -4721,6 +5199,8 @@ PipelineResult emit_rvalue_expression(Expression &expr, llvm::Value *&value) {
     } else {
       return emit_rvalue_intrinsic_function_call(expr.function_call, value);
     }
+  case EXPR_FLOAT_LITERAL:
+    return emit_rvalue_float_literal(expr.numeric_literal, value);
   case EXPR_NUMERIC_LITERAL:
     return emit_rvalue_integer_literal(expr.numeric_literal, value);
   case EXPR_STRING_LITERAL:
@@ -4767,7 +5247,7 @@ PipelineResult emit_local_variable_definition(VariableDefinition &variable) {
   return emit_variable_initalization(variable);
 }
 
-PipelineResult emit_global_constant_initialization(VariableDefinition &variable) {
+PipelineResult emit_global_variable_initialization(VariableDefinition &variable) {
   //TypeDef *type = variable.type->type;
   llvm::Type *llvm_type;
   PipelineResult result = emit_type_declaration(*variable.type, llvm_type);
@@ -4898,7 +5378,7 @@ LLVMReplacement matches_replacement(std::string &line, std::string &token_str, S
   const char *replacement = find_char(line.data(), end, '$');
   if (replacement == NULL) return LLVM_REPLACEMENT_NONE;
 
-  const char *space = find_any_of(replacement, end, ", \t\r\n\0");
+  const char *space = find_any_of(replacement, end, ":, \t\r\n\0");
   if (space == NULL) {
     space = end;
   }
@@ -4919,8 +5399,8 @@ LLVMReplacement matches_replacement(std::string &line, std::string &token_str, S
 
   if (equals == NULL) {
     const char *equals = find_char(line.data(), end, '=');
-    assert(equals);
-    //if (equals == NULL) return LLVM_REPLACEMENT_FIRST_EXPRESSION;
+    //assert(equals);
+    if (equals == NULL) return LLVM_REPLACEMENT_FIRST_EXPRESSION;
 
     const char *first_item = find_char(equals, end, '%');
     if (first_item == NULL) return LLVM_REPLACEMENT_FIRST_EXPRESSION;
@@ -4943,7 +5423,10 @@ int lines_replace_tokens(Lines &lines) {
     LLVMReplacement replacement = matches_replacement(line, token_str, token_substr, old_lhs, old_rhs);
     switch(replacement) {
     case LLVM_REPLACEMENT_ASSIGNMENT: {
-      VariableDefinition *variable = db_lookup_variable(token_substr);
+      //VariableDefinition *variable = db_lookup_variable(token_substr);
+      VaraibleDefinitionDBEntry *entry = db_lookup_variable(token_substr);
+      assert(entry->type == VT_VARIABLE);
+      VariableDefinition *variable = entry->variable;
       llvm::Type *type = variable->llvm_value->getType()->getContainedType(0);
       std::string type_str = to_llvm_type_str(type);
       std::string new_line = string_format("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
@@ -4956,19 +5439,30 @@ int lines_replace_tokens(Lines &lines) {
                                       } break;
     case LLVM_REPLACEMENT_FIRST_EXPRESSION: 
     case LLVM_REPLACEMENT_EXPRESSION: {
-      VariableDefinition *variable = db_lookup_variable(token_substr);
-      llvm::Type *type = variable->llvm_value->getType()->getContainedType(0);
-      std::string type_str = to_llvm_type_str(type);
-      std::string new_load  = string_format("%%%s%d = load %s* %%%s", token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
-      std::string new_line        = string_format("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
-      std::string new_line_no_type= string_format("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
-      if (replacement == LLVM_REPLACEMENT_EXPRESSION) new_line = new_line_no_type;
+      VaraibleDefinitionDBEntry *entry = db_lookup_variable(token_substr);
 
-      lines.erase(lines.begin() + i); //lines.remove(line);
-      lines.insert(lines.begin() + i, new_load); //lines.insert(new_load);
-      lines.insert(lines.begin() + i+1, new_line); //lines.insert(new_line);
+      if (entry->type == VT_STATEMENT_PARAM) {
+        assert(entry->statement_param->type == SCP_IDENTIFIER);
+        std::string replacement = to_cstring(entry->statement_param->identifier);
+        std::string new_line        = string_format("%s%s%s", old_lhs.c_str(), replacement.c_str(), old_rhs.c_str());
+        lines.erase(lines.begin() + i);
+        lines.insert(lines.begin() + i, new_line);
+      } else {
+        assert(entry->type == VT_VARIABLE);
+        VariableDefinition *variable = entry->variable;
+        llvm::Type *type = variable->llvm_value->getType()->getContainedType(0);
+        std::string type_str = to_llvm_type_str(type);
+        std::string new_load  = string_format("%%%s%d = load %s* %%%s", token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
+        std::string new_line        = string_format("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+        std::string new_line_no_type= string_format("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+        if (replacement == LLVM_REPLACEMENT_EXPRESSION) new_line = new_line_no_type;
+        lines.erase(lines.begin() + i); //lines.remove(line);
+        lines.insert(lines.begin() + i, new_load); //lines.insert(new_load);
+        lines.insert(lines.begin() + i+1, new_line); //lines.insert(new_line);
+      }
+
       ++i; //next = new_line;
-                                      } break;
+    } break;
     case LLVM_REPLACEMENT_NONE:
       ++i;
       break;
@@ -5053,7 +5547,7 @@ void replace_inline_llvm_bindings(SubString &raw_llvm, char replaced_llvm_buffer
 #include "llvm/AsmParser/Parser.h"
 #include "LLParser2.h"
 
-static bool ParseAssembly2(llvm::MemoryBuffer *F, llvm::Module &M, llvm::SMDiagnostic &Err, llvm::Function *Function, llvm::BasicBlock *BB) 
+static bool ParseAssembly2(llvm::MemoryBuffer *F, llvm::Module &M, llvm::SMDiagnostic &Err, llvm::Function *Function, llvm::BasicBlock *&BB) 
 {
   llvm::SourceMgr SM;
   //std::unique_ptr<MemoryBuffer> Buf = llvm::MemoryBuffer::getMemBuffer(F, false);
@@ -5077,12 +5571,19 @@ PipelineResult emit_inline_llvm(llvm::Function *function, LLVMStatement &llvm_st
   llvm::MemoryBuffer *memory = llvm::MemoryBuffer::getMemBuffer(llvmAssembly, "<string>", true);
   llvm::SMDiagnostic error;
   llvm::BasicBlock *block = g.llvm.builder->GetInsertBlock();
+  llvm::BasicBlock *old_block = block;
+
   //g.llvm.module->dump();
   bool retval = ParseAssembly2(memory, *g.llvm.module, error, function, block);
-  //assert(retval);
+
   if (retval == false) {
     return make_emit_error("error parsing inline assembly");
   }
+
+  if (block != old_block) {
+    g.llvm.builder->SetInsertPoint(block);
+  }
+  //assert(retval);
 
   return EMIT_SUCCESS;
 }
@@ -5152,6 +5653,58 @@ PipelineResult emit_function_declaration(FunctionDefinition &function) {
   }
 
   return PIPELINE_SUCCESS;
+}
+
+PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param)
+{
+  switch(statement.type) {
+  case FS_VARIABLE: {
+    PipelineResult result = emit_local_variable_definition(statement.varaible);
+    if (is_success(result) == false) { 
+      return result;
+    }
+  } break;
+  case FS_ASSIGNMENT: {
+    PipelineResult result = emit_assignment_statement(statement.assignment);
+    if (is_success(result) == false) {
+      return result;
+    }
+  } break;
+  case FS_STATEMENT_CALL: {
+    PipelineResult result = emit_statement_call(function, statement.statement_call, retval_param);
+    if (is_success(result) == false) {
+      return result;
+    }
+  } break;
+  case FS_RETURN: {
+    PipelineResult result = emit_return_statement(statement.return_statement, retval_param);
+    if (is_success(result) == false) {
+      return result;
+    }
+  } break;
+  case FS_EXPRESSION: {
+    //assert(subtoken.num_subtokens == 1);
+    llvm::Value *unused;
+    PipelineResult result = emit_rvalue_expression(*statement.expression, unused);
+    if (is_success(result) == false) {
+      return result;
+    }
+  } break;
+  case FS_LLVM: {
+    PipelineResult result = emit_inline_llvm(function, statement.llvm);
+    if (is_success(result) == false) {
+      return result;
+    }
+  } break;
+  default: 
+    halt();
+  }
+
+  return PIPELINE_SUCCESS;
+}
+
+bool variable_exists(const SubString &identifier) {
+  return db_lookup_variable(identifier) != NULL;
 }
 
 PipelineResult emit_function_definition(FunctionDefinition &function) {
@@ -5226,42 +5779,8 @@ PipelineResult emit_function_definition(FunctionDefinition &function) {
 
     for(int i = 0; i < function.num_statements; ++i) {
       FunctionStatement &statement = function.body[i];
-      switch(statement.type) {
-      case FS_VARIABLE: {
-        PipelineResult result = emit_local_variable_definition(statement.varaible);
-        if (is_success(result) == false) { 
-          return result;
-        }
-      } break;
-      case FS_ASSIGNMENT: {
-        PipelineResult result = emit_assignment_statement(statement.assignment);
-        if (is_success(result) == false) {
-          return result;
-        }
-      } break;
-      case FS_RETURN: {
-        PipelineResult result = emit_return_statement(statement.return_statement, retval_param);
-        if (is_success(result) == false) {
-          return result;
-        }
-      } break;
-      case FS_EXPRESSION: {
-        //assert(subtoken.num_subtokens == 1);
-        llvm::Value *unused;
-        PipelineResult result = emit_rvalue_expression(*statement.expression, unused);
-        if (is_success(result) == false) {
-          return result;
-        }
-      } break;
-      case FS_LLVM: {
-        PipelineResult result = emit_inline_llvm(function.llvm_function, statement.llvm);
-        if (is_success(result) == false) {
-          return result;
-        }
-      } break;
-      default: 
-        halt();
-      }
+      PipelineResult result = emit_function_statement(function.llvm_function, statement, retval_param);
+      if (is_success(result) == false) return result;
     }
   }
 
@@ -5329,37 +5848,37 @@ PipelineResult emit_external_function_declaration(ExternFunctionDeclaration &fun
   return EMIT_SUCCESS;
 }
 
-PipelineResult emit_program_statement(ProgramStatement &statement) {
-    switch(statement.type) {
-    case PS_STRUCT:
-    case PS_LLVM_TYPE:
-      // case PS_TYPEDEF:
-      break;
-    case PS_VARIABLE:
-      return emit_global_constant_initialization(statement.varaible);
-    case PS_FUNCTION:
-      return emit_function_definition(statement.function);
-    case PS_EXTERN_FUNCTION:
-      return emit_external_function_declaration(statement.extern_function);
-    case PS_IMPORT:
-      break;
-    default:
-      halt();
-    }
-
-  return EMIT_SUCCESS;
-}
-
-PipelineResult emit_program(Program &program, const char *dest_file) {
-  for(int i = 0; i < program.num_statements; ++i) {
-    PipelineResult result = emit_program_statement(program.statement[i]);
-    if(is_success(result) == false) return result;
-  }
-
-  //g.llvm.module->dump();
-
-  return EMIT_SUCCESS;
-}
+//PipelineResult emit_program_statement(ProgramStatement &statement) {
+//    switch(statement.type) {
+//    case PS_STRUCT:
+//    case PS_LLVM_TYPE:
+//      // case PS_TYPEDEF:
+//      break;
+//    case PS_VARIABLE:
+//      return emit_global_variable_initialization(statement.varaible);
+//    case PS_FUNCTION:
+//      return emit_function_definition(statement.function);
+//    case PS_EXTERN_FUNCTION:
+//      return emit_external_function_declaration(statement.extern_function);
+//    case PS_IMPORT:
+//      break;
+//    default:
+//      halt();
+//    }
+//
+//  return EMIT_SUCCESS;
+//}
+//
+//PipelineResult emit_program(Program &program, const char *dest_file) {
+//  for(int i = 0; i < program.num_statements; ++i) {
+//    PipelineResult result = emit_program_statement(program.statement[i]);
+//    if(is_success(result) == false) return result;
+//  }
+//
+//  //g.llvm.module->dump();
+//
+//  return EMIT_SUCCESS;
+//}
 
 //CompileResult make_result(const LLVMTypeResult &result) {
 //  CompileResult retval;
@@ -5639,6 +6158,12 @@ DigestResult digest_member(Token *expression, Expression &expr) {
   return DIGEST_SUCCESS;
 }
 
+DigestResult digest_float_literal(Token *expression, Expression &expr) {
+  expr.type = EXPR_FLOAT_LITERAL;
+  expr.numeric_literal.literal = expression->substring;
+  return DIGEST_SUCCESS;
+}
+
 DigestResult digest_integer_literal(Token *expression, Expression &expr) {
   expr.type = EXPR_NUMERIC_LITERAL;
   expr.numeric_literal.literal = expression->substring;
@@ -5678,6 +6203,8 @@ DigestResult digest_expression(Token *expression, Expression &expr) {
     return digest_integer_literal(expression, expr);
   case TOKEN_STRING_LITERAL:
     return digest_string_literal(expression, expr);
+  case TOKEN_FLOAT_LITERAL:
+    return digest_float_literal(expression, expr);
   case TOKEN_IDENTIFIER:
     return digest_identifier(expression, expr);
   default:
@@ -5731,6 +6258,57 @@ DigestResult digest_inline_llvm(Token *inline_llvm, FunctionStatement &statement
   return DIGEST_SUCCESS;
 }
 
+StatementCallParam *alloc_statement_call_params(int num_params) {
+  return (StatementCallParam *)calloc(num_params, sizeof(StatementCallParam));
+}
+
+DigestResult digest_statement_call_param(Token *tok_param, StatementCallParam &param) {
+  switch(tok_param->type) {
+  case TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER:
+    param.type = SCP_IDENTIFIER;
+    param.identifier = tok_param->start->substring;
+    break;
+  case TOKEN_STATEMENT_CALL_PARAM_EXPRESSION:
+    param.type = SCP_IDENTIFIER;
+    param.identifier = tok_param->start->substring;
+    break;
+  default:
+    halt();
+  }
+
+  return DIGEST_SUCCESS;
+}
+
+DigestResult digest_function_statement(Token *tok_function_statement, FunctionStatement &fn_statement);
+
+
+DigestResult digest_statement_call(Token *tok_statement, FunctionStatement &statement) {
+  Token *tok_identifier, *tok_params, *tok_body;
+  expand_tokens(tok_statement, tok_identifier, tok_params, tok_body);
+
+  statement.type = FS_STATEMENT_CALL;
+  statement.statement_call.identifier = tok_identifier->substring;
+  statement.statement_call.num_params = count_subtokens(tok_params);
+  statement.statement_call.params = alloc_statement_call_params(statement.statement_call.num_params);
+  int i = 0;
+  for(Token *tok_param = tok_params->start; tok_param != NULL; tok_param = tok_param->next) {
+    StatementCallParam &param = statement.statement_call.params[i++];
+    DigestResult param_result = digest_statement_call_param(tok_param, param);
+    if (is_success(param_result) == false) return param_result;
+  }
+
+  statement.statement_call.num_statement_body = count_subtokens(tok_body);
+  statement.statement_call.body = function_body_alloc(statement.statement_call.num_statement_body);
+  int j = 0;
+  for(Token *tok_fn_statement = tok_body->start; tok_fn_statement != NULL; tok_fn_statement = tok_fn_statement->next) {
+    FunctionStatement &fn_statement = statement.statement_call.body[j++];
+    DigestResult result = digest_function_statement(tok_fn_statement, fn_statement);
+    if (is_success(result) == false) return result;
+  }
+
+  return DIGEST_SUCCESS;
+}
+
 DigestResult digest_function_statement(Token *tok_function_statement, FunctionStatement &fn_statement) {
   switch(tok_function_statement->type) {
   case TOKEN_VARIABLE_DEFINITION:
@@ -5747,6 +6325,8 @@ DigestResult digest_function_statement(Token *tok_function_statement, FunctionSt
     return digest_expression(tok_function_statement->start, *fn_statement.expression);
   case TOKEN_INLINE_LLVM:
     return digest_inline_llvm(tok_function_statement, fn_statement);
+  case TOKEN_STATEMENT_CALL:
+    return digest_statement_call(tok_function_statement, fn_statement);
   //case TOKEN_FUNCTION_DEFINITION:
   //case TOKEN_LLVM_TYPE_DEFINITION:
   //case TOKEN_STRUCT_DEFINITION:
@@ -5774,6 +6354,48 @@ DigestResult make_digest_error(const FileLocation &location, const char *format_
   result.error.location = location;
   result.error.error_string = format_str;
   return result;
+}
+
+DigestResult digest_statement_param_definition(Token *tok_param, StatementParam &param) {
+  Token *tok_type, *tok_identifier;
+  expand_tokens(tok_param, tok_type, tok_identifier);
+
+  DigestResult result = digest_type_declaration(tok_type, param.type);
+  if (is_success(result) == false) return result;
+  
+  param.identifier = tok_identifier->substring;
+  return DIGEST_SUCCESS;
+}
+
+DigestResult digest_statement_definition(Token *tok_statement, ProgramStatement &statement) {
+  Token *tok_identifier, *tok_params, *tok_body;
+  expand_tokens(tok_statement, tok_identifier, tok_params, tok_body);
+
+  statement.type = PS_STATEMENT;
+  statement.statement.identifier = tok_identifier->substring;
+
+  statement.statement.num_statement_params = count_subtokens(tok_params);
+  statement.statement.statement_params = statement_params_alloc(statement.statement.num_statement_params);
+  int i = 0;
+  for(Token *tok_param = tok_params->start; tok_param != NULL; tok_param = tok_param->next) {
+    StatementParam &param = statement.statement.statement_params[i++];
+    DigestResult result = digest_statement_param_definition(tok_param, param);
+    if (is_success(result) == false) return result;
+  }
+
+  // TODO: multi-statements
+  statement.statement.num_statement_yield_params = 0;
+
+  statement.statement.num_body_statements = count_subtokens(tok_body);
+  statement.statement.body = function_body_alloc(statement.statement.num_body_statements);
+  int j = 0;
+  for(Token *tok_statement = tok_body->start; tok_statement != NULL; tok_statement = tok_statement->next) {
+    FunctionStatement &stmt = statement.statement.body[j++];
+    DigestResult result = digest_function_statement(tok_statement, stmt);
+    if (is_success(result) == false) return result;
+  }
+
+  return DIGEST_SUCCESS;
 }
 
 DigestResult digest_function_definition(Token *function_definition, ProgramStatement &statement) {
@@ -5885,6 +6507,10 @@ DigestResult digest_program(ParserState &parser, Token *program_token, Program &
       DigestResult result = digest_struct_definition(program_statement, cur_statement);
       if (is_success(result) == false) return result;
     } break;
+    case TOKEN_STATEMENT_DEFINITION: {
+      DigestResult result = digest_statement_definition(program_statement, cur_statement);
+      if (is_success(result) == false) return result;
+    } break;
     //case TOKEN_ENUM_DEFINITION:
     //  typecheck_enum_definition(program_statement);
     //  break;
@@ -5978,8 +6604,65 @@ PipelineResult emit_import_statement(ImportStatement &import, CompilationProject
   return PIPELINE_SUCCESS;
 }
 
+//statement while(bool expr) {
+//label Test;
+//  if (expr) {
+//    yield;
+//    goto Test;
+//  }
+//}
+//
+//for (statement initial, bool expr, statement inc) {
+//  initial;
+//  while(expr) {
+//    yield;
+//    inc;
+//  }
+//}
+//
+//statement if (bool expr) {
+//  llvm {
+//    %i1 = trunc $expr to i1
+//    br i1 %i1, label %Then, label %Else
+//  }
+//label Then;
+//  yield;
+//label Else;
+//}
+//
+//statement goto (identifier lbl) {
+//  llvm {
+//    br label $lbl
+//  }
+//};
+//
+//statement label (identifier label) {
+//  llvm {
+//$label:
+//  }
+//};
+//
+//statement if (bool expr) clauseThen else clauseElse {
+//  if (expr) {
+//    yield clauseThen;
+//    goto End;
+//  } 
+//  yield clauseElse;
+//label End;
+//}
+//
+//statement for(identifier x, identifier arr) {
+//  for(int i = 0, i < arr.length, ++i) {
+//    auto x = arr[i];
+//    yield;
+//  }
+//}
+
+
 PipelineResult pipelined_emit(ProgramStatement &statement, CompilationProject &project, CompilationSet &active_set) {
   switch(statement.type) {
+  case PS_STATEMENT:
+    return emit_statement_definition(statement.statement);
   case PS_FUNCTION:
     return emit_function_definition(statement.function);
   case PS_EXTERN_FUNCTION:
@@ -5991,7 +6674,7 @@ PipelineResult pipelined_emit(ProgramStatement &statement, CompilationProject &p
     return emit_struct_type_definition(statement.struct_def);
   case PS_VARIABLE:
     //return emit_variable_initalization(statement.varaible);
-    return emit_global_constant_initialization(statement.varaible);
+    return emit_global_variable_initialization(statement.varaible);
   case PS_IMPORT: 
     return emit_import_statement(statement.import, project, active_set);
   default:
@@ -6040,6 +6723,8 @@ PipelineResult emit_variable_declaration(VariableDefinition &definition) {
 
 PipelineResult pipelined_declaration(ProgramStatement &statement) {
   switch(statement.type) {
+  case PS_STATEMENT:
+    return emit_statement_declaration(statement.statement);
   case PS_FUNCTION:
     return emit_function_declaration(statement.function);
   case PS_EXTERN_FUNCTION:
@@ -6061,6 +6746,8 @@ PipelineResult pipelined_declaration(ProgramStatement &statement) {
 
 PipelineResult pipelined_typecheck(ProgramStatement &statement) {
   switch(statement.type) {
+  case PS_STATEMENT:
+    return typecheck_statement_definition(statement.statement);
   case PS_FUNCTION:
     return typecheck_function_definition(statement.function);
   case PS_EXTERN_FUNCTION:
