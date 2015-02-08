@@ -109,6 +109,7 @@
     <None Include="..\int.gg" />
     <None Include="..\main.gg" />
     <None Include="..\prelude.gg" />
+    <None Include="..\tod.gg" />
     <None Include="..\vec2.gg" />
     <None Include="..\vec2i.gg" />
   </ItemGroup>
