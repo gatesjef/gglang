@@ -140,7 +140,7 @@ namespace llvm {
       Context(m->getContext()), Lex(F, SM, Err, m->getContext()),
       M(m) {}
     bool Run();
-    bool RunSubFunction(Function *n, BasicBlock *BB);
+    bool RunSubFunction(Function *n, BasicBlock *&BB);
 
 
     LLVMContext &getContext() { return Context; }
@@ -395,6 +395,7 @@ namespace llvm {
     bool ParseFunctionBody(Function &Fn);
     bool ParseBasicBlock(PerFunctionState &PFS);
     bool ParseBasicBlock2(PerFunctionState &PFS, BasicBlock *BB);
+
 
     enum TailCallType { TCT_None, TCT_Tail, TCT_MustTail };
 

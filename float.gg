@@ -5,6 +5,10 @@ llvm_type f32 {
   float 
 }
 
+llvm_type f64 { 
+  double
+}
+
 f32 operator +(f32 a, f32 b) {
   f32 x;
   llvm {
@@ -101,6 +105,173 @@ bool operator >=(f32 a, f32 b) {
   llvm {
     %cmp_result = fcmp oge $a, $b
     $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+
+f32 Abs(f32 a) {
+  f32 retval; 
+  llvm {
+    $retval = call float @llvm.fabs.f32( $a )
+  }
+  return retval;
+}
+
+f32 Sqrt(f32 a) {
+  f32 retval; 
+  llvm {
+    $retval = call float @llvm.sqrt.f32( $a )
+  }
+  return retval;
+}
+
+//f32 Sin(f32 a) {
+//  f32 retval; 
+//  llvm {
+//    $retval = call float @llvm.sin.f32( $a )
+//  }
+//  return retval;
+//}
+
+f64 Sin(f64 a) {
+  f64 retval; 
+  llvm {
+    $retval = call double @llvm.sin.f64( $a )
+  }
+  return retval;
+}
+
+f32 Sin(f32 a) {
+  f64 sin = Sin(to_f64(a));
+  f32 retval = to_f32(sin);
+  return retval;
+}
+
+f64 Cos(f64 a) {
+  f64 retval; 
+  llvm {
+    $retval = call double @llvm.cos.f64( $a )
+  }
+  return retval;
+}
+
+f32 Cos(f32 a) {
+  return to_f32(Sin(to_f64(a)));
+}
+
+//f32 Pow(f32 a, f32 p) {
+//  f32 retval; 
+//  llvm {
+//    $retval = call float @llvm.pow.f32( $a, $p )
+//  }
+//  return retval;
+//}
+
+f64 Exp(f64 a) {
+  f64 retval; 
+  llvm {
+    $retval = call double @llvm.exp.f64( $a )
+  }
+  return retval;
+}
+
+f64 Ln(f64 a) {
+  f64 retval; 
+  llvm {
+    $retval = call double @llvm.log.f64( $a )
+  }
+  return retval;
+}
+
+f32 Exp(f32 a) {
+  return to_f32(Exp(to_f64(a)));
+}
+
+f32 Ln(f32 a) {
+  return to_f32(Ln(to_f64(a)));
+}
+
+//f32 Min(f32 a, f32 b) {
+//  f32 retval; 
+//  llvm {
+//    $retval = call float @llvm.minnum.f32( $a, $b )
+//  }
+//  return retval;
+//}
+
+//f32 Max(f32 a, f32 b) {
+//  f32 retval; 
+//  llvm {
+//    $retval = call float @llvm.maxnum.f32( $a, $b )
+//  }
+//  return retval;
+//}
+
+f32 Floor(f32 a) {
+  f32 retval; 
+  llvm {
+    $retval = call float @llvm.floor.f32( $a )
+  }
+  return retval;
+}
+
+f32 Ceil(f32 a) {
+  f32 retval; 
+  llvm {
+    $retval = call float @llvm.ceil.f32( $a )
+  }
+  return retval;
+}
+
+f32 Trunc(f32 a) {
+  f32 retval; 
+  llvm {
+    $retval = call float @llvm.trunc.f32( $a )
+  }
+  return retval;
+}
+
+//f64 Round(f64 a) {
+//  f64 retval; 
+//  llvm {
+//    $retval = call double @llvm.round.f64( $a )
+//  }
+//  return retval;
+//}
+//
+//f32 Round(f32 a) {
+//  return to_f32(Round(to_f64(a)));
+//}
+
+i32 to_i32(f32 a) {
+  i32 retval; 
+  llvm {
+    $retval = fptosi $a to i32
+  }
+  return retval;
+}
+
+f32 to_f32(i32 a) {
+  f32 retval; 
+  llvm {
+    $retval = sitofp $a to float
+  }
+  return retval;
+}
+
+f32 to_f32(f64 a) {
+  f32 retval; 
+  llvm {
+    $retval = fptrunc $a to float
+  }
+  return retval;
+}
+
+f64 to_f64(f32 a) {
+  f64 retval; 
+  llvm {
+    $retval = fpext $a to double
   }
   return retval;
 }

@@ -44,13 +44,28 @@ bool LLParser2::Run() {
 }
 
 /// Run: module ::= toplevelentity*
-bool LLParser2::RunSubFunction(Function *Fn, BasicBlock *BB) {
+bool LLParser2::RunSubFunction(Function *Fn, BasicBlock *&BB) {
   // Prime the lexer.
   Lex.Lex();
 
   PerFunctionState PFS(*this, *Fn, 0);
 
-  return ParseBasicBlock2(PFS, BB);
+  // If this basic block starts out with a name, remember it.
+  while (Lex.getKind() != lltok::Eof) {
+    std::string Name;
+    LocTy NameLoc = Lex.getLoc();
+    if (Lex.getKind() == lltok::LabelStr) {
+      Name = Lex.getStrVal();
+      Lex.Lex();
+
+      BB = PFS.DefineBB(Name, NameLoc);
+      if (!BB) return true;
+    }
+
+    if(ParseBasicBlock2(PFS, BB)) return true;
+  }
+
+  return true;
 }
 
 /// ValidateEndOfModule - Do final validity and sanity checks at the end of the

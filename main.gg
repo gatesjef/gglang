@@ -2,7 +2,66 @@
 // main.gg
 // Hello comments!
 
+statement label(identifier lbl) {
+  llvm {
+    br label %$lbl
+    $lbl:
+  }
+}
+
+statement goto(identifier lbl) {
+  llvm {
+    br label %$lbl
+    end_goto:
+  }
+}
+
+statement if (bool expr) {
+  bool result = expr;
+  llvm {
+    %i1 = trunc $result to i1
+    br i1 %i1, label %Then, label %Else
+    Then:
+  }
+  yield;
+  label(Else) {}
+}
+
 import "prelude.gg";
+
+extern i32 printf(char*, ...);
+
+void test_if() {
+  printf("pre if-true\n");
+  if (true) {
+    printf("true!\n");
+  }
+  printf("post if-true\n");
+
+  // TODO: multiple statements in same scope
+  //printf("pre if-false\n");
+  //if (false) {
+  //  printf("false!\n");
+  //}
+  //printf("post if-false\n");
+}
+
+void test_goto_raw() {
+  llvm {
+    br label %test
+test:
+    br label %test
+end_goto:
+  }
+}
+
+
+void test_goto() {
+  label(START) {}
+  printf("repeat\n");
+  goto(START) {}
+}
+
 
 i32 a_constant = 1+1;
 
@@ -22,8 +81,6 @@ void test_struct() {
   printf("a_struct: %d, %d - %d\n", a_struct.a_field, a_struct.another_field, *a_struct_ptr);
 }
 
-extern i32 printf(char*, ...);
-
 void test_printf() {
   char *fmt = "A var string: %s\n";
   char *str = "varstring";
@@ -41,7 +98,7 @@ void test_printf() {
   printf ("Preceding with blanks: %10d \n", 1977);
   printf ("Preceding with zeros: %010d \n", 1977);
   printf ("Some different radices: %d %x %o %#x %#o \n", 100, 100, 100, 100, 100);
-  //printf ("floats: %4.2f %+.0e %E \n", 3.1416, 3.1416, 3.1416);
+  printf ("floats: %4.2f %+.0e %E \n", 3.1416, 3.1416, 3.1416);
   printf ("Width trick: %*d \n", 5, 10);
   printf ("%s \n", "A string");
 }
@@ -154,6 +211,18 @@ void test_string() {
   putchar(10);
 }
 
+void test_float() {
+  f32 x = 1;
+  f32 y = 10.1;
+  f32 z = x+y;
+  printf("%.2f+%.2f=%.2f\n", x, y, z);
+}
+
+void test_math() {
+}
+
+import "breakout.gg";
+
 i32 main() {
   test_functions();
   i32 retval = test_i32();
@@ -164,8 +233,13 @@ i32 main() {
   test_printf();
   test_struct();
   test_const_expr();
+  test_float();
+  test_if();
+  //test_goto();
   return retval;
 }
+
+
 
 // end of line comments
 // functions definition
@@ -207,10 +281,12 @@ i32 main() {
 // const expression in array declaration
 // pass/return >64 bit structure type by reference
 // const expr that return structure types (const expr that return functions?)
+// float literals
+// paren expressions
 
 ///////////////////////////////////////
-// float literals
 // const varaibles in array declaration
+// array initializer
 // run directive enviroments
 // link sdl equivalent
 

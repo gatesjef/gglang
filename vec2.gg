@@ -1,4 +1,4 @@
-// Vec2.gg
+// vec2.gg
 
 struct vec2 {
   f32 x;
@@ -6,10 +6,10 @@ struct vec2 {
 }
 
 //TODO float literals
-//vec2 V20 = V2(0,0);
-//vec2 V21 = V2(1,1);
-//Vec2 V2X = V2(1,0);
-//Vec2 V2Y = V2(0,1);
+vec2 V20 = V2(0,0);
+vec2 V21 = V2(1,1);
+vec2 V2X = V2(1,0);
+vec2 V2Y = V2(0,1);
 
 vec2 V2(f32 x, f32 y) {
   vec2 retval; // = UNDEFINED;
@@ -17,6 +17,114 @@ vec2 V2(f32 x, f32 y) {
   retval.y = y;
   return retval;
 }
+
+
+vec2 operator +(vec2 v1, vec2 v2) {
+  vec2 retval; // = undefined
+  retval.x = v1.x + v2.x;
+  retval.y = v1.y + v2.y;
+  return retval;
+}
+
+vec2 operator -(vec2 v1, vec2 v2) {
+  vec2 retval; // = undefined
+  retval.x = v1.x - v2.x;
+  retval.y = v1.y - v2.y;
+  return retval;
+}
+
+vec2 operator -(vec2 v) {
+  return V20 - v;
+}
+
+vec2 operator *(vec2 v1, i32 s) {
+  vec2 retval; // = undefined
+  retval.x = v1.x * s;
+  retval.y = v1.y * s;
+  return retval;
+}
+
+// TODO: error with function redefinition
+//vec2 operator *(i32 s, vec2 v1) {
+//  vec2 retval; // = undefined
+//  retval.x = v1.x * s;
+//  retval.y = v1.y * s;
+//  return retval;
+//}
+
+vec2 operator /(vec2 v1, f32 s) {
+  vec2 retval; // = undefined
+  retval.x = v1.x / s;
+  retval.y = v1.y / s;
+  return retval;
+}
+
+//vec2 operator %(vec2 v1, f32 s) {
+//  vec2 retval; // = undefined
+//  retval.x = v1.x % s;
+//  retval.y = v1.y % s;
+//  return retval;
+//}
+
+vec2 MulEl2(vec2 v1, vec2 v2) {
+  vec2 retval; // = undefined
+  retval.x = v1.x * v1.x;
+  retval.y = v1.y * v1.y;
+  return retval;
+}
+
+vec2 DivEl2(vec2 v1, vec2 v2) {
+  vec2 retval; // = undefined
+  retval.x = v1.x / v1.x;
+  retval.y = v1.y / v1.y;
+  return retval;
+}
+
+f32 Dot(vec2 v1, vec2 v2) {
+  return v1.x*v2.x + v1.y*v2.y;
+}
+
+//bool operator ==(vec2 v1, vec2 v2) {
+//  return (v1.x == v2.x) && (v1.y == v2.y);
+//}
+
+//bool operator !=(vec2 v1, vec2 v2) {
+//  return (v1.x != v2.x) || (v1.y != v2.y);
+//}
+
+f32 SqrLen(vec2 v0) {
+  return Dot(v0, v0);
+}
+
+f32 SqrDist(vec2 v0, vec2 v1) {
+  return SqrLen(v1-v0);
+}
+
+f32 Len(vec2 v0) {
+  return Sqrt(SqrLen(v0));
+}
+
+f32 Dist(vec2 v0, vec2 v1) {
+  return Sqrt(SqrDist(v0, v1));
+}
+
+vec2 Norm(vec2 v0) {
+  return v0 / Len(v0);
+}
+
+f32 EPSILON = 0.0001;
+
+vec2 Norm_Safe(vec2 v0) {
+  return v0 / (Len(v0) + EPSILON);
+}
+
+//float Len(const vec2i& v0);
+//float Dist(const vec2i& v0, const vec2i& v1);
+//bool  RangeContains(const vec2i &r, float p);
+//void  RangeInflate(vec2i &v, float p);
+//vec2i RangeIntersect(const vec2i &r0, const vec2i &r1);
+//vec2i RangeUnion(const vec2i &r0, const vec2i &r1);
+//vec2i LerpInt(const vec2i& v1, const vec2i& v2, float t);
 
 //bool operator ==(const Vec2& v1, const Vec2& v2);
 //bool operator !=(const Vec2& v1, const Vec2& v2);

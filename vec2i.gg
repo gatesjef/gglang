@@ -78,37 +78,28 @@ vec2i DivEl2(vec2i v1, vec2i v2) {
   return retval;
 }
 
-//i32 Dot(vec2i v1, vec2i v2) {
-//  return v1.x*v2.x + v1.y*v2.y;
-//}
+i32 Dot(vec2i v1, vec2i v2) {
+  return v1.x*v2.x + v1.y*v2.y;
+}
 
-//bool operator ==(vec2i v1, vec2i v2) {
-//  return v1.x == v2.x && v1.y == v2.y;
-//}
+bool operator ==(vec2i Z1, vec2i v2) {
+  return (Z1.x == v2.x) && (Z1.y == v2.y);
+}
 
-//bool operator !=(vec2i v1, vec2i v2) {
-//  return v1.x != v2.x || v1.y != v2.y;
-//}
+bool operator !=(vec2i v1, vec2i v2) {
+  return (v1.x != v2.x) || (v1.y != v2.y);
+}
 
+i32 SqrLen(vec2i v0) {
+  return Dot(v0, v0);
+}
 
-//void operator +=(vec2i& v1, const vec2i& v2);
-//vec2i operator +(const vec2i& v1, const vec2i& v2);
-//void operator -=(vec2i& v1, const vec2i& v2);
-//vec2i operator -(const vec2i& v1, const vec2i& v2);
-//void operator *=(vec2i& v, int f);
-//vec2i operator *(const vec2i& v, int f);
-//vec2i operator*(float f, const vec2i& v);
-////void operator /=(vec2i& v, float f); 
-////vec2i operator /(const vec2i& v, int f);
-//vec2i operator -(const vec2i& v);
-//vec2i MulEl2(const vec2i& v0, const vec2i& v1);
-//
-//int   Dot(const vec2i& v0,const vec2i& v1);
-//int   SqrLen(const vec2i& v0);
+i32 SqrDist(vec2i v0, vec2i v1) {
+  return SqrLen(v1-v0);
+}
+
 //float Len(const vec2i& v0);
-//int   SqrDist(const vec2i& v0, const vec2i& v1);
 //float Dist(const vec2i& v0, const vec2i& v1);
-//vec2i Perp(const vec2i& v);
 //bool  RangeContains(const vec2i &r, float p);
 //void  RangeInflate(vec2i &v, float p);
 //vec2i RangeIntersect(const vec2i &r0, const vec2i &r1);
