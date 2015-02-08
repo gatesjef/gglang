@@ -1,0 +1,11 @@
+// tod.gg
+
+import "prelude.gg";
+
+extern i32 printf(char*, ...);
+
+i32 main() {
+  printf("Hello tod!\n");
+
+  return 0;
+}

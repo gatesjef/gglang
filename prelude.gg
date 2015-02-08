@@ -1,6 +1,10 @@
 ///////////////////////////////////
 // prelude.gg
 
+llvm_type char {
+  u8
+}
+
 
 import "void.gg";
 import "bool.gg";

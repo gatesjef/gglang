@@ -2744,7 +2744,7 @@ SubString op_to_substring(TokenType op) {
 //}
 
 PipelineResult make_error(const FileLocation &location, const char *format_str, ...) {
-  PipelineResult  result;
+  PipelineResult result = {0};
   result.result = RESULT_ERROR;
   result.error.location = location;
   FORMAT_ERROR_STRING(result.error.error_string, format_str);
@@ -5934,28 +5934,43 @@ CompileResult make_result(const PipelineResult &typecheck_result) {
   CompileResult retval;
   retval.result = typecheck_result.result;
   //retval.error = typecheck_result.error;
-  const std::string &file = typecheck_result.error.location.parser->filepath;
-  //const std::string &file = g.parser.files[typecheck_result.error.location.file_index];
-  int line = typecheck_result.error.location.line;
-  int col = typecheck_result.error.location.column;
-  retval.error.error_string = string_format("%s(%d:%d): %s\n", file.c_str(), line, col, typecheck_result.error.error_string.c_str());
+  if (typecheck_result.error.location.parser) {
+    const std::string &file = typecheck_result.error.location.parser->filepath;
+    //const std::string &file = g.parser.files[typecheck_result.error.location.file_index];
+    int line = typecheck_result.error.location.line;
+    int col = typecheck_result.error.location.column;
+    retval.error.error_string = string_format("%s(%d:%d): %s\n", file.c_str(), line, col, typecheck_result.error.error_string.c_str());
+  } else {
+    retval.error.error_string = string_format("error at unknown location: %s\n", typecheck_result.error.error_string.c_str());
+  }
   return retval;
 }
 
-std::string to_dest_file(const char *source_file) {
+std::string path_remove_extension(std::string source_file) {
   std::string directory;
   SubString filename;
-  path_split_directory_filename(source_file, directory, filename);
+  path_split_directory_filename(source_file.c_str(), directory, filename);
   std::string retval = directory.append(filename.start, filename.length);
   size_t endPos = retval.find_last_of(".");
   retval = retval.substr(0, endPos);
-  retval += ".out";
   return retval;
+}
+
+std::string to_dest_file(std::string source_file) {
+  return path_remove_extension(source_file) + ".out";
+}
+
+std::string to_exe_file(std::string source_file) {
+  return path_remove_extension(source_file) + ".exe";
+}
+
+std::string to_obj_file(std::string source_file) {
+  return path_remove_extension(source_file) + ".obj";
 }
 
 const CompileResult COMPILE_SUCCESS = {};
 
-void IRCompile(LLVMState &llvm);
+void IRCompile(LLVMState &llvm, const char* obj_file, const char* exe_file);
 
 DigestResult digest_default_value_expression(Expression &expr) {
   expr.type = EXPR_DEFAULT_VALUE;
@@ -6936,28 +6951,6 @@ PipelineResult compile_pipelined(const char* source_file, const char *dest_file)
   }
 
   return PIPELINE_SUCCESS;
-}
-
-std::string path_remove_extension(std::string source_file) {
-  std::string directory;
-  SubString filename;
-  path_split_directory_filename(source_file.c_str(), directory, filename);
-  std::string retval = directory.append(filename.start, filename.length);
-  size_t endPos = retval.find_last_of(".");
-  retval = retval.substr(0, endPos);
-  return retval;
-}
-
-std::string to_dest_file(std::string source_file) {
-  return path_remove_extension(source_file) + ".out";
-}
-
-std::string to_exe_file(std::string source_file) {
-  return path_remove_extension(source_file) + ".exe";
-}
-
-std::string to_obj_file(std::string source_file) {
-  return path_remove_extension(source_file) + ".obj";
 }
 
 CompileResult compile_program(std::string source_file, std::string exe_file) {
