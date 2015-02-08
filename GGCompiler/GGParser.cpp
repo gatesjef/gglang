@@ -28,8 +28,8 @@ TOKEN_TUPLE_START,
   TOKEN_STATEMENT_BODY,
   TOKEN_STATEMENT_CALL,
   TOKEN_STATEMENT_CALL_PARAM,
-    TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER,
-    TOKEN_STATEMENT_CALL_PARAM_EXPRESSION,
+    //TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER,
+    //TOKEN_STATEMENT_CALL_PARAM_EXPRESSION,
   TOKEN_STATEMENT_CALL_BODY,
   TOKEN_YIELD_STATEMENT,
 
@@ -334,6 +334,7 @@ struct FunctionDefinition;
 struct ExternFunctionDeclaration;
 struct StatementDefinition;
 struct StatementCallParam;
+struct StatementParam;
 
 struct TypeDefinitionDBEntry {
   int scope;
@@ -349,6 +350,7 @@ struct StatementDefinitionDBEntry {
 
 enum VariableType {
   VT_VARIABLE,
+  VT_STATEMENT_CALL_PARAM,
   VT_STATEMENT_PARAM,
 };
 
@@ -358,7 +360,8 @@ struct VaraibleDefinitionDBEntry {
   VariableType type;
 
   VariableDefinition *variable;
-  StatementCallParam *statement_param;
+  StatementCallParam *statement_call_param;
+  StatementParam *statement_param;
 };
 
 struct FunctionDefinitionDBEntry {
@@ -451,9 +454,15 @@ struct FunctionCall {
 
 };
 
+enum VariableReferenceType {
+  VRT_VARIABLE,
+  VRT_STATEMENT_EXPR,
+};
+
 struct VariableReference {
   SubString identifier;
 
+  VariableReferenceType type;
   VariableDefinition *variable;
 };
 
@@ -562,6 +571,7 @@ enum FunctionStatementType {
   FS_RETURN,
   FS_LLVM,
   FS_ASSIGNMENT,
+  FS_YIELD,
   //FS_IF,
   //FS_FOR,
 };
@@ -620,6 +630,7 @@ struct StatementCallParam {
 
   union {
     SubString identifier;
+    Expression *expression;
   };
 };
 
@@ -1922,15 +1933,15 @@ ParseResult parse_yield_statement(ParserState &parser) {
   ParseResult yield_result = parse_yield_exact(parser);
   if (is_success(yield_result) == false) return yield_result;
 
-  ParseResult identifier_result = parse_identifier(parser);
-  if (is_error(identifier_result)) return identifier_result;
+  //ParseResult identifier_result = parse_identifier(parser);
+  //if (is_error(identifier_result)) return identifier_result;
 
   ParseResult semicolon_result = parse_semicolon(parser);
   if (is_success(semicolon_result) == false) {
     make_error(parser, "Expected ';' in yield statement");
   }
 
-  return make_result(parser, TOKEN_YIELD_STATEMENT, identifier_result);
+  return make_result(parser, TOKEN_YIELD_STATEMENT, PARSE_EMPTY);
 }
 
 ParseResult parse_statement(ParserState &parser);
@@ -2246,18 +2257,18 @@ ParseResult parse_assignment_statement(ParserState &parser) {
   return make_result(parser, TOKEN_ASSIGMENT_STATEMENT, result);
 }
 
-ParseResult parse_statement_call_param_identifier(ParserState &parser) {
-  ParseResult result = parse_identifier(parser);
-  if (is_success(result) == false) return result;
-  
-  return make_result(parser, TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER, result);
-}
+//ParseResult parse_statement_call_param_identifier(ParserState &parser) {
+//  ParseResult result = parse_identifier(parser);
+//  if (is_success(result) == false) return result;
+//  
+//  return make_result(parser, TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER, result);
+//}
 
 
 ParseResult parse_statement_call_params(ParserState &parser) {
   static const ParseFn statements[] = {
-    //parse_expression,
-    parse_statement_call_param_identifier, 
+    parse_expression,
+    //parse_statement_call_param_identifier, 
     //varaible_declaration,
     //statement,
   };
@@ -3548,26 +3559,31 @@ PipelineResult typecheck_integer_literal(NumericLiteral &literal, TypeDeclaratio
 }
 
 PipelineResult typecheck_identifier(VariableReference &variable, TypeDeclaration *&type) {
-  if (variable.variable == NULL) {
-    VaraibleDefinitionDBEntry *entry = db_lookup_variable(variable.identifier);
+  VaraibleDefinitionDBEntry *entry = db_lookup_variable(variable.identifier);
+  //if (variable.variable == NULL) {
     if (entry == NULL) {
       return make_variable_dependancy(variable.identifier);
     }
 
     switch(entry->type) {
     case VT_VARIABLE:
+      variable.type = VRT_VARIABLE;
       variable.variable = entry->variable;
+      type = variable.variable->type;
       break;
     case VT_STATEMENT_PARAM:
+      variable.type = VRT_STATEMENT_EXPR;
+      type = &entry->statement_param->type;
+      break;
+    case VT_STATEMENT_CALL_PARAM:
       halt();
       break;
     default:
       halt();
     }
-  }
+  //}
 
-  type = variable.variable->type;
-  assert(variable.variable);
+  //assert(variable.variable);
   return PIPELINE_SUCCESS;
 }
 
@@ -4037,6 +4053,10 @@ PipelineResult typecheck_assignment(TypeDeclaration *type, Expression &expressio
   PipelineResult result = typecheck_expression(expression, expression_type);
   if (is_success(result) == false) return result;
 
+  llvm::Type *llvm_type_unused;
+  PipelineResult result_type = emit_type_declaration(*type, llvm_type_unused);
+  if (is_success(result_type) == false) return result_type;
+
   if (expression_type != type) {
 
     ConversionChain conversions = {};
@@ -4120,11 +4140,30 @@ StatementDefinition *db_lookup_statement(const SubString &identifier) {
   return NULL;
 }
 
-PipelineResult typecheck_statement_call(StatementCall  &call) {
+PipelineResult typecheck_statement_call(TypeDeclaration *retval_type, StatementCall  &call) {
   StatementDefinition *def = db_lookup_statement(call.identifier);
   if (def == NULL) return make_statement_dependancy(call.identifier);
 
   // TODO, check params
+  for(int i = 0; i < call.num_params; ++i) {
+
+    if (substring_cmp(def->statement_params[i].type.base_type.identifier, "identifier")) {
+      if (call.params[i].expression->type != EXPR_VARIABLE) {
+        return make_error(UNKNOWN_LOCATION, "expected identifier");
+      }
+      return PIPELINE_SUCCESS;
+    }
+
+    TypeDeclaration *type;
+    assert(call.params[i].type == SCP_EXPRESSION);
+    PipelineResult result = typecheck_expression(*call.params[i].expression, type);
+    if (is_success(result) == false) return result;
+  }
+
+  for(int i = 0; i < call.num_statement_body; ++i) {
+    PipelineResult result = typecheck_function_statement(retval_type, call.body[i]);
+    if (is_success(result) == false) return result;
+  }
 
   return PIPELINE_SUCCESS;
 }
@@ -4142,8 +4181,8 @@ PipelineResult typecheck_statement_call(StatementCall  &call) {
 PipelineResult emit_statement_call_param(StatementCallParam &call_param, StatementParam &statement_param) {
   VaraibleDefinitionDBEntry entry = {};
   entry.scope = g.db.scope;
-  entry.type = VT_STATEMENT_PARAM;
-  entry.statement_param = &call_param;
+  entry.type = VT_STATEMENT_CALL_PARAM;
+  entry.statement_call_param = &call_param;
   return db_try_add_variable(entry, statement_param.identifier);
 }
 
@@ -4161,6 +4200,21 @@ public:
 PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param);
 
 
+PipelineResult emit_inner_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param, FunctionStatement *body, int num_statement_body) {
+  if (statement.type == FS_YIELD) {
+    for(int i = 0; i < num_statement_body; ++i) {
+      PipelineResult result = emit_function_statement(function, body[i], retval_param);
+      if (is_success(result)) return result;
+    }
+  } else {
+      PipelineResult result = emit_function_statement(function, statement, retval_param);
+      if (is_success(result)) return result;
+  }
+
+  return PIPELINE_SUCCESS;
+}
+
+
 PipelineResult emit_statement_call(llvm::Function *function, StatementCall &call, llvm::Value *retval_param) {
   StatementDefinition *def = db_lookup_statement(call.identifier);
   assert(def);
@@ -4175,7 +4229,7 @@ PipelineResult emit_statement_call(llvm::Function *function, StatementCall &call
 
     for(int i = 0; i < def->num_body_statements; ++i) {
       FunctionStatement &body_statement = def->body[i];
-      PipelineResult result = emit_function_statement(function, body_statement, retval_param);
+      PipelineResult result = emit_inner_function_statement(function, body_statement, retval_param, call.body, call.num_statement_body);
       if (is_success(result) == false) return result;
     }
   }
@@ -4216,7 +4270,12 @@ PipelineResult emit_statement_definition(StatementDefinition &statement) {
 }
 
 PipelineResult typecheck_statement_param(StatementParam &param) {
-  return PIPELINE_SUCCESS;
+  VaraibleDefinitionDBEntry entry = {};
+  entry.scope = g.db.scope;
+  entry.identifier = param.identifier;
+  entry.type = VT_STATEMENT_PARAM;
+  entry.statement_param = &param;
+  return db_try_add_variable(entry, param.identifier);
 }
 
 PipelineResult typecheck_statement_statement(FunctionStatement &statement) {
@@ -4225,19 +4284,22 @@ PipelineResult typecheck_statement_statement(FunctionStatement &statement) {
 
 PipelineResult typecheck_statement_definition(StatementDefinition &statement) {
 
-  for(int i = 0; i < statement.num_statement_params; ++i) {
-    PipelineResult result = typecheck_statement_param(statement.statement_params[i]);
-    if (is_success(result) == false) return result;
-  }
+  {
+    DBScope scope;
+    for(int i = 0; i < statement.num_statement_params; ++i) {
+      PipelineResult result = typecheck_statement_param(statement.statement_params[i]);
+      if (is_success(result) == false) return result;
+    }
 
-  for(int i = 0; i < statement.num_statement_yield_params; ++i) {
-    //typecheck_yield_param();
-    // TODO
-  }
+    for(int i = 0; i < statement.num_statement_yield_params; ++i) {
+      //typecheck_yield_param();
+      // TODO
+    }
 
-  for(int i = 0; i < statement.num_body_statements; ++i) {
-    PipelineResult result = typecheck_statement_statement(statement.body[i]);
-    if (is_success(result) == false) return result;
+    for(int i = 0; i < statement.num_body_statements; ++i) {
+      PipelineResult result = typecheck_statement_statement(statement.body[i]);
+      if (is_success(result) == false) return result;
+    }
   }
 
   return PIPELINE_SUCCESS;
@@ -4252,7 +4314,7 @@ PipelineResult typecheck_function_statement(TypeDeclaration *retval_type, Functi
     //case TOKEN_SWITCH_STATEMENT:
     //  return typecheck_switch_statement(statement, result_retval);
   case FS_STATEMENT_CALL:
-    return typecheck_statement_call(statement.statement_call);
+    return typecheck_statement_call(retval_type, statement.statement_call);
   case FS_RETURN:
     return typecheck_return_statement(retval_type, statement.return_statement);
   case FS_EXPRESSION: {
@@ -4264,6 +4326,7 @@ PipelineResult typecheck_function_statement(TypeDeclaration *retval_type, Functi
   case FS_VARIABLE:
     return typecheck_variable_definition(statement.varaible);
   case FS_LLVM:
+  case FS_YIELD:
     return PIPELINE_SUCCESS;
   default:
     halt();
@@ -4855,12 +4918,24 @@ PipelineResult emit_lvalue_identifier(VariableReference &variable, llvm::Value *
   //llvm::Value *retval = old_db_lookup_variable(token->substring)->llvm_value;
   //assert(retval);
   //return retval;
-  if (variable.variable->llvm_value == NULL) {
-    return make_variable_dependancy(variable.identifier);
+
+  if (variable.type == VRT_VARIABLE) {
+    if (variable.variable == NULL || variable.variable->llvm_value == NULL) {
+      return make_variable_dependancy(variable.identifier);
+    }
+    assert(variable.variable->llvm_value);
+    value = variable.variable->llvm_value; 
+    return EMIT_SUCCESS;
+  } else if (variable.type == VRT_STATEMENT_EXPR) {
+    VaraibleDefinitionDBEntry *entry = db_lookup_variable(variable.identifier);
+    assert(entry->type == VT_STATEMENT_CALL_PARAM);
+    assert(entry->statement_call_param->type == SCP_EXPRESSION);
+    return emit_lvalue_expression(*entry->statement_call_param->expression, value);
+  } else {
+    halt();
   }
-  assert(variable.variable->llvm_value);
-  value = variable.variable->llvm_value; 
-  return EMIT_SUCCESS;
+
+  return PIPELINE_SUCCESS;
 }
 
 PipelineResult emit_lvalue_expression(Expression &expression, llvm::Value *&value) {
@@ -5441,9 +5516,9 @@ int lines_replace_tokens(Lines &lines) {
     case LLVM_REPLACEMENT_EXPRESSION: {
       VaraibleDefinitionDBEntry *entry = db_lookup_variable(token_substr);
 
-      if (entry->type == VT_STATEMENT_PARAM) {
-        assert(entry->statement_param->type == SCP_IDENTIFIER);
-        std::string replacement = to_cstring(entry->statement_param->identifier);
+      if (entry->type == VT_STATEMENT_CALL_PARAM) {
+        //assert(entry->statement_call_param->type == SCP_IDENTIFIER); TODO
+        std::string replacement = to_cstring(entry->statement_call_param->expression->variable.identifier);
         std::string new_line        = string_format("%s%s%s", old_lhs.c_str(), replacement.c_str(), old_rhs.c_str());
         lines.erase(lines.begin() + i);
         lines.insert(lines.begin() + i, new_line);
@@ -5695,6 +5770,9 @@ PipelineResult emit_function_statement(llvm::Function *function, FunctionStateme
     if (is_success(result) == false) {
       return result;
     }
+  } break;
+  case FS_YIELD: {
+    halt();
   } break;
   default: 
     halt();
@@ -6279,16 +6357,15 @@ StatementCallParam *alloc_statement_call_params(int num_params) {
 
 DigestResult digest_statement_call_param(Token *tok_param, StatementCallParam &param) {
   switch(tok_param->type) {
-  case TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER:
-    param.type = SCP_IDENTIFIER;
-    param.identifier = tok_param->start->substring;
-    break;
-  case TOKEN_STATEMENT_CALL_PARAM_EXPRESSION:
-    param.type = SCP_IDENTIFIER;
-    param.identifier = tok_param->start->substring;
-    break;
+  //case TOKEN_IDENTIFIER:
+  //  param.type = SCP_IDENTIFIER;
+  //  param.identifier = tok_param->substring;
+  //  break;
   default:
-    halt();
+    param.type = SCP_EXPRESSION;
+    param.identifier = tok_param->substring;
+    param.expression = expressions_alloc(1);
+    return digest_expression(tok_param, *param.expression);
   }
 
   return DIGEST_SUCCESS;
@@ -6324,6 +6401,11 @@ DigestResult digest_statement_call(Token *tok_statement, FunctionStatement &stat
   return DIGEST_SUCCESS;
 }
 
+DigestResult digest_yield_statement(Token *tok_function_statement, FunctionStatement &fn_statement) {
+  fn_statement.type = FS_YIELD;
+  return PIPELINE_SUCCESS;
+}
+
 DigestResult digest_function_statement(Token *tok_function_statement, FunctionStatement &fn_statement) {
   switch(tok_function_statement->type) {
   case TOKEN_VARIABLE_DEFINITION:
@@ -6346,6 +6428,8 @@ DigestResult digest_function_statement(Token *tok_function_statement, FunctionSt
   //case TOKEN_LLVM_TYPE_DEFINITION:
   //case TOKEN_STRUCT_DEFINITION:
   // ...
+  case TOKEN_YIELD_STATEMENT:
+    return digest_yield_statement(tok_function_statement, fn_statement);
   default: 
     halt();
   }

@@ -16,26 +16,35 @@ statement goto(identifier lbl) {
   }
 }
 
-//statement if (bool expr) {
-//  bool result = expr;
-//  llvm {
-//    %i1 = trunc $result to i1
-//    br i1 %i1, label %Then, label %Else
-//    Then:
-//  }
-//  yield;
-//  label(Else) {}
-//}
+statement if (bool expr) {
+  bool result = expr;
+  llvm {
+    %i1 = trunc $result to i1
+    br i1 %i1, label %Then, label %Else
+    Then:
+  }
+  yield;
+  label(Else) {}
+}
 
 import "prelude.gg";
 
 extern i32 printf(char*, ...);
 
-//void test_if() {
-//  if (true) {
-//    printf("true!");
-//  }
-//}
+void test_if() {
+  printf("pre if-true\n");
+  if (true) {
+    printf("true!\n");
+  }
+  printf("post if-true\n");
+
+  // TODO: multiple statements in same scope
+  //printf("pre if-false\n");
+  //if (false) {
+  //  printf("false!\n");
+  //}
+  //printf("post if-false\n");
+}
 
 void test_goto_raw() {
   llvm {
@@ -225,7 +234,8 @@ i32 main() {
   test_struct();
   test_const_expr();
   test_float();
-  test_goto();
+  test_if();
+  //test_goto();
   return retval;
 }
 
