@@ -31,6 +31,16 @@ import "prelude.gg";
 
 extern i32 printf(char*, ...);
 
+extern i32 strcmp(char*, char*);
+
+void test_strcmp() {
+  i32 x = strcmp("hi", "there");
+  printf("strcmp(hi, there) : %d\n", x);
+
+  i32 y = strcmp("hi", "hi");
+  printf("strcmp(hi, hi) : %d\n", y);
+}
+
 void test_if() {
   printf("pre if-true\n");
   if (true) {
@@ -235,6 +245,7 @@ i32 main() {
   test_const_expr();
   test_float();
   test_if();
+  test_strcmp();
   //test_goto();
   return retval;
 }

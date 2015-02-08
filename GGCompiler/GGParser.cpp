@@ -4012,7 +4012,7 @@ PipelineResult typecheck_variable_definition(VariableDefinition &variable) {
     }
   }
 
-  if (g.db.scope != 0) {
+  if (g.db.scope != 0 && variable.identifier.length > 0) {
     PipelineResult result_add = db_add_variable_declaration(variable);
     if (is_success(result_add) == false) {
       return result_add;
