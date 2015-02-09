@@ -103,3 +103,6 @@ bool operator >=(i32 a, i32 b) {
   return retval;
 }
 
+llvm_type u32 { 
+  u32 
+}

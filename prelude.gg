@@ -5,6 +5,9 @@ llvm_type char {
   u8
 }
 
+llvm_type u8 {
+  u8
+}
 
 import "void.gg";
 import "bool.gg";

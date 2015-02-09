@@ -346,7 +346,7 @@ std::string exec(char* cmd) {
   return result;
 }
 
-void IRCompile(LLVMState &llvm, const char* obj_file, const char* exe_file)
+void IRCompile(LLVMState &llvm, const char* obj_file, const char* exe_file, const char* extra_link_options)
 {
   sys::PrintStackTraceOnErrorSignal();
   //PrettyStackTraceProgram X(argc, argv);
@@ -389,7 +389,7 @@ void IRCompile(LLVMState &llvm, const char* obj_file, const char* exe_file)
   compileModule((char **)&name, *llvm.context, llvm.module);
 
   //system("link me.obj /ENTRY:main");
-  std::string link_command = std::string("..\\mylink.bat ") + std::string(obj_file) + std::string(" ") + std::string(exe_file);
+  std::string link_command = std::string("..\\mylink.bat ") + std::string(obj_file) + std::string(extra_link_options) + std::string(" /OUT:") + std::string(exe_file);
   system(link_command.c_str());
 
   //exec("vcvars32.bat");
