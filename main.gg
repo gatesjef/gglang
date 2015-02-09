@@ -16,6 +16,9 @@ statement goto(identifier lbl) {
   }
 }
 
+i32 hex = 0xFF00ff00;
+i32 hex2 = 0Xa;
+
 statement if (bool expr) {
   bool result = expr;
   llvm {
@@ -41,9 +44,9 @@ statement if (bool expr) {
 
 import "prelude.gg";
 
-extern i32 printf(char*, ...);
+extern i32 printf(char* fmt, ...);
 
-extern i32 strcmp(char*, char*);
+extern i32 strcmp(char* str0, char*);
 
 void test_strcmp() {
   i32 x = strcmp("hi", "there");
@@ -60,7 +63,6 @@ void test_if() {
   }
   printf("post if-true\n");
 
-  // TODO: multiple statements in same scope
   printf("pre if-false\n");
   if (false) {
     printf("false!\n");

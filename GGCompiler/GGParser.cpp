@@ -78,6 +78,7 @@ TOKEN_SUBSTRING_START,
   TOKEN_STRING_LITERAL,
   TOKEN_INTEGER_LITERAL,
   TOKEN_FLOAT_LITERAL,
+  TOKEN_HEX_LITERAL,
 
   TOKEN_IDENTIFIER,
   TOKEN_OPERATOR_IDENTIFIER,
@@ -496,6 +497,7 @@ enum ExpressionType {
   EXPR_VARIABLE,
   EXPR_STRING_LITERAL,
   EXPR_NUMERIC_LITERAL,
+  EXPR_HEX_LITERAL,
   EXPR_FLOAT_LITERAL,
   //EXPR_BINARY,
 
@@ -1167,6 +1169,20 @@ static bool isDigit(char c) {
   return isdigit(c) != 0;
 }
 
+static bool isHexDigit(char c) {
+  if (isDigit(c)) return true;
+  if (c >= 'a' && c <= 'f') return true;
+  if (c >= 'A' && c <= 'F') return true;
+  return false;
+}
+
+ParseResult parse_hex_literal(ParserState &parser) {
+  ParseResult result = parse_one_or_more_pred(parser, isHexDigit, TOKEN_HEX_LITERAL);
+  if (is_success(result) == false) return result;
+  consume_whitespace(parser);
+  return result;
+};
+
 ParseResult parse_integer_literal(ParserState &parser) {
   ParseResult result = parse_one_or_more_pred(parser, isDigit, TOKEN_INTEGER_LITERAL);
   if (is_success(result) == false) return result;
@@ -1321,6 +1337,10 @@ ParseResult parse_varargs(ParserState &parser) {
   return parse_exact(parser, "...");
 }
 
+ParseResult parse_variable_identifier(ParserState &parser) {
+  return parse_identifier(parser);
+}
+
 ParseResult parse_param_type_declaration(ParserState &parser) {
   ParseResult result = parse_varargs(parser);
   if (is_success(result)) {
@@ -1328,6 +1348,12 @@ ParseResult parse_param_type_declaration(ParserState &parser) {
   } else {
     ParseResult result = parse_type_declaration(parser);
     if (is_success(result) == false) return result;
+
+    ParseResult result_optional_identifier = parse_variable_identifier(parser);
+    if (is_error(result_optional_identifier)) {
+      return result_optional_identifier;
+    }
+
     return make_result(parser, TOKEN_FUNCTION_PARAM, result);
   }
 }
@@ -1531,49 +1557,60 @@ ParseResult parse_array_index_op(ParserState &parser, Token *lhs) {
   return retval;
 }
 
+ParseResult parse_hex_prefix(ParserState &parser) {
+  ParseResult result = parse_exact(parser, "0x");
+  if (is_success(result)) return result;
+
+  return parse_exact(parser, "0X");
+}
+
 ParseResult parse_numeric_literal(ParserState &parser) {
-  ParseResult retval = parse_integer_literal(parser);
-  if (is_success(retval) == false) return retval;
 
-  if (is_success(parse_exact(parser, ".")) == false) {
+  ParseResult hex_result = parse_hex_prefix(parser);
+
+  if (is_success(hex_result)) {
+    ParseResult retval = parse_hex_literal(parser);
+    if (is_success(retval) == false) {
+      return make_error(parser, "expected hex literal.");
+    }
     return retval;
+  } else {
+    ParseResult retval = parse_integer_literal(parser);
+    if (is_success(retval) == false) return retval;
+
+    if (is_success(parse_exact(parser, ".")) == false) {
+      return retval;
+    }
+
+    assert(retval.start == retval.end && retval.start != NULL);
+    retval.start->type = TOKEN_FLOAT_LITERAL;
+
+    ParseResult retval2 = parse_integer_literal(parser);
+    if (is_success(retval2) == false) {
+      return retval;
+    }
+
+    assert(retval2.start == retval2.end && retval2.start != NULL);
+
+    retval.start->substring.length = retval2.start->substring.start + retval2.start->substring.length - retval.start->substring.start;
+
+    if (is_success(parse_exact(parser, "e")) == false) {
+      return retval;
+    }
+
+    // TODO -exponents
+    //parse_exact(parser, "-");
+
+    ParseResult retval3 = parse_integer_literal(parser);
+    if (is_success(retval3) == false) {
+      return retval;
+    }
+
+    assert(retval3.start == retval3.end && retval3.start != NULL);
+    retval.start->substring.length = retval3.start->substring.start + retval3.start->substring.length - retval.start->substring.start;
+
+    return retval;  
   }
-
-  assert(retval.start == retval.end && retval.start != NULL);
-  retval.start->type = TOKEN_FLOAT_LITERAL;
-
-  ParseResult retval2 = parse_integer_literal(parser);
-  if (is_success(retval2) == false) {
-    return retval;
-  }
-
-  assert(retval2.start == retval2.end && retval2.start != NULL);
-
-  retval.start->substring.length = retval2.start->substring.start + retval2.start->substring.length - retval.start->substring.start;
-
-  if (is_success(parse_exact(parser, "e")) == false) {
-    return retval;
-  }
-
-  // TODO -exponents
-  //parse_exact(parser, "-");
-
-  ParseResult retval3 = parse_integer_literal(parser);
-  if (is_success(retval3) == false) {
-    return retval;
-  }
-
-  assert(retval3.start == retval3.end && retval3.start != NULL);
-  retval.start->substring.length = retval3.start->substring.start + retval3.start->substring.length - retval.start->substring.start;
-
-  return retval;
-
-  //static const ParseFn fns[] = {
-  //  parse_integer_literal, 
-  //  //parse_float_literal,
-  //};
-  //static const int num_fns = ARRAYSIZE(fns);
-  //return parse_first_of(parser, fns, num_fns);
 }
 
 ParseResult parse_literal(ParserState &parser) {
@@ -1583,10 +1620,6 @@ ParseResult parse_literal(ParserState &parser) {
   };
   static const int num_fns = ARRAYSIZE(fns);
   return parse_first_of(parser, fns, num_fns);
-}
-
-ParseResult parse_variable_identifier(ParserState &parser) {
-  return parse_identifier(parser);
 }
 
 ParseResult parse_paren_expression(ParserState &parser) {
@@ -3630,6 +3663,7 @@ PipelineResult typecheck_expression(Expression &expr, TypeDeclaration *&type) {
   //  return typecheck_integer_literal(expr);
   case EXPR_FUNCTION_CALL:
     return typecheck_function_call_expression(expr.function_call, type);
+  case EXPR_HEX_LITERAL:
   case EXPR_NUMERIC_LITERAL:
     return typecheck_integer_literal(expr.numeric_literal, type);
   case EXPR_FLOAT_LITERAL:
@@ -5205,6 +5239,19 @@ PipelineResult emit_rvalue_float_literal(NumericLiteral &literal, llvm::Value *&
   return EMIT_SUCCESS;
 }
 
+PipelineResult emit_rvalue_hex_literal(NumericLiteral &literal, llvm::Value *&value) {
+  TypeDeclaration *type = integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
+  int num_bits = type_size(type);
+  llvm::IntegerType *llvm_type = llvm::IntegerType::get(*g.llvm.context, num_bits);
+  //assert(type->llvm_type == (llvm::Type *)llvm_type);
+
+  llvm::StringRef str = to_string_ref(literal.literal);
+
+  const int RADIX = 16;
+  value = llvm::ConstantInt::get(llvm_type, str, RADIX);
+  return EMIT_SUCCESS;
+}
+
 PipelineResult emit_rvalue_integer_literal(NumericLiteral &literal, llvm::Value *&value) {
   TypeDeclaration *type = integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
   int num_bits = type_size(type);
@@ -5278,6 +5325,8 @@ PipelineResult emit_rvalue_expression(Expression &expr, llvm::Value *&value) {
     }
   case EXPR_FLOAT_LITERAL:
     return emit_rvalue_float_literal(expr.numeric_literal, value);
+  case EXPR_HEX_LITERAL:
+    return emit_rvalue_hex_literal(expr.numeric_literal, value);
   case EXPR_NUMERIC_LITERAL:
     return emit_rvalue_integer_literal(expr.numeric_literal, value);
   case EXPR_STRING_LITERAL:
@@ -6280,6 +6329,12 @@ DigestResult digest_float_literal(Token *expression, Expression &expr) {
   return DIGEST_SUCCESS;
 }
 
+DigestResult digest_hex_literal(Token *expression, Expression &expr) {
+  expr.type = EXPR_HEX_LITERAL;
+  expr.numeric_literal.literal = expression->substring;
+  return DIGEST_SUCCESS;
+}
+
 DigestResult digest_integer_literal(Token *expression, Expression &expr) {
   expr.type = EXPR_NUMERIC_LITERAL;
   expr.numeric_literal.literal = expression->substring;
@@ -6315,6 +6370,8 @@ DigestResult digest_expression(Token *expression, Expression &expr) {
     return digest_function_call(expression, expr);
   case TOKEN_OP_MEMBER:
     return digest_member(expression, expr);
+  case TOKEN_HEX_LITERAL:
+    return digest_hex_literal(expression, expr);
   case TOKEN_INTEGER_LITERAL:
     return digest_integer_literal(expression, expr);
   case TOKEN_STRING_LITERAL:
