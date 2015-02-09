@@ -81,6 +81,7 @@ TOKEN_SUBSTRING_START,
   TOKEN_STRING_LITERAL,
   TOKEN_INTEGER_LITERAL,
   TOKEN_FLOAT_LITERAL,
+  TOKEN_HEX_LITERAL,
 
   TOKEN_IDENTIFIER,
   TOKEN_OPERATOR_IDENTIFIER,
@@ -385,6 +386,7 @@ struct SymbolDatabase {
   Table<StatementDefinitionDBEntry> statements;
 
   int scope;
+  int scope_id;
 };
 
 enum ParamDefinitionType {
@@ -503,6 +505,7 @@ enum ExpressionType {
   EXPR_VARIABLE,
   EXPR_STRING_LITERAL,
   EXPR_NUMERIC_LITERAL,
+  EXPR_HEX_LITERAL,
   EXPR_FLOAT_LITERAL,
   //EXPR_BINARY,
 
@@ -1200,6 +1203,20 @@ static bool isDigit(char c) {
   return isdigit(c) != 0;
 }
 
+static bool isHexDigit(char c) {
+  if (isDigit(c)) return true;
+  if (c >= 'a' && c <= 'f') return true;
+  if (c >= 'A' && c <= 'F') return true;
+  return false;
+}
+
+ParseResult parse_hex_literal(ParserState &parser) {
+  ParseResult result = parse_one_or_more_pred(parser, isHexDigit, TOKEN_HEX_LITERAL);
+  if (is_success(result) == false) return result;
+  consume_whitespace(parser);
+  return result;
+};
+
 ParseResult parse_integer_literal(ParserState &parser) {
   ParseResult result = parse_one_or_more_pred(parser, isDigit, TOKEN_INTEGER_LITERAL);
   if (is_success(result) == false) return result;
@@ -1354,6 +1371,10 @@ ParseResult parse_varargs(ParserState &parser) {
   return parse_exact(parser, "...");
 }
 
+ParseResult parse_variable_identifier(ParserState &parser) {
+  return parse_identifier(parser);
+}
+
 ParseResult parse_param_type_declaration(ParserState &parser) {
   ParseResult result = parse_varargs(parser);
   if (is_success(result)) {
@@ -1361,6 +1382,12 @@ ParseResult parse_param_type_declaration(ParserState &parser) {
   } else {
     ParseResult result = parse_type_declaration(parser);
     if (is_success(result) == false) return result;
+
+    ParseResult result_optional_identifier = parse_variable_identifier(parser);
+    if (is_error(result_optional_identifier)) {
+      return result_optional_identifier;
+    }
+
     return make_result(parser, TOKEN_FUNCTION_PARAM, result);
   }
 }
@@ -1576,49 +1603,60 @@ ParseResult parse_array_index_op(ParserState &parser, Token *lhs) {
   return retval;
 }
 
+ParseResult parse_hex_prefix(ParserState &parser) {
+  ParseResult result = parse_exact(parser, "0x");
+  if (is_success(result)) return result;
+
+  return parse_exact(parser, "0X");
+}
+
 ParseResult parse_numeric_literal(ParserState &parser) {
-  ParseResult retval = parse_integer_literal(parser);
-  if (is_success(retval) == false) return retval;
 
-  if (is_success(parse_exact(parser, ".")) == false) {
+  ParseResult hex_result = parse_hex_prefix(parser);
+
+  if (is_success(hex_result)) {
+    ParseResult retval = parse_hex_literal(parser);
+    if (is_success(retval) == false) {
+      return make_error(parser, "expected hex literal.");
+    }
     return retval;
+  } else {
+    ParseResult retval = parse_integer_literal(parser);
+    if (is_success(retval) == false) return retval;
+
+    if (is_success(parse_exact(parser, ".")) == false) {
+      return retval;
+    }
+
+    assert(retval.start == retval.end && retval.start != NULL);
+    retval.start->type = TOKEN_FLOAT_LITERAL;
+
+    ParseResult retval2 = parse_integer_literal(parser);
+    if (is_success(retval2) == false) {
+      return retval;
+    }
+
+    assert(retval2.start == retval2.end && retval2.start != NULL);
+
+    retval.start->substring.length = retval2.start->substring.start + retval2.start->substring.length - retval.start->substring.start;
+
+    if (is_success(parse_exact(parser, "e")) == false) {
+      return retval;
+    }
+
+    // TODO -exponents
+    //parse_exact(parser, "-");
+
+    ParseResult retval3 = parse_integer_literal(parser);
+    if (is_success(retval3) == false) {
+      return retval;
+    }
+
+    assert(retval3.start == retval3.end && retval3.start != NULL);
+    retval.start->substring.length = retval3.start->substring.start + retval3.start->substring.length - retval.start->substring.start;
+
+    return retval;  
   }
-
-  assert(retval.start == retval.end && retval.start != NULL);
-  retval.start->type = TOKEN_FLOAT_LITERAL;
-
-  ParseResult retval2 = parse_integer_literal(parser);
-  if (is_success(retval2) == false) {
-    return retval;
-  }
-
-  assert(retval2.start == retval2.end && retval2.start != NULL);
-
-  retval.start->substring.length = retval2.start->substring.start + retval2.start->substring.length - retval.start->substring.start;
-
-  if (is_success(parse_exact(parser, "e")) == false) {
-    return retval;
-  }
-
-  // TODO -exponents
-  //parse_exact(parser, "-");
-
-  ParseResult retval3 = parse_integer_literal(parser);
-  if (is_success(retval3) == false) {
-    return retval;
-  }
-
-  assert(retval3.start == retval3.end && retval3.start != NULL);
-  retval.start->substring.length = retval3.start->substring.start + retval3.start->substring.length - retval.start->substring.start;
-
-  return retval;
-
-  //static const ParseFn fns[] = {
-  //  parse_integer_literal, 
-  //  //parse_float_literal,
-  //};
-  //static const int num_fns = ARRAYSIZE(fns);
-  //return parse_first_of(parser, fns, num_fns);
 }
 
 ParseResult parse_literal(ParserState &parser) {
@@ -1628,10 +1666,6 @@ ParseResult parse_literal(ParserState &parser) {
   };
   static const int num_fns = ARRAYSIZE(fns);
   return parse_first_of(parser, fns, num_fns);
-}
-
-ParseResult parse_variable_identifier(ParserState &parser) {
-  return parse_identifier(parser);
 }
 
 ParseResult parse_paren_expression(ParserState &parser) {
@@ -3677,6 +3711,7 @@ PipelineResult typecheck_expression(Expression &expr, TypeDeclaration *&type) {
   //  return typecheck_integer_literal(expr);
   case EXPR_FUNCTION_CALL:
     return typecheck_function_call_expression(expr.function_call, type);
+  case EXPR_HEX_LITERAL:
   case EXPR_NUMERIC_LITERAL:
     return typecheck_integer_literal(expr.numeric_literal, type);
   case EXPR_FLOAT_LITERAL:
@@ -4238,6 +4273,7 @@ class DBScope {
 public:
   DBScope() {
     db_push_scope();
+    g.db.scope_id++;
   }
 
   ~DBScope() {
@@ -5257,6 +5293,19 @@ PipelineResult emit_rvalue_float_literal(NumericLiteral &literal, llvm::Value *&
   return EMIT_SUCCESS;
 }
 
+PipelineResult emit_rvalue_hex_literal(NumericLiteral &literal, llvm::Value *&value) {
+  TypeDeclaration *type = integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
+  int num_bits = type_size(type);
+  llvm::IntegerType *llvm_type = llvm::IntegerType::get(*g.llvm.context, num_bits);
+  //assert(type->llvm_type == (llvm::Type *)llvm_type);
+
+  llvm::StringRef str = to_string_ref(literal.literal);
+
+  const int RADIX = 16;
+  value = llvm::ConstantInt::get(llvm_type, str, RADIX);
+  return EMIT_SUCCESS;
+}
+
 PipelineResult emit_rvalue_integer_literal(NumericLiteral &literal, llvm::Value *&value) {
   TypeDeclaration *type = integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
   int num_bits = type_size(type);
@@ -5330,6 +5379,8 @@ PipelineResult emit_rvalue_expression(Expression &expr, llvm::Value *&value) {
     }
   case EXPR_FLOAT_LITERAL:
     return emit_rvalue_float_literal(expr.numeric_literal, value);
+  case EXPR_HEX_LITERAL:
+    return emit_rvalue_hex_literal(expr.numeric_literal, value);
   case EXPR_NUMERIC_LITERAL:
     return emit_rvalue_integer_literal(expr.numeric_literal, value);
   case EXPR_STRING_LITERAL:
@@ -5540,16 +5591,35 @@ LLVMReplacement matches_replacement(std::string &line, std::string &token_str, S
   }
 }
 
-int lines_replace_tokens(Lines &lines) {
-  int temp_n = 0;
+void str_replace(std::string &s, const std::string &search, const std::string &replace ) 
+{
+  for(size_t pos = 0; ; pos += replace.length()) 
+	{
+    pos = s.find( search, pos );
+    if( pos == std::string::npos ) break;
+
+    s.erase( pos, search.length() );
+    s.insert( pos, replace );
+  }
+}
+
+void replace_number_symbols(std::string &line, int scope_id) {
+  std::string num_str = string_format(".%d", scope_id);
+  str_replace(line, "#", num_str);
+}
+
+int lines_replace_tokens(Lines &lines, int scope_id) {
+  int temp_n = (scope_id << 16) + 0;
   for(int i = 0; i < (int)lines.size();) {
-    auto line = lines[i];
+    auto &line = lines[i];
+
+    replace_number_symbols(line, scope_id);
 
     std::string old_lhs;
-    std::string token_str;
+    std::string token_str_old;
     SubString token_substr;
     std::string old_rhs;
-    LLVMReplacement replacement = matches_replacement(line, token_str, token_substr, old_lhs, old_rhs);
+    LLVMReplacement replacement = matches_replacement(line, token_str_old, token_substr, old_lhs, old_rhs);
     switch(replacement) {
     case LLVM_REPLACEMENT_ASSIGNMENT: {
       //VariableDefinition *variable = db_lookup_variable(token_substr);
@@ -5557,9 +5627,10 @@ int lines_replace_tokens(Lines &lines) {
       assert(entry->type == VT_VARIABLE);
       VariableDefinition *variable = entry->variable;
       llvm::Type *type = variable->llvm_value->getType()->getContainedType(0);
+      std::string name = variable->llvm_value->getName();
       std::string type_str = to_llvm_type_str(type);
-      std::string new_line = string_format("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
-      std::string new_store = string_format("store %s %%%s%d, %s* %%%s", type_str.c_str(), token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
+      std::string new_line = string_format("%s%%%s%d%s", old_lhs.c_str(), name.c_str(), temp_n, old_rhs.c_str());
+      std::string new_store = string_format("store %s %%%s%d, %s* %%%s", type_str.c_str(), name.c_str(), temp_n, type_str.c_str(), name.c_str());
 
       lines.erase(lines.begin() + i); //lines.remove(i); //line);
       lines.insert(lines.begin() + i, new_line);
@@ -5581,9 +5652,10 @@ int lines_replace_tokens(Lines &lines) {
         VariableDefinition *variable = entry->variable;
         llvm::Type *type = variable->llvm_value->getType()->getContainedType(0);
         std::string type_str = to_llvm_type_str(type);
-        std::string new_load  = string_format("%%%s%d = load %s* %%%s", token_str.c_str(), temp_n, type_str.c_str(), token_str.c_str());
-        std::string new_line        = string_format("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
-        std::string new_line_no_type= string_format("%s%%%s%d%s", old_lhs.c_str(), token_str.c_str(), temp_n, old_rhs.c_str());
+        std::string name = variable->llvm_value->getName();
+        std::string new_load  = string_format("%%%s%d = load %s* %%%s", name.c_str(), temp_n, type_str.c_str(), name.c_str());
+        std::string new_line        = string_format("%s%s %%%s%d%s", old_lhs.c_str(), type_str.c_str(), name.c_str(), temp_n, old_rhs.c_str());
+        std::string new_line_no_type= string_format("%s%%%s%d%s", old_lhs.c_str(), name.c_str(), temp_n, old_rhs.c_str());
         if (replacement == LLVM_REPLACEMENT_EXPRESSION) new_line = new_line_no_type;
         lines.erase(lines.begin() + i); //lines.remove(line);
         lines.insert(lines.begin() + i, new_load); //lines.insert(new_load);
@@ -5663,12 +5735,12 @@ static void lines_to_buffer(const Lines &lines, char *buffer, int buffer_size) {
   }
 }
 
-void replace_inline_llvm_bindings(SubString &raw_llvm, char replaced_llvm_buffer[1024]) 
+void replace_inline_llvm_bindings(SubString &raw_llvm, char replaced_llvm_buffer[1024], int scope_id) 
 {
   //GGSubString lines[MAX_LLVM_LINES];
   Lines lines;
   substring_to_lines(raw_llvm, lines);
-  lines_replace_tokens(lines);
+  lines_replace_tokens(lines, scope_id);
   lines_to_buffer(lines, replaced_llvm_buffer, 1024);
 }
 
@@ -5694,7 +5766,7 @@ static bool ParseAssembly2(llvm::MemoryBuffer *F, llvm::Module &M, llvm::SMDiagn
 
 PipelineResult emit_inline_llvm(llvm::Function *function, LLVMStatement &llvm_statement) {
   char replaced_llvm_buffer[1024];
-  replace_inline_llvm_bindings(llvm_statement.raw_llvm, replaced_llvm_buffer);
+  replace_inline_llvm_bindings(llvm_statement.raw_llvm, replaced_llvm_buffer, g.db.scope_id);
 
   llvm::StringRef llvmAssembly(replaced_llvm_buffer);
   llvm::MemoryBuffer *memory = llvm::MemoryBuffer::getMemBuffer(llvmAssembly, "<string>", true);
@@ -6315,6 +6387,12 @@ DigestResult digest_float_literal(Token *expression, Expression &expr) {
   return DIGEST_SUCCESS;
 }
 
+DigestResult digest_hex_literal(Token *expression, Expression &expr) {
+  expr.type = EXPR_HEX_LITERAL;
+  expr.numeric_literal.literal = expression->substring;
+  return DIGEST_SUCCESS;
+}
+
 DigestResult digest_integer_literal(Token *expression, Expression &expr) {
   expr.type = EXPR_NUMERIC_LITERAL;
   expr.numeric_literal.literal = expression->substring;
@@ -6350,6 +6428,8 @@ DigestResult digest_expression(Token *expression, Expression &expr) {
     return digest_function_call(expression, expr);
   case TOKEN_OP_MEMBER:
     return digest_member(expression, expr);
+  case TOKEN_HEX_LITERAL:
+    return digest_hex_literal(expression, expr);
   case TOKEN_INTEGER_LITERAL:
     return digest_integer_literal(expression, expr);
   case TOKEN_STRING_LITERAL:
