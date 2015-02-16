@@ -63,7 +63,7 @@ TOKEN_TUPLE_START,
   TOKEN_FUNCTION_TYPE,
 
   TOKEN_STATEMENT_MACRO_TYPE,
-  //TOKEN_IDENTIFIER_MACRO_TYPE,
+  TOKEN_IDENTIFIER_MACRO_TYPE,
   //TOKEN_EXPRESSION_MACRO_TYPE,
 
   TOKEN_BINARY_EXPRESSION,
@@ -227,6 +227,7 @@ enum TypeDeclarationKind {
   TYPE_FUNCTION,
 
   MACRO_TYPE_STATEMENT,
+  MACRO_TYPE_IDENTIFIER,
 };
 
 struct StructDef;
@@ -1507,7 +1508,16 @@ ParseResult parse_declspec_declaration(ParserState &parser) {
   return make_result(parser, TOKEN_FUNCTION_DECLSPEC_LIST, result);
 }
 
+ParseResult parse_identifier_exact(ParserState &parser) {
+  return parse_exact(parser, "identifier");
+}
+
 ParseResult parse_statement_type_declaration(ParserState &parser) {
+  ParseResult result_identifier = parse_identifier_exact(parser);
+  if (is_success(result_identifier)) {
+    return make_result(parser, TOKEN_IDENTIFIER_MACRO_TYPE, (Token *)NULL);
+  }
+
   ParseResult result = parse_statement_exact(parser);
   if (is_success(result)) {
     return make_result(parser, TOKEN_STATEMENT_MACRO_TYPE, (Token *)NULL);
@@ -2095,6 +2105,18 @@ ParseResult parse_function_params(ParserState &parser) {
   return make_result(parser, TOKEN_FUNCTION_PARAMS, result);
 }
 
+ParseResult parse_with_semicolon(ParserState &parser, ParseFn fn) {
+  ParseResult result = fn(parser);
+  if (is_success(result) == false) return result;
+
+  ParseResult result_semicolon = parse_semicolon(parser);
+  if (is_success(result_semicolon) == false) {
+    return make_error(parser, "expected semicolon");
+  }
+
+  return result;
+}
+
 ParseResult parse_extern_function_declaration(ParserState &parser) {
   ParseFn statments[] = {
     parse_extern_exact,
@@ -2104,12 +2126,16 @@ ParseResult parse_extern_function_declaration(ParserState &parser) {
     parse_left_paren,
     parse_function_type_params,
     parse_right_paren,
-    parse_semicolon,
+    //parse_semicolon,
   };
   static const int num_statements = ARRAYSIZE(statments);
 
   ParseResult result = parse_sequence(parser, statments, num_statements);
   return make_result(parser, TOKEN_EXTERNAL_FUNCTION_DECLARATION, result);
+}
+
+ParseResult parse_extern_function_declaration_semi(ParserState &parser) {
+  return parse_with_semicolon(parser, parse_extern_function_declaration);
 }
 
 ParseResult parse_yield_exact(ParserState &parser) {
@@ -2132,13 +2158,14 @@ ParseResult parse_yield_exact(ParserState &parser) {
 //}
 
 ParseResult parse_statement(ParserState &parser);
+ParseResult parse_statement_semi(ParserState &parser);
 
 ParseResult parse_statement_statement(ParserState &parser) {
   //ParseResult parse_yield = parse_yield_statement(parser);
   //if (is_success(parse_yield)) return parse_yield;
   //if (is_error(parse_yield)) return parse_yield;
 
-  return parse_statement(parser);
+  return parse_statement_semi(parser);
 }
 
 ParseResult parse_statement_body(ParserState &parser) {
@@ -2218,16 +2245,16 @@ ParseResult parse_struct_exact(ParserState &parser) {
   return parse_exact(parser, "struct");
 }
 
-ParseResult parse_variable_definition_part_2(ParserState &parser, ParseResult &partial_results) {
+ParseResult parse_variable_definition_part_2(ParserState &parser, ParseResult &partial_results, bool expect_semicolon) {
   if (is_success(parse_declaration_assignment_operator(parser))) {
     ParseResult expr = parse_expression(parser);
     if (is_success(expr) == false) {
-      return make_error(parser, "Invalid expression for variable initilizer");
+      return make_error(parser, "Invalid expression for variable initializer");
     }
     append_result_old(partial_results, expr);
   } 
 
-  if (is_success(parse_semicolon(parser)) == false) {
+  if (expect_semicolon && is_success(parse_semicolon(parser)) == false) {
       return make_error(parser, "Missing semicolon");
   }
 
@@ -2244,11 +2271,14 @@ ParseResult parse_variable_definition(ParserState &parser) {
   ParseResult result = parse_sequence(parser, statements, num_statements);
   if (is_success(result) == false) return result;
 
-  return parse_variable_definition_part_2(parser, result);
+  return parse_variable_definition_part_2(parser, result, false);
 }
 
+ParseResult parse_variable_definition_semi(ParserState &parser) {
+  return parse_with_semicolon(parser, parse_variable_definition);
+}
 ParseResult parse_struct_field(ParserState &parser) {
-  return parse_variable_definition(parser);
+  return parse_variable_definition_semi(parser);
 }
 
 ParseResult parse_struct_fields(ParserState &parser) {
@@ -2398,13 +2428,18 @@ ParseResult parse_return_statement(ParserState &parser) {
 ParseResult parse_expression_statement(ParserState &parser) {
   static const ParseFn statements[] = {
     parse_expression,
-    parse_semicolon,
+    //parse_semicolon,
   };
   static const int num_statements = ARRAYSIZE(statements);
 
   ParseResult result = parse_sequence(parser, statements, num_statements);
   return make_result(parser, TOKEN_EXPRESSION_STATEMENT, result);
 }
+
+ParseResult parse_expression_statement_semi(ParserState &parser) {
+  return parse_with_semicolon(parser, parse_expression_statement);
+}
+
 
 ParseResult parse_inline_llvm(ParserState &parser) {
   static const ParseFn statements[] = {
@@ -2449,12 +2484,16 @@ ParseResult parse_assignment_statement(ParserState &parser) {
     parse_expression,
     parse_assignment_operator,
     parse_expression,
-    parse_semicolon,
+    //parse_semicolon,
   };
   static const int num_statements = ARRAYSIZE(statements);
 
   ParseResult result = parse_sequence(parser, statements, num_statements);
   return make_result(parser, TOKEN_ASSIGMENT_STATEMENT, result);
+}
+
+ParseResult parse_assignment_statement_semi(ParserState &parser) {
+  return parse_with_semicolon(parser, parse_assignment_statement);
 }
 
 //ParseResult parse_statement_arg_identifier(ParserState &parser) {
@@ -2519,10 +2558,11 @@ ParseResult parse_statement_call(ParserState &parser) {
 }
 
 ParseResult parse_function_definition(ParserState &parser);
-
 ParseResult parse_variable_or_function_definition(ParserState &parser);
+ParseResult parse_variable_or_function_definition_semi(ParserState &parser);
 
-ParseResult parse_statement(ParserState &parser) {
+
+ParseResult parse_statement_option(ParserState &parser, bool semicolon) {
   {
     static const ParseFn statements[] = {
       parse_block_statement,
@@ -2546,6 +2586,7 @@ ParseResult parse_statement(ParserState &parser) {
     if (is_error(result)) return result;
   }
 
+  if (semicolon == false)
   {
     static const ParseFn difficult_statements[] = {
       parse_statement_call,
@@ -2559,19 +2600,37 @@ ParseResult parse_statement(ParserState &parser) {
     if (result.result == RESULT_ERROR) {
       return make_error(parser, "Unknown statement");
     }
-
-    //ParseResult result_semicolon = parse_semicolon(parser);
-    //if (is_success(result_semicolon) == false) {
-    //  return make_error(parser, "expected semi-colon");
-    //}
-
+    return result;
+  } else {
+    static const ParseFn difficult_statements[] = {
+      parse_statement_call,
+      parse_variable_or_function_definition_semi,  // 
+      parse_assignment_statement_semi,             // 
+      parse_expression_statement_semi,             // 
+      //parse_function_definition,
+    };
+    static const int num_difficult_statements = ARRAYSIZE(difficult_statements);
+    ParseResult result = parse_first_of_deep(parser, difficult_statements, num_difficult_statements);
+    if (result.result == RESULT_ERROR) {
+      return make_error(parser, "Unknown statement");
+    }
     return result;
   }
 
 }
 
+ParseResult parse_statement_semi(ParserState &parser) {
+  return parse_statement_option(parser, true);
+}
+
+ParseResult parse_statement(ParserState &parser) {
+
+  return parse_statement_option(parser, false);
+}
+
+
 ParseResult parse_function_body(ParserState &parser) {
-  ParseResult result = parse_zero_or_more(parser, parse_statement);
+  ParseResult result = parse_zero_or_more(parser, parse_statement_semi);
   return make_result(parser, TOKEN_FUNCTION_BODY, result);
 }
 
@@ -2601,7 +2660,7 @@ int count_subtokens(Token *token) {
 }
 
 // either variable or function definition
-ParseResult parse_variable_or_function_definition(ParserState &parser) {
+ParseResult parse_variable_or_function_definition_option(ParserState &parser, bool semicolon) {
   static const ParseFn statements[] = {
     parse_type_declaration,
     parse_function_identifier, 
@@ -2642,18 +2701,27 @@ ParseResult parse_variable_or_function_definition(ParserState &parser) {
       return make_error(parser, "Invalid operator definition");
     }
 
-    return parse_variable_definition_part_2(parser, partial_results);
+    return parse_variable_definition_part_2(parser, partial_results, semicolon);
   }
 }
 
+ParseResult parse_variable_or_function_definition(ParserState &parser) {
+  return parse_variable_or_function_definition_option(parser, false);
+}
+
+ParseResult parse_variable_or_function_definition_semi(ParserState &parser) {
+  return parse_variable_or_function_definition_option(parser, true);
+}
+
+
 ParseResult parse_program_statements(ParserState &parser) {
   static const ParseFn statements[] = {
-    parse_import_statement,             // import
-    parse_link_library_statement,       // link_library
-    parse_extern_function_declaration,  // extern void x(int y);
-    parse_type_definition,              // struct ..., type ..., enum ..., llvm type
-    parse_statement_definition,         // 
-    parse_variable_or_function_definition,
+    parse_import_statement,                   // import
+    parse_link_library_statement,             // link_library
+    parse_extern_function_declaration_semi,   // extern void x(int y);
+    parse_type_definition,                    // struct ..., type ..., enum ..., llvm type
+    parse_statement_definition,               // 
+    parse_variable_or_function_definition_semi,
   };
   static const int num_statements = ARRAYSIZE(statements);
   ParseResult result = parse_first_of(parser, statements, num_statements);
@@ -4719,10 +4787,10 @@ PipelineResult typecheck_statement_call(TypeDeclaration *retval_type, StatementC
   // TODO, check params
   for(int i = 0; i < call.num_params; ++i) {
 
-    if (def->statement_params[i].type.kind != MACRO_TYPE_STATEMENT && substring_cmp(def->statement_params[i].type.base_type.identifier, "identifier")) {
-      if (call.args[i].expression->type != EXPR_VARIABLE) {
-        return make_error(UNKNOWN_LOCATION, "expected identifier");
-      }
+    if (def->statement_params[i].type.kind == MACRO_TYPE_IDENTIFIER) {
+      assert(call.args[i].type == SCP_STATEMENT);
+      assert(call.args[i].statement->type == FS_EXPRESSION);
+      assert(call.args[i].statement->expression->type == EXPR_VARIABLE);
       return PIPELINE_SUCCESS;
     }
 
@@ -4971,6 +5039,9 @@ DigestResult digest_type_declaration(Token *token, TypeDeclaration &decl) {
     return digest_function_type(token, decl);
   case TOKEN_STATEMENT_MACRO_TYPE:
     decl.kind = MACRO_TYPE_STATEMENT;
+    break;
+  case TOKEN_IDENTIFIER_MACRO_TYPE:
+    decl.kind = MACRO_TYPE_IDENTIFIER;
     break;
     //return digest_function_type(token, decl);
     //case TOKEN_PARAMETERIZED_TYPE:
@@ -5916,8 +5987,9 @@ PipelineResult emit_rvalue_identifier(VariableReference &varaible, llvm::Value *
       assert(entry);
     }
     assert(entry->type == VT_STATEMENT_ARG);
-    assert(entry->statement_arg->type == SCP_EXPRESSION);
-    return emit_rvalue_expression(*entry->statement_arg->expression, value);
+    assert(entry->statement_arg->type == SCP_STATEMENT);
+    assert(entry->statement_arg->statement->type == FS_EXPRESSION);
+    return emit_rvalue_expression(*entry->statement_arg->statement->expression, value);
   } else {
     llvm::Value *lvalue;
     PipelineResult result = emit_lvalue_identifier(varaible, lvalue);
@@ -6254,7 +6326,10 @@ int lines_replace_tokens(SymbolScope *scope, Lines &lines, int scope_id) {
 
       if (entry->type == VT_STATEMENT_ARG) {
         //assert(entry->statement_arg->type == SCP_IDENTIFIER); TODO
-        std::string replacement = to_cstring(entry->statement_arg->expression->variable.identifier);
+        assert(entry->statement_arg->type == SCP_STATEMENT);
+        assert(entry->statement_arg->statement->type == FS_EXPRESSION);
+        assert(entry->statement_arg->statement->expression->type == EXPR_VARIABLE);
+        std::string replacement = to_cstring(entry->statement_arg->statement->expression->variable.identifier);
         std::string new_line        = string_format("%s%s%s", old_lhs.c_str(), replacement.c_str(), old_rhs.c_str());
         lines.erase(lines.begin() + i);
         lines.insert(lines.begin() + i, new_line);

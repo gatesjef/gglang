@@ -10,6 +10,12 @@
 //  }
 //}
 
+void test_for() {
+  for (i32 x = 10, x < 20, x = x + 1) {
+    printf("for %d\n", x);
+  }
+}
+
 statement label(identifier lbl) {
   llvm {
     br label %$lbl
@@ -23,6 +29,7 @@ statement goto(identifier lbl) {
     end_goto:
   }
 }
+
 
 i32 hex = 0xFF00ff00;
 i32 hex2 = 0Xa;
@@ -82,12 +89,6 @@ void test_while() {
   while(x < 10) {
     printf("while %d\n", x);
     x = x + 1;
-  }
-}
-
-void test_for() {
-  for (i32 x = 10;, x < 20, x = x + 1;) {
-    printf("for %d\n", x);
   }
 }
 
