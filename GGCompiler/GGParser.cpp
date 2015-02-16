@@ -31,6 +31,7 @@ TOKEN_TUPLE_START,
   TOKEN_STATEMENT_BODY,
   TOKEN_STATEMENT_CLAUSE,
   TOKEN_STATEMENT_CALL,
+  TOKEN_STATEMENT_ARGS,
   TOKEN_STATEMENT_ARG,
     //TOKEN_STATEMENT_ARG_IDENTIFIER,
     //TOKEN_STATEMENT_ARG_EXPRESSION,
@@ -60,6 +61,10 @@ TOKEN_TUPLE_START,
   TOKEN_POINTER_TYPE,
   TOKEN_ARRAY_TYPE,
   TOKEN_FUNCTION_TYPE,
+
+  TOKEN_STATEMENT_MACRO_TYPE,
+  //TOKEN_IDENTIFIER_MACRO_TYPE,
+  //TOKEN_EXPRESSION_MACRO_TYPE,
 
   TOKEN_BINARY_EXPRESSION,
   TOKEN_UNARY_EXPRESSION,
@@ -220,6 +225,8 @@ enum TypeDeclarationKind {
   TYPE_ARRAY,
   TYPE_POINTER,
   TYPE_FUNCTION,
+
+  MACRO_TYPE_STATEMENT,
 };
 
 struct StructDef;
@@ -680,9 +687,10 @@ struct ExternFunctionDeclaration {
 };
 
 enum StatementArgType {
-  SCP_IDENTIFIER,
+  //SCP_IDENTIFIER,
   SCP_EXPRESSION,
-  SCP_TYPE,
+  SCP_STATEMENT,
+  //SCP_TYPE,
 };
 
 struct StatementArg {
@@ -692,6 +700,7 @@ struct StatementArg {
     SubString identifier;
     //TypeDeclaration type;
     Expression *expression;
+    FunctionStatement *statement;
   };
 };
 
@@ -699,7 +708,7 @@ struct StatementCall {
   SubString identifier;
   SymbolScope *scope;
 
-  StatementArg *params;
+  StatementArg *args;
   int num_params;
 
   FunctionStatement *body;
@@ -1498,9 +1507,18 @@ ParseResult parse_declspec_declaration(ParserState &parser) {
   return make_result(parser, TOKEN_FUNCTION_DECLSPEC_LIST, result);
 }
 
+ParseResult parse_statement_type_declaration(ParserState &parser) {
+  ParseResult result = parse_statement_exact(parser);
+  if (is_success(result)) {
+    return make_result(parser, TOKEN_STATEMENT_MACRO_TYPE, (Token *)NULL);
+  }
+
+  return parse_type_declaration(parser);
+}
+
 ParseResult parse_statement_param(ParserState &parser) {
   static const ParseFn fns[] = { 
-    parse_type_declaration,
+    parse_statement_type_declaration,
     parse_identifier,
   };
   static const int num = ARRAYSIZE(fns);
@@ -2447,17 +2465,36 @@ ParseResult parse_assignment_statement(ParserState &parser) {
 //}
 
 
-ParseResult parse_statement_args(ParserState &parser) {
-  static const ParseFn statements[] = {
-    parse_expression,
-    //parse_statement_arg_identifier, 
-    //varaible_declaration,
-    //statement,
-  };
-  static const int num_statements = ARRAYSIZE(statements);
+ParseResult parse_statement_arg(ParserState &parser) {
+  //ParseResult result = parse_statement_no_semicolon(parser);
 
-  ParseResult result = parse_first_of_deep(parser, statements, num_statements);
-  return make_result(parser, TOKEN_STATEMENT_ARG, result);
+  ParseResult result_statement = parse_statement(parser);
+  if (is_success(result_statement)) {
+    return result_statement;
+  }
+
+  ParseResult result_expression = parse_expression(parser);
+  if (is_success(result_expression)) {
+    return result_expression;
+  }
+
+  return PARSE_EMPTY;
+
+  //static const ParseFn statements[] = {
+  //  parse_expression,
+  //  //parse_statement_arg_identifier, 
+  //  //varaible_declaration,
+  //  //statement,
+  //};
+  //static const int num_statements = ARRAYSIZE(statements);
+
+  //ParseResult result = parse_first_of_deep(parser, statements, num_statements);
+  //return make_result(parser, TOKEN_STATEMENT_ARG, result);
+}
+
+ParseResult parse_statement_args(ParserState &parser) {
+  ParseResult result = parse_zero_or_more_separated(parser, parse_statement_arg, ",");
+  return make_result(parser, TOKEN_STATEMENT_ARGS, result);
 }
 
 ParseResult parse_statement_call_body(ParserState &parser) {
@@ -2499,7 +2536,13 @@ ParseResult parse_statement(ParserState &parser) {
     static const int num_statements = ARRAYSIZE(statements);
 
     ParseResult result = parse_first_of(parser, statements, num_statements);
-    if (is_success(result)) return result;
+    if (is_success(result)) {
+      //ParseResult result_semicolon = parse_semicolon(parser);
+      //if (is_success(result_semicolon) == false) {
+      //  return make_error(parser, "expected semi-colon");
+      //}
+      return result;
+    }
     if (is_error(result)) return result;
   }
 
@@ -2516,6 +2559,11 @@ ParseResult parse_statement(ParserState &parser) {
     if (result.result == RESULT_ERROR) {
       return make_error(parser, "Unknown statement");
     }
+
+    //ParseResult result_semicolon = parse_semicolon(parser);
+    //if (is_success(result_semicolon) == false) {
+    //  return make_error(parser, "expected semi-colon");
+    //}
 
     return result;
   }
@@ -4040,10 +4088,14 @@ PipelineResult typecheck_identifier(VariableReference &variable, TypeDeclaration
       variable.type = VRT_STATEMENT_EXPR;
       type = &entry->statement_param->type;
       break;
-    case VT_STATEMENT_CLAUSE:
+    case VT_STATEMENT_CLAUSE: {
       variable.type = VRT_STATEMENT_CLAUSE;
-      type = db_lookup_type_by_identifier(globalScope(), to_substring("void"))->decl;  // &entry->statement_clause->identifier;
-      break;
+      TypeDefinition *def = db_lookup_type_by_identifier(globalScope(), to_substring("void"));
+      if (def == NULL) {
+        return make_type_dependancy(to_substring("void"));
+      }
+      type = def->decl;  // &entry->statement_clause->identifier;
+    } break;
     case VT_STATEMENT_ARG:
       halt();
       break;
@@ -4667,17 +4719,24 @@ PipelineResult typecheck_statement_call(TypeDeclaration *retval_type, StatementC
   // TODO, check params
   for(int i = 0; i < call.num_params; ++i) {
 
-    if (substring_cmp(def->statement_params[i].type.base_type.identifier, "identifier")) {
-      if (call.params[i].expression->type != EXPR_VARIABLE) {
+    if (def->statement_params[i].type.kind != MACRO_TYPE_STATEMENT && substring_cmp(def->statement_params[i].type.base_type.identifier, "identifier")) {
+      if (call.args[i].expression->type != EXPR_VARIABLE) {
         return make_error(UNKNOWN_LOCATION, "expected identifier");
       }
       return PIPELINE_SUCCESS;
     }
 
-    TypeDeclaration *type;
-    assert(call.params[i].type == SCP_EXPRESSION);
-    PipelineResult result = typecheck_expression(*call.params[i].expression, type);
-    if (is_success(result) == false) return result;
+    //assert(call.args[i].type == SCP_EXPRESSION);
+    if (call.args[i].type == SCP_EXPRESSION) {
+      TypeDeclaration *type;
+      PipelineResult result = typecheck_expression(*call.args[i].expression, type);
+      if (is_success(result) == false) return result;
+    } else if (call.args[i].type == SCP_STATEMENT) {
+      PipelineResult result = typecheck_function_statement(retval_type, *call.args[i].statement);
+      if (is_success(result) == false) return result;
+    } else {
+      halt();
+    }
   }
 
   for(int i = 0; i < call.num_statement_body; ++i) {
@@ -4756,7 +4815,7 @@ PipelineResult emit_statement_call(llvm::Function *function, StatementCall &call
   DBBoundScope scope;
 
   for(int i = 0; i < call.num_params; ++i) {
-    PipelineResult result = emit_statement_arg(call.params[i], def->statement_params[i]);
+    PipelineResult result = emit_statement_arg(call.args[i], def->statement_params[i]);
     if (is_success(result) == false) return result;
   }
 
@@ -4910,6 +4969,10 @@ DigestResult digest_type_declaration(Token *token, TypeDeclaration &decl) {
     return digest_array_type(token, decl);
   case TOKEN_FUNCTION_TYPE:
     return digest_function_type(token, decl);
+  case TOKEN_STATEMENT_MACRO_TYPE:
+    decl.kind = MACRO_TYPE_STATEMENT;
+    break;
+    //return digest_function_type(token, decl);
     //case TOKEN_PARAMETERIZED_TYPE:
     //  return emit_pointer_type(declaration);
   default:
@@ -5785,15 +5848,22 @@ PipelineResult emit_rvalue_integer_literal(NumericLiteral &literal, llvm::Value 
   PipelineResult result = typecheck_integer_literal(literal, type);
   if (is_success(result) == false) return result;
 
+  llvm::Type *llvm_type;
+  PipelineResult result_llvm = emit_type_declaration(*type, llvm_type);
+  if (is_success(result_llvm) == false) return result_llvm;
+
+  llvm::IntegerType *llvm_integer_type = llvm::dyn_cast<llvm::IntegerType>(llvm_type);
+  assert(llvm_integer_type);
+
   //TypeDeclaration *type = ...//  integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
-  int num_bits = type_size(type);
-  llvm::IntegerType *llvm_type = llvm::IntegerType::get(*g.llvm.context, num_bits);
+  //int num_bits = type_size(type);
+  //llvm::IntegerType *llvm_type = llvm::IntegerType::get(*g.llvm.context, num_bits);
   //assert(type->llvm_type == (llvm::Type *)llvm_type);
 
   llvm::StringRef str = to_string_ref(literal.literal);
 
   const int RADIX = 10;
-  value = llvm::ConstantInt::get(llvm_type, str, RADIX);
+  value = llvm::ConstantInt::get(llvm_integer_type, str, RADIX);
   return EMIT_SUCCESS;
 }
 
@@ -6439,6 +6509,16 @@ PipelineResult emit_function_statement(llvm::Function *function, FunctionStateme
         if (is_success(result) == false) {
           return result;
         }
+      }
+    } else if (statement.expression->type == EXPR_VARIABLE && statement.expression->variable.type == VRT_STATEMENT_EXPR) {
+      VariableDefinitionDBEntry *entry = db_lookup_variable(statement.expression->variable.scope, statement.expression->variable.identifier);
+      assert(entry);
+      assert(entry->type == VT_STATEMENT_ARG);
+      assert(entry->statement_arg != NULL);
+      assert(entry->statement_arg->type == SCP_STATEMENT);
+      PipelineResult result = emit_function_statement(function, *entry->statement_arg->statement, retval_param, retval_block, retval_value);
+      if (is_success(result) == false) {
+        return result;
       }
     } else {
       llvm::Value *unused;
@@ -7133,13 +7213,25 @@ StatementArg *alloc_statement_args(int num_params) {
   return (StatementArg *)calloc(num_params, sizeof(StatementArg));
 }
 
+DigestResult digest_function_statement(Token *tok_function_statement, FunctionStatement &fn_statement);
+
+
 DigestResult digest_statement_arg(Token *tok_param, StatementArg &param) {
   switch(tok_param->type) {
   //case TOKEN_IDENTIFIER:
   //  param.type = SCP_IDENTIFIER;
   //  param.identifier = tok_param->substring;
   //  break;
-  case TOKEN_IDENTIFIER:
+  case TOKEN_STATEMENT_CALL:
+  case TOKEN_ASSIGMENT_STATEMENT:
+  case TOKEN_RETURN_STATEMENT:
+  case TOKEN_EXPRESSION_STATEMENT:
+  case TOKEN_VARIABLE_DEFINITION:
+    param.type = SCP_STATEMENT;
+    param.identifier = tok_param->substring;
+    param.statement = function_body_alloc(1);
+    return digest_function_statement(tok_param, *param.statement);
+    break;
   default:
     param.type = SCP_EXPRESSION;
     param.identifier = tok_param->substring;
@@ -7150,9 +7242,6 @@ DigestResult digest_statement_arg(Token *tok_param, StatementArg &param) {
   return DIGEST_SUCCESS;
 }
 
-DigestResult digest_function_statement(Token *tok_function_statement, FunctionStatement &fn_statement);
-
-
 DigestResult digest_statement_call(Token *tok_statement, FunctionStatement &statement) {
   Token *tok_identifier, *tok_params, *tok_body;
   expand_tokens(tok_statement, tok_identifier, tok_params, tok_body);
@@ -7160,14 +7249,14 @@ DigestResult digest_statement_call(Token *tok_statement, FunctionStatement &stat
   statement.type = FS_STATEMENT_CALL;
   statement.statement_call.identifier = tok_identifier->substring;
   statement.statement_call.num_params = count_subtokens(tok_params);
-  statement.statement_call.params = alloc_statement_args(statement.statement_call.num_params);
+  statement.statement_call.args = alloc_statement_args(statement.statement_call.num_params);
   statement.statement_call.scope = g.db.scope_current;
 
   DBScopeDigest scope;
 
   int i = 0;
   for(Token *tok_param = tok_params->start; tok_param != NULL; tok_param = tok_param->next) {
-    StatementArg &param = statement.statement_call.params[i++];
+    StatementArg &param = statement.statement_call.args[i++];
     DigestResult param_result = digest_statement_arg(tok_param, param);
     if (is_success(param_result) == false) return param_result;
   }

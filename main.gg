@@ -58,6 +58,15 @@ statement while(bool while_check) while_clause {
     goto(LOOP) {}
   }
 }
+
+
+statement for(statement for_declaration, bool for_check, statement for_increment) for_clause {
+  for_declaration;
+  while(for_check) {
+    for_clause;
+    for_increment;
+  }
+}
 //
 //statement for(statement init, bool check, statement update) {
 //  init;
@@ -73,6 +82,12 @@ void test_while() {
   while(x < 10) {
     printf("while %d\n", x);
     x = x + 1;
+  }
+}
+
+void test_for() {
+  for (i32 x = 10;, x < 20, x = x + 1;) {
+    printf("for %d\n", x);
   }
 }
 
@@ -305,6 +320,7 @@ i32 main() {
   test_strcmp();
   test_goto();
   test_while();
+  test_for();
   return retval;
 }
 
