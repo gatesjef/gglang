@@ -1,8 +1,24 @@
 // int.gg
 
 // i32
+llvm_type i8 { 
+  i8 
+}
+
+llvm_type i16 { 
+  i16 
+}
+
 llvm_type i32 { 
   i32 
+}
+
+llvm_type i64 { 
+  i64
+}
+
+llvm_type i128 { 
+  i128
 }
 
 i32 operator +(i32 a, i32 b) {
@@ -104,5 +120,156 @@ bool operator >=(i32 a, i32 b) {
 }
 
 llvm_type u32 { 
-  u32 
+  i32 
 }
+
+//u32 operator +(u32 a, u32 b) {
+//  u32 x;
+//  llvm {
+//    $x = add $a, $b
+//  }
+//  return x;
+//}
+//
+//u32 operator -(u32 a, u32 b) {
+//  u32 x;
+//  llvm {
+//    $x = sub $a, $b
+//  }
+//  return x;
+//}
+//
+//u32 operator *(u32 a, u32 b) {
+//  u32 x;
+//  llvm {
+//    $x = mul $a, $b
+//  }
+//  return x;
+//}
+//
+//u32 operator /(u32 a, u32 b) {
+//  u32 x;
+//  llvm {
+//    $x = sdiv $a, $b
+//  }
+//  return x;
+//}
+//
+//u32 operator %(u32 a, u32 b) {
+//  u32 x;
+//  llvm {
+//    $x = srem $a, $b
+//  }
+//  return x;
+//}
+//
+//u32 operator -(u32 a) {
+//  return 0-a;
+//}
+
+u8 to_u8(i32 a) {
+  u8 retval;
+  llvm {
+    $retval = trunc $a to i8
+  }
+  return retval;
+}
+
+u32 to_u32(i32 a) {
+  u32 retval;
+  llvm {
+    $retval = add $a, 0
+  }
+  return retval;
+}
+
+u32 operator &(u32 a, u32 b) {
+  u32 retval; 
+  llvm {
+    $retval = and $a, $b
+  }
+  return retval;
+}
+
+u32 operator |(u32 a, u32 b) {
+  u32 retval; 
+  llvm {
+    $retval = or $a, $b
+  }
+  return retval;
+}
+
+u32 operator ^(u32 a, u32 b) {
+  u32 retval; 
+  llvm {
+    $retval = xor $a, $b
+  }
+  return retval;
+}
+
+bool operator ==(u32 a, u32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = icmp eq $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+bool operator !=(u32 a, u32 b) {
+  bool retval; 
+  llvm {
+    %cmp_result = icmp ne $a, $b
+    $retval = sext i1 %cmp_result to i8
+  }
+  return retval;
+}
+
+//bool operator <(u32 a, u32 b) {
+//  bool retval; 
+//  llvm {
+//    %cmp_result = icmp slt $a, $b
+//    $retval = sext i1 %cmp_result to i8
+//  }
+//  return retval;
+//}
+//
+//bool operator <=(u32 a, u32 b) {
+//  bool retval; 
+//  llvm {
+//    %cmp_result = icmp sle $a, $b
+//    $retval = sext i1 %cmp_result to i8
+//  }
+//  return retval;
+//}
+//
+//bool operator >(u32 a, u32 b) {
+//  bool retval; 
+//  llvm {
+//    %cmp_result = icmp sgt $a, $b
+//    $retval = sext i1 %cmp_result to i8
+//  }
+//  return retval;
+//}
+//
+//bool operator >=(u32 a, u32 b) {
+//  bool retval; 
+//  llvm {
+//    %cmp_result = icmp sge $a, $b
+//    $retval = sext i1 %cmp_result to i8
+//  }
+//  return retval;
+//}
+
+llvm_type u8 {
+  i8
+}
+
+llvm_type u16 {
+  i16
+}
+
+llvm_type u64 {
+  i64
+}
+

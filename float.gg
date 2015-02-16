@@ -143,8 +143,8 @@ f64 Sin(f64 a) {
 }
 
 f32 Sin(f32 a) {
-  f64 sin = Sin(to_f64(a));
-  f32 retval = to_f32(sin);
+  f64 val = Sin(to_f64(a));
+  f32 retval = to_f32(val);
   return retval;
 }
 
@@ -157,7 +157,9 @@ f64 Cos(f64 a) {
 }
 
 f32 Cos(f32 a) {
-  return to_f32(Sin(to_f64(a)));
+  f64 val = Cos(to_f64(a));
+  f32 retval = to_f32(val);
+  return retval;
 }
 
 //f32 Pow(f32 a, f32 p) {
@@ -185,11 +187,15 @@ f64 Ln(f64 a) {
 }
 
 f32 Exp(f32 a) {
-  return to_f32(Exp(to_f64(a)));
+  f64 val = Exp(to_f64(a));
+  f32 retval = to_f32(val);
+  return retval;
 }
 
 f32 Ln(f32 a) {
-  return to_f32(Ln(to_f64(a)));
+  f64 val = Ln(to_f64(a));
+  f32 retval = to_f32(val);
+  return retval;
 }
 
 //f32 Min(f32 a, f32 b) {
@@ -252,13 +258,13 @@ i32 to_i32(f32 a) {
   return retval;
 }
 
-f32 to_f32(i32 a) {
-  f32 retval; 
-  llvm {
-    $retval = sitofp $a to float
-  }
-  return retval;
-}
+//f32 to_f32(i32 a) {
+//  f32 retval; 
+//  llvm {
+//    $retval = sitofp $a to float
+//  }
+//  return retval;
+//}
 
 f32 to_f32(f64 a) {
   f32 retval; 

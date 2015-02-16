@@ -27,19 +27,19 @@ statement goto(identifier lbl) {
 i32 hex = 0xFF00ff00;
 i32 hex2 = 0Xa;
 
-statement if (bool expr) {
-  bool result = expr;
+statement if (bool if_check) then_clause {
+  bool result = if_check;
   llvm {
     %i1# = trunc $result to i1
     br i1 %i1#, label %Then#, label %Else#
     Then#:
   }
 
-  yield;
+  then_clause;
 
   llvm {
     br label %Resume#
-      Else#:
+    Else#:
   }
 
   //yield elseClause;
@@ -50,13 +50,14 @@ statement if (bool expr) {
   }
 }
 
-//statement while(bool check) {
-//  label(LOOP) {}
-//  if (check) {
-//    yield;
-//    goto(LOOP) {}
-//  }
-//}
+statement while(bool while_check) while_clause {
+  label(LOOP) {}
+  bool while_result = while_check;
+  if (while_result) {
+    while_clause;
+    goto(LOOP) {}
+  }
+}
 //
 //statement for(statement init, bool check, statement update) {
 //  init;
@@ -66,19 +67,17 @@ statement if (bool expr) {
 //  }
 //}
 //
-//void test_while() {
-//  i32 x = 0;
-//  while(x < 10) {
-//    printf("%d\n", x);
-//    x = x + 1;
-//  }
-//}
+
+void test_while() {
+  i32 x = 0;
+  while(x < 10) {
+    printf("while %d\n", x);
+    x = x + 1;
+  }
+}
 
 import "prelude.gg";
 
-extern i32 printf(char* fmt, ...);
-
-extern i32 strcmp(char* str0, char*);
 
 void test_strcmp() {
   i32 x = strcmp("hi", "there");
@@ -100,22 +99,34 @@ void test_if() {
     printf("false!\n");
   }
   printf("post if-false\n");
-}
 
-void test_goto_raw() {
-  llvm {
-    br label %test
-test:
-    br label %test
-end_goto:
+  printf("pre if-true again\n");
+  if (true) {
+    printf("true!\n");
   }
+  printf("post if-true again\n");
 }
 
+//void test_goto_raw() {
+//  llvm {
+//    br label %test
+//test:
+//    br label %test
+//end_goto:
+//  }
+//}
 
-void test_goto() {
+
+i32 test_goto() {
+  i32 x = 0;
   label(START) {}
+  if (x == 10) {
+    return 10;
+  }
   printf("repeat\n");
+  x = x + 1;
   goto(START) {}
+  return 20;
 }
 
 
@@ -292,8 +303,8 @@ i32 main() {
   test_float();
   test_if();
   test_strcmp();
-  //test_while();
-  //test_goto();
+  test_goto();
+  test_while();
   return retval;
 }
 
@@ -343,24 +354,22 @@ i32 main() {
 // paren expressions
 // if statement
 // goto statement
+// bool type
+// link sdl equivalent
+// while statement
 
 ///////////////////////////////////////
+// revisit error messages
+// better llvm error messages
+// memory mgmt
 // const varaibles in array declaration
-// array initializer
 // run directive enviroments
-// link sdl equivalent
-
-// do scope properly
 // character literals
-// paren expressions
 // undefined initialization
 // array initialization
-// bool type
-// constant expression
-// global constant initialization
-// if statement
 // for statement
-// struct type
+// empty structs (like forward declare for FFI)
+// global variables 
 
 // data array?
 // game jam

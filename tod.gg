@@ -3,8 +3,6 @@
 import "prelude.gg";
 link_library "SDL2/lib/x86/SDL2.lib";
 
-extern i32 printf(char*, ...);
-
 struct SDL_Rect {
     i32 x;
     i32 y;
@@ -15,20 +13,19 @@ struct SDL_Rect {
 extern dllimport i32 SDL_Init(u32 flags);
 extern dllimport i32* SDL_CreateWindow(char* title, i32 x, i32 y, i32 w, i32 h, u32 flags);
 extern dllimport i32* SDL_CreateRenderer(i32* window, i32 index, u32 flags);
-extern dllimport i32 SDL_RenderFillRect(i32* renderer, SDL_Rect* rect);
-extern dllimport i32 SDL_RenderClear(i32* renderer);
+extern dllimport i32* SDL_RenderFillRect(i32* renderer, SDL_Rect* rect);
+extern dllimport i32* SDL_RenderClear(i32* renderer);
 extern dllimport void SDL_RenderPresent(i32* renderer);
 extern dllimport void SDL_Delay(u32 ms);
 extern dllimport void SDL_DestroyRenderer(i32* renderer);
 extern dllimport void SDL_DestroyWindow(i32* window);
 extern dllimport void SDL_Quit();
-extern dllimport i32 SDL_SetRenderDrawColor(i32* renderer, i32 r, i32 g, i32 b, i32 a);
-//extern dllimport i32 SDL_SetRenderDrawColor(i32* renderer, u8 r, u8 g, u8 b, u8 a);
+extern dllimport i32 SDL_SetRenderDrawColor(i32* renderer, u8 r, u8 g, u8 b, u8 a);
 
-i32 SDL_INIT_VIDEO = 0x00000020;
-i32 SDL_WINDOW_SHOWN = 0x00000004;
-i32 SDL_RENDERER_ACCELERATED = 0x00000002;
-i32 SDL_RENDERER_PRESENTVSYNC = 0x00000004;
+u32 SDL_INIT_VIDEO = 0x00000020;
+u32 SDL_WINDOW_SHOWN = 0x00000004;
+u32 SDL_RENDERER_ACCELERATED = 0x00000002;
+u32 SDL_RENDERER_PRESENTVSYNC = 0x00000004;
 
 i32 main() {
   printf("Hello sdl!\n");
@@ -37,8 +34,7 @@ i32 main() {
 
   i32* window = SDL_CreateWindow("gg sdl go!", 300, 300, 640, 480, SDL_WINDOW_SHOWN);
 
-  //i32* ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  i32* ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED + SDL_RENDERER_PRESENTVSYNC);
+  i32* ren = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
 
   SDL_RenderClear(ren);
 

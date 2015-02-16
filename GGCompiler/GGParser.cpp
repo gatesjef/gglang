@@ -16,7 +16,7 @@ TOKEN_LIST_START,
   TOKEN_FUNCTION_DECLSPEC_LIST,
   TOKEN_FUNCTION_DECLSPEC_DLL_IMPORT,
   TOKEN_FUNCTION_TYPE_PARAMS,
-  TOKEN_FUNCTION_CALL_PARAMS,
+  TOKEN_FUNCTION_ARGS,
   TOKEN_STRUCT_FIELDS,
   TOKEN_BLOCK_STATEMENT,
 TOKEN_LIST_END,
@@ -29,12 +29,13 @@ TOKEN_TUPLE_START,
   TOKEN_STATEMENT_PARAMS,
   TOKEN_STATEMENT_PARAM,
   TOKEN_STATEMENT_BODY,
+  TOKEN_STATEMENT_CLAUSE,
   TOKEN_STATEMENT_CALL,
-  TOKEN_STATEMENT_CALL_PARAM,
-    //TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER,
-    //TOKEN_STATEMENT_CALL_PARAM_EXPRESSION,
+  TOKEN_STATEMENT_ARG,
+    //TOKEN_STATEMENT_ARG_IDENTIFIER,
+    //TOKEN_STATEMENT_ARG_EXPRESSION,
   TOKEN_STATEMENT_CALL_BODY,
-  TOKEN_YIELD_STATEMENT,
+  //TOKEN_YIELD_STATEMENT,
 
   TOKEN_CONTINUE_STATEMENT,
   TOKEN_BREAK_STATEMENT,
@@ -266,8 +267,11 @@ struct ArrayTypeDeclaration {
   uint64_t count;
 };
 
+struct SymbolScope;
+
 struct TypeDeclaration {
   TypeDeclarationKind kind;
+  SymbolScope *scope;
 
   union {
     BaseTypeDeclaration base_type;
@@ -285,8 +289,11 @@ enum TypeDefintitionKind {
   // TYPE_TYPEDEF,
 };
 
+struct TypeDefinition;
+
 struct LLVMTypeDefinition {
   SubString identifier;
+  SymbolScope *scope;
   SubString raw_llvm;
 };
 
@@ -316,6 +323,8 @@ struct StructDefinition {
   //Token *tok_fields;
   FieldDefinition *fields;
   int num_fields;
+
+  TypeDefinition *definition;
 };
 
 struct TypeDefinition {
@@ -342,11 +351,11 @@ struct VariableDefinition;
 struct FunctionDefinition;
 struct ExternFunctionDeclaration;
 struct StatementDefinition;
-struct StatementCallParam;
+struct StatementArg;
 struct StatementParam;
 
 struct TypeDefinitionDBEntry {
-  int scope;
+  //int scope;
   TypeDefinition *type;
 
  //TypeDef *varaible;
@@ -359,18 +368,30 @@ struct StatementDefinitionDBEntry {
 
 enum VariableType {
   VT_VARIABLE,
-  VT_STATEMENT_CALL_PARAM,
+  VT_STATEMENT_ARG,
   VT_STATEMENT_PARAM,
+  VT_STATEMENT_CLAUSE,
+  VT_STATEMENT_CLAUSE_BODY,
 };
 
-struct VaraibleDefinitionDBEntry {
+struct StatementClause {
+  SubString identifier;
+};
+
+struct FunctionStatement;
+
+struct VariableDefinitionDBEntry {
   int scope;
   SubString identifier;
   VariableType type;
 
   VariableDefinition *variable;
-  StatementCallParam *statement_call_param;
+  StatementArg *statement_arg;
   StatementParam *statement_param;
+  StatementClause *statement_clause;
+
+  FunctionStatement *statement_body;
+  int statement_num_body;
 };
 
 struct FunctionDefinitionDBEntry {
@@ -379,14 +400,35 @@ struct FunctionDefinitionDBEntry {
   ExternFunctionDeclaration *extern_function;
 };
 
-struct SymbolDatabase {
+
+struct SymbolScope {
+  SymbolScope() {
+    parent = 0;
+    child = 0;
+    next = 0;
+  }
+
+  SymbolScope *parent;
+  SymbolScope *child;
+  SymbolScope *next;
   Table<FunctionDefinitionDBEntry> functions;
-  Table<VaraibleDefinitionDBEntry> variables;
+  Table<VariableDefinitionDBEntry> variables;
+  Table<VariableDefinitionDBEntry> bound_variables;
   Table<TypeDefinitionDBEntry> types;
   Table<StatementDefinitionDBEntry> statements;
+};
 
-  int scope;
-  int scope_id;
+struct SymbolDatabase {
+  //Table<FunctionDefinitionDBEntry> functions;
+  //Table<VaraibleDefinitionDBEntry> variables;
+  //Table<TypeDefinitionDBEntry> types;
+  //Table<StatementDefinitionDBEntry> statements;
+  SymbolScope *scope_head;
+  SymbolScope *scope_current;
+  SymbolScope *scope_bound;
+
+  //int scope;
+  //int scope_id;
 };
 
 enum ParamDefinitionType {
@@ -403,8 +445,6 @@ struct StatementParam {
   TypeDeclaration type;
   SubString identifier;
 };
-
-struct FunctionStatement;
 
 enum IntrinsicOperationType {
   OP_NONE,
@@ -423,6 +463,7 @@ enum IntrinsicOperationType {
   OP_EXTEND_INT_TO_FLOAT,
   OP_CAST_POINTER,
   OP_CAST_ARRAY_TO_POINTER,
+  OP_UNSIGNED_TO_SIGNED,
 
   //OP_MEMBER_DEREFERENCE,
 
@@ -451,6 +492,7 @@ struct FunctionDefinition {
 
 
 struct FunctionCall {
+  SymbolScope *scope;
   SubString identifier;
   TokenType op;
 
@@ -467,10 +509,12 @@ struct FunctionCall {
 enum VariableReferenceType {
   VRT_VARIABLE,
   VRT_STATEMENT_EXPR,
+  VRT_STATEMENT_CLAUSE,
 };
 
 struct VariableReference {
   SubString identifier;
+  SymbolScope *scope;
 
   VariableReferenceType type;
   VariableDefinition *variable;
@@ -544,6 +588,7 @@ enum DependancyType {
 };
 
 struct CompilationDependancy {
+  SymbolScope *scope;
   DependancyType type;
   SubString identifier;
 };
@@ -583,7 +628,7 @@ enum FunctionStatementType {
   FS_RETURN,
   FS_LLVM,
   FS_ASSIGNMENT,
-  FS_YIELD,
+  //FS_YIELD,
   //FS_IF,
   //FS_FOR,
 };
@@ -593,6 +638,7 @@ struct ReturnStatement {
 };
 
 struct LLVMStatement {
+  SymbolScope *scope;
   SubString raw_llvm;
 };
 
@@ -633,23 +679,27 @@ struct ExternFunctionDeclaration {
   llvm::Function *llvm_function;
 };
 
-enum StatementCallParamType {
+enum StatementArgType {
   SCP_IDENTIFIER,
   SCP_EXPRESSION,
+  SCP_TYPE,
 };
 
-struct StatementCallParam {
-  StatementCallParamType type;
+struct StatementArg {
+  StatementArgType type;
 
   union {
     SubString identifier;
+    //TypeDeclaration type;
     Expression *expression;
   };
 };
 
 struct StatementCall {
   SubString identifier;
-  StatementCallParam *params;
+  SymbolScope *scope;
+
+  StatementArg *params;
   int num_params;
 
   FunctionStatement *body;
@@ -658,6 +708,7 @@ struct StatementCall {
 
 struct FunctionStatement {
   FunctionStatementType type;
+  //SymbolScope *scope;
 
   union {
     ExternFunctionDeclaration extern_function;
@@ -678,6 +729,7 @@ struct FunctionStatement {
 struct ImportStatement {
   SubString file;
   ParserState *parser;
+  SymbolScope *scope;
 };
 
 //struct StatementParam {
@@ -686,10 +738,10 @@ struct ImportStatement {
 //struct StatementBody {
 //};
 
-struct StatementYieldParam {
-  SubString keyword;
-  SubString identifier;
-};
+//struct StatementYieldParam {
+//  SubString keyword;
+//  SubString identifier;
+//};
 
 struct StatementDefinition {
   SubString identifier;
@@ -697,8 +749,11 @@ struct StatementDefinition {
   StatementParam *statement_params;
   int num_statement_params;
 
-  StatementYieldParam *statement_yield_params;
-  int num_statement_yield_params;
+  StatementClause *statement_clauses;
+  int num_statement_clauses;
+
+  //StatementYieldParam *statement_yield_params;
+  //int num_statement_yield_params;
 
   FunctionStatement *body;
   int num_body_statements;
@@ -706,6 +761,7 @@ struct StatementDefinition {
 
 struct ProgramStatement {
   Token *token;
+  SymbolScope *scope;
   ProgramStatementType type;
   union {
     ImportStatement import;
@@ -731,20 +787,52 @@ struct G {
   std::string extra_link_options;
 } g;
 
-void db_push_scope() {
-  g.db.scope++;
+void db_push_bound_scope() {
+  SymbolScope *new_scope = new SymbolScope();
+
+  if (g.db.scope_bound) {
+    new_scope->next = g.db.scope_bound->child;
+    g.db.scope_bound->child = new_scope;
+  }
+
+  new_scope->parent = g.db.scope_bound;
+  g.db.scope_bound = new_scope;
 }
 
-bool varaible_out_of_scope(const VaraibleDefinitionDBEntry &var) {
-  return var.scope > g.db.scope;
+//bool varaible_out_of_scope(const VaraibleDefinitionDBEntry &var) {
+//  return var.scope > g.db.scope;
+//}
+
+void db_pop_bound_scope() {
+  //g.db.scope--;
+
+  g.db.scope_bound = g.db.scope_bound->parent;
 }
+
+void db_push_scope() {
+  SymbolScope *new_scope = new SymbolScope();
+
+  if (g.db.scope_current) {
+    new_scope->next = g.db.scope_current->child;
+    g.db.scope_current->child = new_scope;
+  }
+
+  new_scope->parent = g.db.scope_current;
+  g.db.scope_current = new_scope;
+}
+
+//bool varaible_out_of_scope(const VaraibleDefinitionDBEntry &var) {
+//  return var.scope > g.db.scope;
+//}
 
 void db_pop_scope() {
-  g.db.scope--;
+  //g.db.scope--;
+
+  g.db.scope_current = g.db.scope_current->parent;
   
 
-  auto remove = std::remove_if(g.db.variables.begin(), g.db.variables.end(), varaible_out_of_scope);
-  g.db.variables.erase(remove, g.db.variables.end());
+  //auto remove = std::remove_if(g.db.variables.begin(), g.db.variables.end(), varaible_out_of_scope);
+  //g.db.variables.erase(remove, g.db.variables.end());
 
   //for(auto &vars : g.db.functions) {
   //  if (vars.scope > g.db.scope) {
@@ -1006,26 +1094,6 @@ ParseResult make_result(ParserState &parser, TokenType type, const ParseResult &
   return make_success(new_token);
 }
 
-ParseResult make_result(ParserState &parser, TokenType type, Token *subtoken) {
-  assert(subtoken);
-  Token *new_token = token_alloc(parser);
-  new_token->type = type;
-  new_token->start = subtoken;
-  new_token->end = subtoken;
-
-  if (subtoken) {
-    new_token->location.parser = &parser;
-    new_token->location = subtoken->location;
-  } else {
-    //new_token->location.file_index = parser.current_file_idx;
-    new_token->location.parser = &parser;
-    new_token->location.line = parser.current_line_number;
-    new_token->location.column = 0;
-  }
-
-  return make_success(new_token);
-}
-
 ParseResult make_result(ParserState &parser, TokenType type, const ParseTable *entry) {
   assert(entry);
   Token *new_token = token_alloc(parser);
@@ -1161,6 +1229,26 @@ ParseResult parse_import_statement(ParserState &parser) {
   //} else {
   //  return make_error(parser, "Invalid import statement");
   //}
+}
+
+ParseResult make_result(ParserState &parser, TokenType type, Token *subtoken) {
+  //assert(subtoken);
+  Token *new_token = token_alloc(parser);
+  new_token->type = type;
+  new_token->start = subtoken;
+  new_token->end = subtoken;
+
+  if (subtoken) {
+    new_token->location.parser = &parser;
+    new_token->location = subtoken->location;
+  } else {
+    //new_token->location.file_index = parser.current_file_idx;
+    new_token->location.parser = &parser;
+    new_token->location.line = parser.current_line_number;
+    new_token->location.column = 0;
+  }
+
+  return make_success(new_token);
 }
 
 ParseResult parse_link_library_statement(ParserState &parser) {
@@ -1540,11 +1628,11 @@ ParseResult parse_member_op(ParserState &parser, Token *lhs) {
   return result;
 }
 
-ParseResult parse_function_call_params(ParserState &parser) {
+ParseResult parse_function_args(ParserState &parser) {
   ParseResult result = parse_zero_or_more_separated(parser, parse_expression, ",");
   if (is_success(result) == false) return result;
 
-  return make_result(parser, TOKEN_FUNCTION_CALL_PARAMS, result);
+  return make_result(parser, TOKEN_FUNCTION_ARGS, result);
 }
 
 ParseResult parse_function_call_op(ParserState &parser, Token *lhs) {
@@ -1553,7 +1641,7 @@ ParseResult parse_function_call_op(ParserState &parser, Token *lhs) {
     if (is_success(result) == false) return result;
   }
 
-  ParseResult params = parse_function_call_params(parser);
+  ParseResult params = parse_function_args(parser);
   if (is_success(params) == false) {
     return make_error(parser, "Invalid function call params");
   }
@@ -1824,11 +1912,11 @@ ParseResult parse_binary_operator(ParserState &parser) {
     "==", TOKEN_CMP_EQ_OP,  9,
     "!=", TOKEN_CMP_NEQ_OP, 9,
 
-    //"&",  TOKEN_BITWISE_AND_OP, 10,
-    //"|",  TOKEN_BITWISE_OR_OP,  11,
     "^",  TOKEN_BITWISE_XOR_OP, 12,
     "&&", TOKEN_LOGICAL_AND_OP, 13,
     "||", TOKEN_LOGICAL_OR_OP,  14,
+    "&",  TOKEN_BITWISE_AND_OP, 10,
+    "|",  TOKEN_BITWISE_OR_OP,  11,
   };
 
   ParseResult assignment_result = peek(parser, parse_2char_assignment_operator);
@@ -2010,27 +2098,27 @@ ParseResult parse_yield_exact(ParserState &parser) {
   return parse_exact(parser, "yield");
 }
 
-ParseResult parse_yield_statement(ParserState &parser) {
-  ParseResult yield_result = parse_yield_exact(parser);
-  if (is_success(yield_result) == false) return yield_result;
-
-  //ParseResult identifier_result = parse_identifier(parser);
-  //if (is_error(identifier_result)) return identifier_result;
-
-  ParseResult semicolon_result = parse_semicolon(parser);
-  if (is_success(semicolon_result) == false) {
-    make_error(parser, "Expected ';' in yield statement");
-  }
-
-  return make_result(parser, TOKEN_YIELD_STATEMENT, PARSE_EMPTY);
-}
+//ParseResult parse_yield_statement(ParserState &parser) {
+//  ParseResult yield_result = parse_yield_exact(parser);
+//  if (is_success(yield_result) == false) return yield_result;
+//
+//  //ParseResult identifier_result = parse_identifier(parser);
+//  //if (is_error(identifier_result)) return identifier_result;
+//
+//  ParseResult semicolon_result = parse_semicolon(parser);
+//  if (is_success(semicolon_result) == false) {
+//    make_error(parser, "Expected ';' in yield statement");
+//  }
+//
+//  return make_result(parser, TOKEN_YIELD_STATEMENT, PARSE_EMPTY);
+//}
 
 ParseResult parse_statement(ParserState &parser);
 
 ParseResult parse_statement_statement(ParserState &parser) {
-  ParseResult parse_yield = parse_yield_statement(parser);
-  if (is_success(parse_yield)) return parse_yield;
-  if (is_error(parse_yield)) return parse_yield;
+  //ParseResult parse_yield = parse_yield_statement(parser);
+  //if (is_success(parse_yield)) return parse_yield;
+  //if (is_error(parse_yield)) return parse_yield;
 
   return parse_statement(parser);
 }
@@ -2048,6 +2136,18 @@ ParseResult parse_right_brace(ParserState &parser) {
   return parse_exact(parser, "}");
 }
 
+ParseResult parse_statement_clauses(ParserState &parser) {
+  ParseResult result = parse_identifier(parser);
+  if (is_error(result)) return result;
+  //if (!is_success(result)) return result;
+
+  if (is_success(result)) {
+    return make_result(parser, TOKEN_STATEMENT_CLAUSE, result);
+  } else {
+    return make_result(parser, TOKEN_STATEMENT_CLAUSE, (Token *)NULL);
+  }
+}
+
 ParseResult parse_statement_definition(ParserState &parser) {
   ParseFn statments[] = {
     parse_statement_exact,
@@ -2055,6 +2155,7 @@ ParseResult parse_statement_definition(ParserState &parser) {
     parse_left_paren,
     parse_statement_params,
     parse_right_paren,
+    parse_statement_clauses,
     parse_left_brace,
     parse_statement_body,
     parse_right_brace,
@@ -2338,29 +2439,29 @@ ParseResult parse_assignment_statement(ParserState &parser) {
   return make_result(parser, TOKEN_ASSIGMENT_STATEMENT, result);
 }
 
-//ParseResult parse_statement_call_param_identifier(ParserState &parser) {
+//ParseResult parse_statement_arg_identifier(ParserState &parser) {
 //  ParseResult result = parse_identifier(parser);
 //  if (is_success(result) == false) return result;
 //  
-//  return make_result(parser, TOKEN_STATEMENT_CALL_PARAM_IDENTIFIER, result);
+//  return make_result(parser, TOKEN_STATEMENT_ARG_IDENTIFIER, result);
 //}
 
 
-ParseResult parse_statement_call_params(ParserState &parser) {
+ParseResult parse_statement_args(ParserState &parser) {
   static const ParseFn statements[] = {
     parse_expression,
-    //parse_statement_call_param_identifier, 
+    //parse_statement_arg_identifier, 
     //varaible_declaration,
     //statement,
   };
   static const int num_statements = ARRAYSIZE(statements);
 
   ParseResult result = parse_first_of_deep(parser, statements, num_statements);
-  return make_result(parser, TOKEN_STATEMENT_CALL_PARAM, result);
+  return make_result(parser, TOKEN_STATEMENT_ARG, result);
 }
 
 ParseResult parse_statement_call_body(ParserState &parser) {
-  ParseResult result = parse_zero_or_more(parser, parse_statement);
+  ParseResult result = parse_zero_or_more(parser, parse_statement_statement);
   return make_result(parser, TOKEN_STATEMENT_CALL_BODY, result);
 }
 
@@ -2368,7 +2469,7 @@ ParseResult parse_statement_call(ParserState &parser) {
   static const ParseFn statements[] = {
     parse_identifier,
     parse_left_paren,
-    parse_statement_call_params,
+    parse_statement_args,
     parse_right_paren,
     parse_left_brace,
     parse_statement_call_body,
@@ -2698,28 +2799,47 @@ PipelineResult emit_type_declaration(TypeDeclaration &declaration, llvm::Type *&
 //  return retval;
 //}
 
-std::string to_cstring(SubString &substring) {
+std::string to_cstring(const SubString &substring) {
   return std::string(substring.start, substring.length);
 }
 
-TypeDefinition *db_lookup_type_by_identifier(const SubString &identifier) {
-  for(TypeDefinitionDBEntry &entry: g.db.types) {
-    if (entry.type->type == TYPE_LLVM && substring_cmp(entry.type->llvm_type_definition->identifier, identifier) == true) {
-      return entry.type;
-    }
-    else if (entry.type->type == TYPE_STRUCT && substring_cmp(entry.type->struct_definition->identifier, identifier) == true) {
-      return entry.type;
-    }
-    //else if (type.kind == TYPEDEF_TYPE) {
+//TypeDefinition *db_lookup_type_by_identifier(const SubString &identifier) {
+//  for(TypeDefinitionDBEntry &entry: g.db.types) {
+//    if (entry.type->type == TYPE_LLVM && substring_cmp(entry.type->llvm_type_definition->identifier, identifier) == true) {
+//      return entry.type;
+//    }
+//    else if (entry.type->type == TYPE_STRUCT && substring_cmp(entry.type->struct_definition->identifier, identifier) == true) {
+//      return entry.type;
+//    }
+//    //else if (type.kind == TYPEDEF_TYPE) {
+//
+//    //}
+//  }
+//
+//  return NULL;
+//};
 
-    //}
+TypeDefinition *db_lookup_type_by_identifier(SymbolScope *scope, const SubString &identifier) {
+  assert (scope != NULL);
+  for(;scope != NULL; scope = scope->parent) {
+    for(TypeDefinitionDBEntry &entry: scope->types) {
+      if (entry.type->type == TYPE_LLVM && substring_cmp(entry.type->llvm_type_definition->identifier, identifier) == true) {
+        return entry.type;
+      }
+      else if (entry.type->type == TYPE_STRUCT && substring_cmp(entry.type->struct_definition->identifier, identifier) == true) {
+        return entry.type;
+      }
+      //else if (type.kind == TYPEDEF_TYPE) {
+
+      //}
+    }
   }
-
   return NULL;
-};
+}
 
-bool db_type_exists(SubString &identifier) {
-  TypeDefinition *type = db_lookup_type_by_identifier(identifier);
+
+bool db_type_exists(SymbolScope *scope, SubString &identifier) {
+  TypeDefinition *type = db_lookup_type_by_identifier(scope, identifier);
   if (type == NULL) return false;
   return true;
 }
@@ -2743,8 +2863,10 @@ FieldDefinition *struct_lookup_field(TypeDefinition &type, const SubString &iden
 }
 
 TypeDeclaration *make_array_type(TypeDeclaration *base_type, uint64_t count) {
-  TypeDeclaration *new_type = new TypeDeclaration;
+  TypeDeclaration *new_type = (TypeDeclaration *)calloc(1, sizeof(TypeDeclaration));
   new_type->kind= TYPE_ARRAY;
+  new_type->scope = base_type->scope;
+  assert(new_type->scope);
   new_type->array_type.sub_type = base_type;
   new_type->array_type.count_expression = NULL;
   new_type->array_type.count = count;
@@ -2752,7 +2874,9 @@ TypeDeclaration *make_array_type(TypeDeclaration *base_type, uint64_t count) {
 }
 
 TypeDeclaration *make_pointer_type(TypeDeclaration *base_type) {
-  TypeDeclaration *pointer_type = new TypeDeclaration;
+  TypeDeclaration *pointer_type = (TypeDeclaration *)calloc(1, sizeof(TypeDeclaration));
+  pointer_type->scope = base_type->scope;
+  assert(pointer_type->scope);
   pointer_type->kind= TYPE_POINTER;
   pointer_type->pointer_type.sub_type = base_type;
   return pointer_type;
@@ -2887,7 +3011,12 @@ DigestResult digest_pointer_type(Token *declaration, TypeDeclaration &type) {
   type.kind = TYPE_POINTER;
   type.pointer_type.sub_type = type_decl_alloc(1);
   DigestResult result = digest_type_declaration(tok_subtype, *type.pointer_type.sub_type);
-  if (is_success(result)) return result;
+  if (is_success(result) == false) {
+    return result;
+  }
+  type.scope = type.pointer_type.sub_type->scope;
+  assert(type.scope != NULL);
+  assert(type.scope == g.db.scope_current);
 
   return DIGEST_SUCCESS;
 }
@@ -2912,6 +3041,9 @@ DigestResult digest_array_type(Token *declaration, TypeDeclaration &type) {
   DigestResult count_result = digest_expression(tok_count, *type.array_type.count_expression);
   if (is_success(count_result) == false) return count_result;
 
+  type.scope = type.array_type.sub_type->scope;
+  assert(type.scope == g.db.scope_current);
+
   return DIGEST_SUCCESS;
 }
 
@@ -2932,11 +3064,14 @@ DigestResult digest_function_type(Token *declaration, TypeDeclaration &type) {
     if (is_success(result) == false) return result;
   }
 
+  type.scope = g.db.scope_current;
+
   return DIGEST_SUCCESS;
 }
 
 
 DigestResult digest_base_type(Token *type_identifier, TypeDeclaration &type) {
+  type.scope = g.db.scope_current;
   type.kind = TYPE_BASE;
   type.base_type.identifier = type_identifier->substring;
   return DIGEST_SUCCESS;
@@ -2944,6 +3079,7 @@ DigestResult digest_base_type(Token *type_identifier, TypeDeclaration &type) {
 
 enum ConversionType {
   array_to_pointer,
+  up_convert_unsigned_to_signed,
   up_convert_integer,
   up_convert_float,
   up_convert_int_to_float,
@@ -2958,12 +3094,37 @@ struct ConversionChain {
   int num_conversions;
 };
 
+SymbolScope *globalScope() {
+  return g.db.scope_head;
+}
+
+TypeDeclaration *lookup_signed_type(TypeDeclaration *source) {
+  //halt();
+  assert(source->kind == TYPE_BASE);
+  if (substring_cmp(source->base_type.identifier, "u8")) {
+    return db_lookup_type_by_identifier(globalScope(), to_substring("i8"))->decl;
+  } else if (substring_cmp(source->base_type.identifier, "u16")) {
+    return db_lookup_type_by_identifier(globalScope(), to_substring("i16"))->decl;
+  } else if (substring_cmp(source->base_type.identifier, "u32")) {
+    return db_lookup_type_by_identifier(globalScope(), to_substring("i32"))->decl;
+  } else if (substring_cmp(source->base_type.identifier, "u64")) {
+    return db_lookup_type_by_identifier(globalScope(), to_substring("i64"))->decl;
+  } else if (substring_cmp(source->base_type.identifier, "u128")) {
+    return db_lookup_type_by_identifier(globalScope(), to_substring("i128"))->decl;
+  }
+
+  halt();
+  return NULL;
+}
+
 TypeDeclaration *apply_conversion(ConversionType type, TypeDeclaration *source, TypeDeclaration *dest= NULL) {
   switch(type) {
   case array_to_pointer: 
     return make_pointer_type(source->array_type.sub_type);
   case up_convert_integer:
     return dest;
+  case up_convert_unsigned_to_signed:
+    return lookup_signed_type(source);
   case up_convert_float:
     return dest;
   case up_convert_int_to_float:
@@ -2990,7 +3151,7 @@ int type_size(TypeDeclaration *type) {
   case TYPE_POINTER:
     return g.llvm.module->getDataLayout()->getPointerSizeInBits();
   case TYPE_BASE: {
-    TypeDefinition *decl = db_lookup_type_by_identifier(type->base_type.identifier);
+    TypeDefinition *decl = db_lookup_type_by_identifier(type->scope, type->base_type.identifier);
     switch(decl->type) {
     case TYPE_LLVM: {
       uint32_t size = llvm_type->getPrimitiveSizeInBits();
@@ -3049,12 +3210,55 @@ bool is_array(TypeDeclaration *type) {
   return type->kind == TYPE_ARRAY;
 }
 
+bool is_unsigned(TypeDeclaration *type) {
+  if (type->kind != TYPE_BASE) return false;
+
+  if (substring_cmp(type->base_type.identifier, "u8")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "u16")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "u32")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "u64")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "u128")) {
+    return true;
+  }
+
+  return false;
+}
+  
+bool is_signed(TypeDeclaration *type) {
+  if (type->kind != TYPE_BASE) return false;
+
+  if (substring_cmp(type->base_type.identifier, "i8")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "i16")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "i32")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "i64")) {
+    return true;
+  } else if (substring_cmp(type->base_type.identifier, "i128")) {
+    return true;
+  }
+
+  return false;
+}
+
+PipelineResult compare_type_declaration(TypeDeclaration &decl0, TypeDeclaration &decl1, bool &retval);
+
 bool can_convert(TypeDeclaration *source, TypeDeclaration *dest, ConversionChain &conversion) {
   conversion.num_conversions = 0;
 
   if (is_array(source) && is_pointer(dest)) {
     conversion.chain[conversion.num_conversions++] = array_to_pointer;
     source = apply_conversion(array_to_pointer, source);
+  }
+
+  if (is_unsigned(source) && is_signed(dest)) {
+    conversion.chain[conversion.num_conversions++] = up_convert_unsigned_to_signed;
+    source = apply_conversion(up_convert_unsigned_to_signed, source, dest);
   }
 
   if (is_integer(source) && is_integer(dest) && type_size(source) < type_size(dest)) {
@@ -3077,24 +3281,29 @@ bool can_convert(TypeDeclaration *source, TypeDeclaration *dest, ConversionChain
     source = apply_conversion(pointer_to_void_pointer, source);
   }
 
-  // TODO: user defined
-  llvm::Type *llvm_source;
-  llvm::Type *llvm_dest;
-  PipelineResult result_source = emit_type_declaration(*source, llvm_source);
-  //if (is_success(result_source) == false) return result_source;
-  assert(is_success(result_source));
+  bool retval;
+  PipelineResult result = compare_type_declaration(*dest, *source, retval);
+  assert(is_success(result));
+  return retval;
 
-  PipelineResult result_dest   = emit_type_declaration(*dest, llvm_dest);
-  //if (is_success(result_dest) == false) return result_dest;
-  assert(is_success(result_dest));
+  //// TODO: user defined
+  //llvm::Type *llvm_source;
+  //llvm::Type *llvm_dest;
+  //PipelineResult result_source = emit_type_declaration(*source, llvm_source);
+  ////if (is_success(result_source) == false) return result_source;
+  //assert(is_success(result_source));
 
-  return (llvm_source == llvm_dest);;
+  //PipelineResult result_dest   = emit_type_declaration(*dest, llvm_dest);
+  ////if (is_success(result_dest) == false) return result_dest;
+  //assert(is_success(result_dest));
+
+  //return (llvm_source == llvm_dest);;
 }
 
-bool compare_function_param_types(TypeDeclaration **call_param_types, ParamDefinition *function_params, int num_params, ConversionChain *conversions) {
+bool compare_function_param_types(TypeDeclaration **arg_types, ParamDefinition *function_params, int num_params, ConversionChain *conversions) {
   for(int i = 0; i < num_params; ++i) {
     assert(function_params[i].type != PD_VARARGS);
-    TypeDeclaration *t0 = call_param_types[i];
+    TypeDeclaration *t0 = arg_types[i];
     TypeDeclaration *t1 = function_params[i].variable.type;
     assert(t0);
     assert(t1);
@@ -3165,6 +3374,13 @@ void create_conversion_expression(ConversionType type, Expression &expression, E
     expression.function_call.num_params = 1;
     expression.function_call.dest_type = dest_type;
     break;
+  case up_convert_unsigned_to_signed:
+    expression.type = EXPR_FUNCTION_CALL;
+    expression.function_call.intrinsic = OP_UNSIGNED_TO_SIGNED;
+    expression.function_call.params = &original_expression;
+    expression.function_call.num_params = 1;
+    expression.function_call.dest_type = dest_type;
+    break;
   case up_convert_integer:
     expression.type = EXPR_FUNCTION_CALL;
     expression.function_call.intrinsic = OP_EXTEND_INTEGER;
@@ -3211,14 +3427,14 @@ void apply_conversion(const ConversionChain &conversion, Expression &expression,
 
 void apply_auto_varargs_conversion(TypeDeclaration *type, Expression &param) {
   if (is_integer(type) && type_size(type) < 32) {
-    TypeDeclaration *i32_type = db_lookup_type_by_identifier(to_substring("i32"))->decl;
+    TypeDeclaration *i32_type = db_lookup_type_by_identifier(globalScope(), to_substring("i32"))->decl;
     ConversionChain chain;
     chain.chain[0] = up_convert_integer;
     chain.num_conversions = 1;
     apply_conversion(chain, param, i32_type);
   }
   if (is_float(type) && type_size(type) < 64) {
-    TypeDeclaration *f64_type = db_lookup_type_by_identifier(to_substring("f64"))->decl;
+    TypeDeclaration *f64_type = db_lookup_type_by_identifier(globalScope(), to_substring("f64"))->decl;
     ConversionChain chain;
     chain.chain[0] = up_convert_float;
     chain.num_conversions = 1;
@@ -3226,72 +3442,74 @@ void apply_auto_varargs_conversion(TypeDeclaration *type, Expression &param) {
   }
 }
 
-void apply_conversions(ConversionChain *conversions, TypeDeclaration **call_param_types, Expression *call_params, ParamDefinition *function_params, int num_params, int num_function_params) {
+void apply_conversions(ConversionChain *conversions, TypeDeclaration **arg_types, Expression *args, ParamDefinition *function_params, int num_params, int num_function_params) {
   for(int i = 0; i < num_params; ++i) {
 
     if (i >= num_function_params || (i == num_function_params-1 && function_params[i].type == PD_VARARGS)) {
-      apply_auto_varargs_conversion(call_param_types[i], call_params[i]);
+      apply_auto_varargs_conversion(arg_types[i], args[i]);
       continue;
     } else if (conversions[i].num_conversions == 0) continue;
 
     assert(function_params[i].type == PD_VARIABLE);
     TypeDeclaration *dest_type = function_params[i].variable.type;
-    apply_conversion(conversions[i], call_params[i], dest_type);
+    apply_conversion(conversions[i], args[i], dest_type);
   }
 }
 
 
-FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenType op, TypeDeclaration **call_param_types, Expression *params, int num_params) {
+FunctionLookupResult db_function_call_lookup(SymbolScope *scope, const SubString &identifier, TokenType op, TypeDeclaration **arg_types, Expression *params, int num_params) {
   FunctionLookupResult error = {LOOKUP_ERROR};
   FunctionMatch best_match = {};
   ConversionChain conversions[MAX_PARAMS] = {};
   int num_function_params;
   
-  for(FunctionDefinitionDBEntry &entry : g.db.functions) {
-    if (entry.function) {
-      if (entry.function->num_params && entry.function->params[entry.function->num_params-1].type == PD_VARARGS) {
-        if (substring_cmp(entry.function->identifier, identifier) && entry.function->num_params-1 <= num_params) {
-          if (compare_function_param_types(call_param_types, entry.function->params, entry.function->num_params-1, conversions) == true) {
-            FunctionLookupResult retval;
-            retval.type = LOOKUP_FUNCTION;
-            retval.function = entry.function;
-            num_function_params = entry.function->num_params;
-            function_match_add(best_match, retval, conversions, num_params);
+  for(; scope != NULL; scope = scope->parent) {
+    for(FunctionDefinitionDBEntry &entry : scope->functions) {
+      if (entry.function) {
+        if (entry.function->num_params && entry.function->params[entry.function->num_params-1].type == PD_VARARGS) {
+          if (substring_cmp(entry.function->identifier, identifier) && entry.function->num_params-1 <= num_params) {
+            if (compare_function_param_types(arg_types, entry.function->params, entry.function->num_params-1, conversions) == true) {
+              FunctionLookupResult retval;
+              retval.type = LOOKUP_FUNCTION;
+              retval.function = entry.function;
+              num_function_params = entry.function->num_params;
+              function_match_add(best_match, retval, conversions, num_params);
+            }
+          }
+        } else {
+          if (substring_cmp(entry.function->identifier, identifier) && entry.function->num_params == num_params) {
+            if (compare_function_param_types(arg_types, entry.function->params, num_params, conversions) == true) {
+              FunctionLookupResult retval;
+              retval.type = LOOKUP_FUNCTION;
+              retval.function = entry.function;
+              num_function_params = entry.function->num_params;
+              //return retval;
+              function_match_add(best_match, retval, conversions, num_params);
+            }
           }
         }
       } else {
-        if (substring_cmp(entry.function->identifier, identifier) && entry.function->num_params == num_params) {
-          if (compare_function_param_types(call_param_types, entry.function->params, num_params, conversions) == true) {
-            FunctionLookupResult retval;
-            retval.type = LOOKUP_FUNCTION;
-            retval.function = entry.function;
-            num_function_params = entry.function->num_params;
-            //return retval;
-            function_match_add(best_match, retval, conversions, num_params);
+        assert(entry.extern_function);
+        if (entry.extern_function->num_params && entry.extern_function->params[entry.extern_function->num_params-1].type == PD_VARARGS) {
+          if (substring_cmp(entry.extern_function->identifier, identifier) && entry.extern_function->num_params-1 <= num_params) {
+            if (compare_function_param_types(arg_types, entry.extern_function->params, entry.extern_function->num_params-1, conversions) == true) {
+              FunctionLookupResult retval;
+              retval.type = LOOKUP_EXTERN_FUNCTION;
+              retval.extern_function = entry.extern_function;
+              //return retval;
+              function_match_add(best_match, retval, conversions, num_params);
+            }
           }
         }
-      }
-    } else {
-      assert(entry.extern_function);
-      if (entry.extern_function->num_params && entry.extern_function->params[entry.extern_function->num_params-1].type == PD_VARARGS) {
-        if (substring_cmp(entry.extern_function->identifier, identifier) && entry.extern_function->num_params-1 <= num_params) {
-          if (compare_function_param_types(call_param_types, entry.extern_function->params, entry.extern_function->num_params-1, conversions) == true) {
-            FunctionLookupResult retval;
-            retval.type = LOOKUP_EXTERN_FUNCTION;
-            retval.extern_function = entry.extern_function;
-            //return retval;
-            function_match_add(best_match, retval, conversions, num_params);
-          }
-        }
-      }
-      else {
-        if (substring_cmp(entry.extern_function->identifier, identifier) && entry.extern_function->num_params == num_params) {
-          if (compare_function_param_types(call_param_types, entry.extern_function->params, num_params, conversions) == true) {
-            FunctionLookupResult retval;
-            retval.type = LOOKUP_EXTERN_FUNCTION;
-            retval.extern_function = entry.extern_function;
-            //return retval;
-            function_match_add(best_match, retval, conversions, num_params);
+        else {
+          if (substring_cmp(entry.extern_function->identifier, identifier) && entry.extern_function->num_params == num_params) {
+            if (compare_function_param_types(arg_types, entry.extern_function->params, num_params, conversions) == true) {
+              FunctionLookupResult retval;
+              retval.type = LOOKUP_EXTERN_FUNCTION;
+              retval.extern_function = entry.extern_function;
+              //return retval;
+              function_match_add(best_match, retval, conversions, num_params);
+            }
           }
         }
       }
@@ -3309,7 +3527,7 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
       num_function_params = best_match.result.function->num_params;
     }
 
-    apply_conversions(best_match.conversions, call_param_types, params, function_params, num_params, num_function_params);
+    apply_conversions(best_match.conversions, arg_types, params, function_params, num_params, num_function_params);
     return best_match.result;
   }
 
@@ -3322,7 +3540,7 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
   //OP_ARRAY_DEREFERENCE,
 
   if (num_params == 1) {
-    TypeDeclaration *type0 = call_param_types[0];
+    TypeDeclaration *type0 = arg_types[0];
 
     if (op == TOKEN_DEREF_OP && is_pointer(type0)) {
       FunctionLookupResult retval;
@@ -3338,8 +3556,8 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
       return error;
     }
   } else if (num_params == 2) {
-    TypeDeclaration *type0 = call_param_types[0];
-    TypeDeclaration *type1 = call_param_types[1];
+    TypeDeclaration *type0 = arg_types[0];
+    TypeDeclaration *type1 = arg_types[1];
 
     if (op == TOKEN_ADD_OP && is_pointer(type0) && is_integer(type1))  {
       FunctionLookupResult retval;
@@ -3361,22 +3579,67 @@ FunctionLookupResult db_function_call_lookup(const SubString &identifier, TokenT
 
 }
 
-bool compare_type_declaration(TypeDeclaration *type0, TypeDeclaration *type1) {
-  return type0 == type1;
-}
+//bool compare_type_declaration(TypeDeclaration *type0, TypeDeclaration *type1) {
+//  return type0 == type1;
+//}
 
-PipelineResult compare_type_declaration(TypeDeclaration &decl0, TypeDeclaration &decl1, bool &result) {
+PipelineResult compare_type_declaration(TypeDeclaration &decl0, TypeDeclaration &decl1, bool &retval) {
   // TODO
 
-  llvm::Type *llvm0;
-  PipelineResult result0 = emit_type_declaration(decl0, llvm0);
-  if (is_success(result0) == false) return result0;
+  if (decl0.kind != decl1.kind) {
+    retval = false;
+    return PIPELINE_SUCCESS;
+  }
 
-  llvm::Type *llvm1;
-  PipelineResult result1 = emit_type_declaration(decl1, llvm1);
-  if (is_success(result1) == false) return result1;
+  switch(decl0.kind) {
+  case TYPE_ARRAY: {
+    if (decl0.array_type.count != decl1.array_type.count) {
+      retval = false;
+      return PIPELINE_SUCCESS;
+    }
 
-  result = llvm0 == llvm1;
+    PipelineResult result = compare_type_declaration(*decl0.array_type.sub_type, *decl1.array_type.sub_type, retval);
+    if (is_success(result) == false) return result;
+    return PIPELINE_SUCCESS;
+  } 
+  case TYPE_POINTER: {
+    PipelineResult result = compare_type_declaration(*decl0.pointer_type.sub_type, *decl1.pointer_type.sub_type, retval);
+    if (is_success(result) == false) return result;
+    return PIPELINE_SUCCESS;
+  }
+  case TYPE_FUNCTION: {
+    PipelineResult result = compare_type_declaration(*decl0.function_type.retval, *decl1.function_type.retval, retval);
+    if (is_success(result) == false) return result;
+
+    if (retval == false) {
+      return PIPELINE_SUCCESS;
+    }
+
+    if (decl0.function_type.num_params != decl1.function_type.num_params) {
+      retval = false;
+      return PIPELINE_SUCCESS;
+    }
+
+    for(int i = 0; i < decl0.function_type.num_params; ++i) {
+      PipelineResult result = compare_type_declaration(decl0.function_type.params[i], decl1.function_type.params[i], retval);
+      if (is_success(result) == false) return result;
+
+      if (retval == false) {
+        return PIPELINE_SUCCESS;
+      }
+    }
+
+    retval = true;
+    return PIPELINE_SUCCESS;
+  }
+  case TYPE_BASE: {
+    retval = substring_cmp(decl0.base_type.identifier, decl1.base_type.identifier);
+    return PIPELINE_SUCCESS;
+  }
+  default:
+    halt();
+  }
+
   return PIPELINE_SUCCESS;
 }
 
@@ -3391,7 +3654,7 @@ PipelineResult compare_function_params(ParamDefinition *function_params, ParamDe
     assert(param.type == PD_VARIABLE);
 
     PipelineResult result = compare_type_declaration(*param.variable.type, *function_param.variable.type, types_equal);
-    if (is_success(result)) return result;
+    if (is_success(result) == false) return result;
 
     if (types_equal == false) return PIPELINE_SUCCESS;
   }
@@ -3415,21 +3678,23 @@ ParamDefinition *dbfunction_get_params(FunctionDefinitionDBEntry &new_function) 
 }
 
 
-PipelineResult db_lookup_function(const SubString &identifier, ParamDefinition *params, int num_params, FunctionDefinitionDBEntry *&result) {
-  for(FunctionDefinitionDBEntry &function : g.db.functions) {
-    SubString function_identifier = dbfunction_get_identifier(function);
-    if (substring_cmp(function_identifier, identifier)) {
-      int function_num_params = dbfunction_get_num_params(function);
-      ParamDefinition *function_params = dbfunction_get_params(function);
-      if (num_params != function_num_params) continue;
+PipelineResult db_lookup_function(SymbolScope *scope, const SubString &identifier, ParamDefinition *params, int num_params, FunctionDefinitionDBEntry *&result) {
+  for(;scope != NULL; scope = scope->parent) {
+    for(FunctionDefinitionDBEntry &function : scope->functions) {
+      SubString function_identifier = dbfunction_get_identifier(function);
+      if (substring_cmp(function_identifier, identifier)) {
+        int function_num_params = dbfunction_get_num_params(function);
+        ParamDefinition *function_params = dbfunction_get_params(function);
+        if (num_params != function_num_params) continue;
 
-      bool types_equal;
-      PipelineResult param_result = compare_function_params(function_params, params, num_params, types_equal);
-      if (is_success(param_result) == false) return param_result;
+        bool types_equal;
+        PipelineResult param_result = compare_function_params(function_params, params, num_params, types_equal);
+        if (is_success(param_result) == false) return param_result;
 
-      if (types_equal == false) continue;
-      result = &function;
-      return PIPELINE_SUCCESS;
+        if (types_equal == false) continue;
+        result = &function;
+        return PIPELINE_SUCCESS;
+      }
     }
   }
 
@@ -3437,18 +3702,33 @@ PipelineResult db_lookup_function(const SubString &identifier, ParamDefinition *
   return PIPELINE_SUCCESS;
 }
 
-VaraibleDefinitionDBEntry *db_lookup_variable(const SubString &identifier) {
-  for(auto &varaible : g.db.variables) {
-    if (substring_cmp(varaible.identifier, identifier)) {
-      return &varaible;
+VariableDefinitionDBEntry *db_lookup_free_variable(SymbolScope *scope, const SubString &identifier) {
+  for(;scope != NULL; scope = scope->parent) {
+    for(auto &varaible : scope->variables) {
+      if (substring_cmp(varaible.identifier, identifier)) {
+        return &varaible;
+      }
     }
   }
-  
+
   return NULL;
+}
+
+VariableDefinitionDBEntry *db_lookup_variable(SymbolScope *scope, const SubString &identifier) {
+  for(SymbolScope *scope_bound = g.db.scope_bound; scope_bound != NULL; scope_bound = scope_bound->parent) {
+    for(auto &varaible : scope_bound->bound_variables) {
+      if (substring_cmp(varaible.identifier, identifier)) {
+        return &varaible;
+      }
+    }
+  }
+
+  return db_lookup_free_variable(scope, identifier);
 }
 
 PipelineResult make_function_dependancy(SubString &identifier) {
   PipelineResult result;
+  result.dependancy.scope = g.db.scope_current;
   result.result = RESULT_DEPENDANCY;
   result.dependancy.type = DEPENDANCY_FUNCTION;
   result.dependancy.identifier = identifier;
@@ -3458,6 +3738,7 @@ PipelineResult make_function_dependancy(SubString &identifier) {
 
 PipelineResult make_type_dependancy(SubString &identifier) {
   PipelineResult result;
+  result.dependancy.scope = g.db.scope_current;
   result.result = RESULT_DEPENDANCY;
   result.dependancy.type = DEPENDANCY_TYPE;
   result.dependancy.identifier = identifier;
@@ -3467,6 +3748,7 @@ PipelineResult make_type_dependancy(SubString &identifier) {
 
 PipelineResult make_variable_dependancy(SubString &identifier) {
   PipelineResult result;
+  result.dependancy.scope = g.db.scope_current;
   result.result = RESULT_DEPENDANCY;
   result.dependancy.type = DEPENDANCY_VARIABLE;
   result.dependancy.identifier = identifier;
@@ -3476,12 +3758,19 @@ PipelineResult make_variable_dependancy(SubString &identifier) {
 
 PipelineResult make_statement_dependancy(SubString &identifier) {
   PipelineResult result;
+  result.dependancy.scope = g.db.scope_current;
   result.result = RESULT_DEPENDANCY;
   result.dependancy.type = DEPENDANCY_STATEMENT;
   result.dependancy.identifier = identifier;
   printf("dependancy %s\n", to_cstring(identifier).c_str());
   return result;
 }
+
+PipelineResult typecheck_type_declaration(TypeDeclaration &type) {
+  llvm::Type *unused;
+  return emit_type_declaration(type, unused);
+}
+
 
 PipelineResult typecheck_function_definition(FunctionDefinition &function);
 
@@ -3492,18 +3781,20 @@ PipelineResult typecheck_function_call_expression(FunctionCall &call, TypeDeclar
     return PIPELINE_SUCCESS;
   }
 
-  TypeDeclaration *call_param_types[MAX_PARAMS];
+  TypeDeclaration *arg_types[MAX_PARAMS];
 
   for(int i = 0; i < call.num_params; ++i)
   {
-    Expression &call_param = call.params[i];
-    PipelineResult result = typecheck_expression(call_param, call_param_types[i]);
-
+    Expression &arg = call.params[i];
+    PipelineResult result = typecheck_expression(arg, arg_types[i]);
     if (is_success(result) == false) return result;
+
+    PipelineResult result_type = typecheck_type_declaration(*arg_types[i]);
+    if (is_success(result_type) == false) return result_type;
   }
 
-  // TODO use call_param_types rather than params;
-  FunctionLookupResult lookup_result = db_function_call_lookup(call.identifier, call.op, call_param_types, call.params, call.num_params);
+  // TODO use arg_types rather than params;
+  FunctionLookupResult lookup_result = db_function_call_lookup(call.scope, call.identifier, call.op, arg_types, call.params, call.num_params);
 
   switch(lookup_result.type) {
   case LOOKUP_ERROR:
@@ -3512,6 +3803,7 @@ PipelineResult typecheck_function_call_expression(FunctionCall &call, TypeDeclar
   case LOOKUP_FUNCTION:
     call.function   = lookup_result.function;
     type = call.function->retval_type;
+    assert(type->scope);
     //if (call.function->retval_type->type == NULL) {
     //  TypecheckResult result = typecheck_type_declaration(*call.function->retval_type);
     //  if (is_success(result) == false) return result;
@@ -3520,6 +3812,7 @@ PipelineResult typecheck_function_call_expression(FunctionCall &call, TypeDeclar
   case LOOKUP_EXTERN_FUNCTION:
     call.extern_function = lookup_result.extern_function;
     type = call.extern_function->retval_type;
+    assert(type->scope);
     //if (call.extern_function->retval_type->type == NULL) {
     //  TypecheckResult result = typecheck_type_declaration(*call.extern_function->retval_type);
     //  if (is_success(result) == false) return result;
@@ -3527,22 +3820,27 @@ PipelineResult typecheck_function_call_expression(FunctionCall &call, TypeDeclar
     break;
   case LOOKUP_INTRINSIC:
     call.intrinsic  = lookup_result.intrinsic;
+    assert(call.scope != NULL);
     switch(lookup_result.intrinsic) {
     case OP_POINTER_DEREFERENCE:
-      type = call_param_types[0]->pointer_type.sub_type;
+      type = arg_types[0]->pointer_type.sub_type;
       call.dest_type = type;
+      assert(type->scope);
       break;
     case OP_ADDRESS_OF:
-      type = make_pointer_type(call_param_types[0]);
+      type = make_pointer_type(arg_types[0]);
       call.dest_type = type;
+      assert(type->scope);
       break;
     case OP_POINTER_ADD:
-      type = call_param_types[0];
+      type = arg_types[0];
       call.dest_type = type;
+      assert(type->scope);
       break;
     case OP_ARRAY_DEREFERENCE:
-      type = call_param_types[0]->array_type.sub_type;
+      type = arg_types[0]->array_type.sub_type;
       call.dest_type = type;
+      assert(type->scope);
       break;
     default:
       halt();
@@ -3551,6 +3849,7 @@ PipelineResult typecheck_function_call_expression(FunctionCall &call, TypeDeclar
     halt();
   }
 
+  assert(type->scope);
   return PIPELINE_SUCCESS;
 }
 
@@ -3590,7 +3889,7 @@ PipelineResult typecheck_array_dereference_expression(FunctionCall &expr){
 }
 
 TypeDeclaration *integer_type_lookup(const char *str) {
-  TypeDefinition *definition = db_lookup_type_by_identifier(to_substring(str));
+  TypeDefinition *definition = db_lookup_type_by_identifier(globalScope(), to_substring(str));
   if (definition == NULL) return NULL;
   assert(definition->decl);
   return definition->decl;
@@ -3630,18 +3929,102 @@ PipelineResult typecheck_float_literal(NumericLiteral &literal, TypeDeclaration 
   return PIPELINE_SUCCESS;
 }
 
+llvm::StringRef to_string_ref(const SubString &substring) {
+  return llvm::StringRef(substring.start, substring.length);
+}
+
+bool try_hex_literal_over_64_bits(NumericLiteral &literal, uint64_t &value) {
+    const llvm::APInt apint(literal.literal.length * 4, to_string_ref(literal.literal), 16);
+
+    if (apint.getActiveBits() > 64) {
+      return false;
+    }
+
+    value = apint.getZExtValue();
+    return true;
+}
+
+bool try_literal_over_64_bits(NumericLiteral &literal, uint64_t &value) {
+    const llvm::APInt apint(literal.literal.length * 4, to_string_ref(literal.literal), 10);
+
+    if (apint.getActiveBits() > 64) {
+      return false;
+    }
+
+    value = apint.getZExtValue();
+    return true;
+}
+
+PipelineResult typecheck_hex_literal(NumericLiteral &literal, TypeDeclaration *&type) {
+  // TODO
+  uint64_t value;
+  if (try_hex_literal_over_64_bits(literal, value)){
+
+    if (value <= 255) {
+      type = integer_type_lookup("u8");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u8"));
+      }
+    } else if (value <= 65536) {
+      type = integer_type_lookup("u16");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u16"));
+      }
+    } else if (value <= 4294967295) {
+      type = integer_type_lookup("u32");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u32"));
+      }
+    } else {
+      type = integer_type_lookup("u64");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u64"));
+      }
+    }
+  } else {
+    // todo
+    halt();
+  }
+
+  return PIPELINE_SUCCESS;
+}
+
 PipelineResult typecheck_integer_literal(NumericLiteral &literal, TypeDeclaration *&type) {
   // TODO
-  type = integer_type_lookup("i32");
-  if (type == NULL) {
-    return make_type_dependancy(to_substring("i32"));
+  uint64_t value;
+  if (try_literal_over_64_bits(literal, value)){
+
+    if (value <= 255) {
+      type = integer_type_lookup("u8");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u8"));
+      }
+    } else if (value <= 65536) {
+      type = integer_type_lookup("u16");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u16"));
+      }
+    } else if (value <= 4294967295) {
+      type = integer_type_lookup("u32");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u32"));
+      }
+    } else {
+      type = integer_type_lookup("u64");
+      if (type == NULL) {
+        return make_type_dependancy(to_substring("u64"));
+      }
+    } 
+  } else {
+    // todo
+    halt();
   }
 
   return PIPELINE_SUCCESS;
 }
 
 PipelineResult typecheck_identifier(VariableReference &variable, TypeDeclaration *&type) {
-  VaraibleDefinitionDBEntry *entry = db_lookup_variable(variable.identifier);
+  VariableDefinitionDBEntry *entry = db_lookup_variable(variable.scope, variable.identifier);
   //if (variable.variable == NULL) {
     if (entry == NULL) {
       return make_variable_dependancy(variable.identifier);
@@ -3657,7 +4040,11 @@ PipelineResult typecheck_identifier(VariableReference &variable, TypeDeclaration
       variable.type = VRT_STATEMENT_EXPR;
       type = &entry->statement_param->type;
       break;
-    case VT_STATEMENT_CALL_PARAM:
+    case VT_STATEMENT_CLAUSE:
+      variable.type = VRT_STATEMENT_CLAUSE;
+      type = db_lookup_type_by_identifier(globalScope(), to_substring("void"))->decl;  // &entry->statement_clause->identifier;
+      break;
+    case VT_STATEMENT_ARG:
       halt();
       break;
     default:
@@ -3686,7 +4073,7 @@ PipelineResult typecheck_field_dereference(FieldDereference &field_deref, TypeDe
     return make_error(UNKNOWN_LOCATION, "Expected struct type");
   }
 
-  TypeDefinition *type_def = db_lookup_type_by_identifier(type_obj->base_type.identifier);
+  TypeDefinition *type_def = db_lookup_type_by_identifier(type_obj->scope, type_obj->base_type.identifier);
 
   if (type_def->type != TYPE_STRUCT) {
     return make_error(UNKNOWN_LOCATION, "Expected struct type");
@@ -3712,6 +4099,7 @@ PipelineResult typecheck_expression(Expression &expr, TypeDeclaration *&type) {
   case EXPR_FUNCTION_CALL:
     return typecheck_function_call_expression(expr.function_call, type);
   case EXPR_HEX_LITERAL:
+    return typecheck_hex_literal(expr.numeric_literal, type);
   case EXPR_NUMERIC_LITERAL:
     return typecheck_integer_literal(expr.numeric_literal, type);
   case EXPR_FLOAT_LITERAL:
@@ -3736,7 +4124,7 @@ enum {
 
 bool is_structure(TypeDeclaration *type) {
   if (type->kind != TYPE_BASE) return false;
-  TypeDefinition *type_def = db_lookup_type_by_identifier(type->base_type.identifier);
+  TypeDefinition *type_def = db_lookup_type_by_identifier(type->scope, type->base_type.identifier);
   if (type_def->type == TYPE_STRUCT) return true;
   return false;
 }
@@ -3793,7 +4181,7 @@ llvm::Constant *marshall_retval_into_base_constant(TypeDeclaration *type, void *
     PipelineResult result = emit_type_declaration(*type, llvm_type);
     assert(is_success(result));
 
-    TypeDefinition *type_def = db_lookup_type_by_identifier(type->base_type.identifier);
+    TypeDefinition *type_def = db_lookup_type_by_identifier(type->scope, type->base_type.identifier);
     assert(type_def->type == TYPE_STRUCT);
 
     const int MAX_FIELDS = 256;
@@ -4048,22 +4436,60 @@ bool is_auto_type(TypeDeclaration *type) {
 
 PipelineResult typecheck_assignment(TypeDeclaration *type, Expression &expression);
 
-PipelineResult db_try_add_variable(VaraibleDefinitionDBEntry &new_variable, const SubString &identifier) {
+PipelineResult db_try_add_variable(VariableDefinitionDBEntry &new_variable, const SubString &identifier) {
   new_variable.identifier = identifier;
 
-  VaraibleDefinitionDBEntry *entry = db_lookup_variable(identifier);
+  VariableDefinitionDBEntry *entry = db_lookup_variable(g.db.scope_current, identifier);
   if (entry) {
     return make_error(UNKNOWN_LOCATION, "Variable redefinition");
   }
 
-  g.db.variables.push_back(new_variable);
+  //printf("added variable: %s\n", to_cstring(identifier).c_str());
+  g.db.scope_current->variables.push_back(new_variable);
 
   return PIPELINE_SUCCESS;
 }
 
+PipelineResult db_try_bind_variable(VariableDefinitionDBEntry &new_variable, const SubString &identifier) {
+  new_variable.identifier = identifier;
+
+  VariableDefinitionDBEntry *entry = db_lookup_variable(g.db.scope_current, identifier);
+  if (entry) {
+    return make_error(UNKNOWN_LOCATION, "Variable redefinition");
+  }
+
+  //printf("added variable: %s\n", to_cstring(identifier).c_str());
+  g.db.scope_bound->bound_variables.push_back(new_variable);
+
+  return PIPELINE_SUCCESS;
+}
+
+
+PipelineResult db_add_statement_param(StatementParam &param) {
+  VariableDefinitionDBEntry new_entry = {};
+  new_entry.type = VT_STATEMENT_PARAM;
+  new_entry.statement_param = &param;
+
+  return db_try_add_variable(new_entry, param.identifier);
+}
+
+PipelineResult db_add_statement_clause(StatementClause &clause) {
+  VariableDefinitionDBEntry new_entry = {};
+  new_entry.type = VT_STATEMENT_CLAUSE;
+  new_entry.statement_clause= &clause;
+
+  return db_try_add_variable(new_entry, clause.identifier);
+}
+
+
+
 PipelineResult db_add_variable_declaration(VariableDefinition &variable) {
-  VaraibleDefinitionDBEntry new_entry = {};
-  new_entry.scope = g.db.scope;
+  if (variable.identifier.length == 0) {
+    return PIPELINE_SUCCESS;
+  }
+
+  VariableDefinitionDBEntry new_entry = {};
+  new_entry.type = VT_VARIABLE;
   new_entry.variable = &variable;
 
   return db_try_add_variable(new_entry, variable.identifier);
@@ -4076,8 +4502,8 @@ PipelineResult typecheck_variable_definition(VariableDefinition &variable) {
   
   //}
 
-  //TypecheckResult result_type = typecheck_type_declaration(*variable.type);
-  //if (is_success(result_type) == false) return result_type;
+  PipelineResult result_type = typecheck_type_declaration(*variable.type);
+  if (is_success(result_type) == false) return result_type;
 
   if (variable.initial_value) {
     if (variable.initial_value->type == EXPR_DEFAULT_VALUE) {
@@ -4095,12 +4521,12 @@ PipelineResult typecheck_variable_definition(VariableDefinition &variable) {
     }
   }
 
-  if (g.db.scope != 0 && variable.identifier.length > 0) {
-    PipelineResult result_add = db_add_variable_declaration(variable);
-    if (is_success(result_add) == false) {
-      return result_add;
-    }
-  }
+  //if (/*g.db.scope != 0 &&*/ variable.identifier.length > 0) {
+  //  PipelineResult result_add = db_add_variable_declaration(variable);
+  //  if (is_success(result_add) == false) {
+  //    return result_add;
+  //  }
+  //}
 
   return PIPELINE_SUCCESS;
 }
@@ -4132,11 +4558,20 @@ PipelineResult typecheck_function_statement(TypeDeclaration *retval_type, Functi
 PipelineResult typecheck_assignment(TypeDeclaration *type, Expression &expression) {
   //TypeDeclaration *expression_type = expression_get_type(expression);
 
-  TypeDeclaration *expression_type;
+  TypeDeclaration *expression_type = NULL;
   PipelineResult result = typecheck_expression(expression, expression_type);
   if (is_success(result) == false) return result;
+  if (expression_type == NULL) {
+    int i = 0; ++i;
+  }
+
+  assert(expression_type->scope != 0);
 
   llvm::Type *llvm_type_unused;
+  PipelineResult result_expr_type = emit_type_declaration(*expression_type, llvm_type_unused);
+  if (is_success(result_expr_type) == false) return result_expr_type;
+
+
   PipelineResult result_type = emit_type_declaration(*type, llvm_type_unused);
   if (is_success(result_type) == false) return result_type;
 
@@ -4179,7 +4614,7 @@ PipelineResult typecheck_assignment_statement(AssignmentStatement &statement) {
   //return result;
 }
 
-Expression *call_params_alloc(int num_params) {
+Expression *args_alloc(int num_params) {
   if (num_params == 0) return NULL;
   return expressions_alloc(num_params);
   //return (Expression *)malloc(sizeof(Expression) * num_params);
@@ -4213,10 +4648,12 @@ PipelineResult typecheck_function_params(ParamDefinition *params, int num_params
   return PIPELINE_SUCCESS;
 }
 
-StatementDefinition *db_lookup_statement(const SubString &identifier) {
-  for(auto &statement : g.db.statements) {
-    if (substring_cmp(statement.statement->identifier, identifier)) {
-      return statement.statement;
+StatementDefinition *db_lookup_statement(SymbolScope *scope, const SubString &identifier) {
+  for(; scope != NULL; scope = scope->parent) {
+    for(auto &statement : scope->statements) {
+      if (substring_cmp(statement.statement->identifier, identifier)) {
+        return statement.statement;
+      }
     }
   }
   
@@ -4224,7 +4661,7 @@ StatementDefinition *db_lookup_statement(const SubString &identifier) {
 }
 
 PipelineResult typecheck_statement_call(TypeDeclaration *retval_type, StatementCall  &call) {
-  StatementDefinition *def = db_lookup_statement(call.identifier);
+  StatementDefinition *def = db_lookup_statement(call.scope, call.identifier);
   if (def == NULL) return make_statement_dependancy(call.identifier);
 
   // TODO, check params
@@ -4261,63 +4698,85 @@ PipelineResult typecheck_statement_call(TypeDeclaration *retval_type, StatementC
 //  }
 //}
 
-PipelineResult emit_statement_call_param(StatementCallParam &call_param, StatementParam &statement_param) {
-  VaraibleDefinitionDBEntry entry = {};
-  entry.scope = g.db.scope;
-  entry.type = VT_STATEMENT_CALL_PARAM;
-  entry.statement_call_param = &call_param;
-  return db_try_add_variable(entry, statement_param.identifier);
+PipelineResult emit_statement_arg(StatementArg &arg, StatementParam &statement_param) {
+  VariableDefinitionDBEntry entry = {};
+  //entry.scope = g.db.scope;
+  printf("arg: %s\n", to_cstring(statement_param.identifier).c_str());
+  entry.type = VT_STATEMENT_ARG;
+  entry.statement_arg = &arg;
+  return db_try_bind_variable(entry, statement_param.identifier);
 }
 
-class DBScope {
+class DBScopeDigest {
 public:
-  DBScope() {
+  DBScopeDigest() {
     db_push_scope();
-    g.db.scope_id++;
+    //g.db.scope_id++;
   }
 
-  ~DBScope() {
+  ~DBScopeDigest() {
     db_pop_scope();
   }
 };
 
-PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param);
-
-
-PipelineResult emit_inner_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param, FunctionStatement *body, int num_statement_body) {
-  if (statement.type == FS_YIELD) {
-    for(int i = 0; i < num_statement_body; ++i) {
-      PipelineResult result = emit_function_statement(function, body[i], retval_param);
-      if (is_success(result)) return result;
-    }
-  } else {
-      PipelineResult result = emit_function_statement(function, statement, retval_param);
-      if (is_success(result)) return result;
+class DBBoundScope {
+public:
+  DBBoundScope() {
+    db_push_bound_scope();
+    //g.db.scope_id++;
   }
+
+  ~DBBoundScope() {
+    db_pop_bound_scope();
+  }
+};
+
+//PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param);
+PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param, llvm::BasicBlock *retval_block, llvm::Value *&retval_value);
+
+
+PipelineResult emit_inner_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param, llvm::BasicBlock *retval_block, llvm::Value *&retval_value) {
+  //if (statement.type == FS_YIELD) {
+  //  for(int i = 0; i < num_statement_body; ++i) {
+  //    PipelineResult result = emit_function_statement(function, body[i], retval_param, retval_block, retval_value);
+  //    if (is_success(result)) return result;
+  //  }
+  //} else {
+      PipelineResult result = emit_function_statement(function, statement, retval_param, retval_block, retval_value);
+      if (is_success(result) == false) return result;
+  //}
 
   return PIPELINE_SUCCESS;
 }
 
-
-PipelineResult emit_statement_call(llvm::Function *function, StatementCall &call, llvm::Value *retval_param) {
-  StatementDefinition *def = db_lookup_statement(call.identifier);
+PipelineResult emit_statement_call(llvm::Function *function, StatementCall &call, llvm::Value *retval_param, llvm::BasicBlock *retval_block, llvm::Value *&retval_value) {
+  StatementDefinition *def = db_lookup_statement(call.scope, call.identifier);
   assert(def);
 
-  {
-    DBScope scope;
+  DBBoundScope scope;
 
-    for(int i = 0; i < call.num_params; ++i) {
-      PipelineResult result = emit_statement_call_param(call.params[i], def->statement_params[i]);
-      if (is_success(result) == false) return result;
-    }
+  for(int i = 0; i < call.num_params; ++i) {
+    PipelineResult result = emit_statement_arg(call.params[i], def->statement_params[i]);
+    if (is_success(result) == false) return result;
+  }
 
-    for(int i = 0; i < def->num_body_statements; ++i) {
-      FunctionStatement &body_statement = def->body[i];
-      PipelineResult result = emit_inner_function_statement(function, body_statement, retval_param, call.body, call.num_statement_body);
-      if (is_success(result) == false) return result;
+  for(int i = 0; i < def->num_statement_clauses; ++i) {
+    assert(def->num_statement_clauses == 1);
+    VariableDefinitionDBEntry entry = {};
+    entry.type = VT_STATEMENT_CLAUSE_BODY;
+    entry.statement_body = call.body;
+    entry.statement_num_body = call.num_statement_body;
+    PipelineResult result = db_try_bind_variable(entry, def->statement_clauses[i].identifier);
+    if (is_success(result) == false) {
+      return result;
     }
   }
 
+  for(int i = 0; i < def->num_body_statements; ++i) {
+    FunctionStatement &body_statement = def->body[i];
+    PipelineResult result = emit_inner_function_statement(function, body_statement, retval_param, retval_block, retval_value);
+    if (is_success(result) == false) return result;
+  }
 
   return PIPELINE_SUCCESS;
   
@@ -4328,24 +4787,24 @@ PipelineResult emit_statement_call(llvm::Function *function, StatementCall &call
 
 PipelineResult db_add_statement_declaration(StatementDefinition &def) {
   StatementDefinitionDBEntry new_entry = {};
-  new_entry.scope = g.db.scope;
+  //new_entry.scope = g.db.scope;
   new_entry.statement = &def;
 
-  StatementDefinition *existing_variable = db_lookup_statement(def.identifier);
+  StatementDefinition *existing_variable = db_lookup_statement(g.db.scope_current, def.identifier);
   if (existing_variable) {
     return make_error(UNKNOWN_LOCATION, "Statement redefinition");
   }
 
-  g.db.statements.push_back(new_entry);
+  g.db.scope_current->statements.push_back(new_entry);
 
   return PIPELINE_SUCCESS;
 }
 
-PipelineResult emit_statement_declaration(StatementDefinition &statement) {
-  return db_add_statement_declaration(statement);
-  //halt();
-  //return make_error(UNKNOWN_LOCATION, "todo");
-}
+//PipelineResult emit_statement_declaration(StatementDefinition &statement) {
+//  return db_add_statement_declaration(statement);
+//  //halt();
+//  //return make_error(UNKNOWN_LOCATION, "todo");
+//}
 
 PipelineResult emit_statement_definition(StatementDefinition &statement) {
   //halt();
@@ -4353,14 +4812,14 @@ PipelineResult emit_statement_definition(StatementDefinition &statement) {
   return PIPELINE_SUCCESS;
 }
 
-PipelineResult typecheck_statement_param(StatementParam &param) {
-  VaraibleDefinitionDBEntry entry = {};
-  entry.scope = g.db.scope;
-  entry.identifier = param.identifier;
-  entry.type = VT_STATEMENT_PARAM;
-  entry.statement_param = &param;
-  return db_try_add_variable(entry, param.identifier);
-}
+//PipelineResult typecheck_statement_param(StatementParam &param) {
+//  VaraibleDefinitionDBEntry entry = {};
+//  //entry.scope = g.db.scope;
+//  entry.identifier = param.identifier;
+//  entry.type = VT_STATEMENT_PARAM;
+//  entry.statement_param = &param;
+//  return db_try_add_variable(entry, param.identifier);
+//}
 
 PipelineResult typecheck_statement_statement(FunctionStatement &statement) {
   return typecheck_function_statement(NULL, statement);
@@ -4368,22 +4827,19 @@ PipelineResult typecheck_statement_statement(FunctionStatement &statement) {
 
 PipelineResult typecheck_statement_definition(StatementDefinition &statement) {
 
-  {
-    DBScope scope;
-    for(int i = 0; i < statement.num_statement_params; ++i) {
-      PipelineResult result = typecheck_statement_param(statement.statement_params[i]);
-      if (is_success(result) == false) return result;
-    }
+  for(int i = 0; i < statement.num_statement_params; ++i) {
+    //PipelineResult result = typecheck_statement_param(statement.statement_params[i]);
+    //if (is_success(result) == false) return result;
+  }
 
-    for(int i = 0; i < statement.num_statement_yield_params; ++i) {
-      //typecheck_yield_param();
-      // TODO
-    }
+  for(int i = 0; i < statement.num_statement_clauses; ++i) {
+    //typecheck_yield_param();
+    // TODO
+  }
 
-    for(int i = 0; i < statement.num_body_statements; ++i) {
-      PipelineResult result = typecheck_statement_statement(statement.body[i]);
-      if (is_success(result) == false) return result;
-    }
+  for(int i = 0; i < statement.num_body_statements; ++i) {
+    PipelineResult result = typecheck_statement_statement(statement.body[i]);
+    if (is_success(result) == false) return result;
   }
 
   return PIPELINE_SUCCESS;
@@ -4410,7 +4866,7 @@ PipelineResult typecheck_function_statement(TypeDeclaration *retval_type, Functi
   case FS_VARIABLE:
     return typecheck_variable_definition(statement.varaible);
   case FS_LLVM:
-  case FS_YIELD:
+  //case FS_YIELD:
     return PIPELINE_SUCCESS;
   default:
     halt();
@@ -4471,7 +4927,7 @@ PipelineResult db_try_add_function(FunctionDefinitionDBEntry &new_function) {
   assert(identifier.length > 0);
 
   FunctionDefinitionDBEntry *existing_fn;
-  PipelineResult result = db_lookup_function(identifier, params, num_params, existing_fn);
+  PipelineResult result = db_lookup_function(g.db.scope_current, identifier, params, num_params, existing_fn);
 
   if (is_success(result) == false) {
     return result;
@@ -4481,13 +4937,13 @@ PipelineResult db_try_add_function(FunctionDefinitionDBEntry &new_function) {
     return make_error(UNKNOWN_LOCATION, "Function redefinition");
   }
 
-  g.db.functions.push_back(new_function);
+  g.db.scope_current->functions.push_back(new_function);
   return PIPELINE_SUCCESS;
 }
 
 PipelineResult db_add_function_declaration(FunctionDefinition &function) {
   FunctionDefinitionDBEntry new_entry = {};
-  new_entry.scope = g.db.scope;
+  //new_entry.scope = g.db.scope;
   new_entry.function = &function;
   return db_try_add_function(new_entry);
 }
@@ -4496,20 +4952,16 @@ PipelineResult typecheck_function_definition(FunctionDefinition &function) {
   //TypecheckResult result_retval = typecheck_type_declaration(*function.retval_type);
   //if (is_success(result_retval) == false) return result_retval;
 
-  {
-    DBScope scope;
-    PipelineResult result_params = typecheck_function_params(function.params, function.num_params);
-    if (is_success(result_params) == false) return result_params;
+  PipelineResult result_params = typecheck_function_params(function.params, function.num_params);
+  if (is_success(result_params) == false) return result_params;
 
-    PipelineResult result_body = typecheck_function_body(function.retval_type, function.body, function.num_statements);
-    if (is_success(result_body) == false) return result_body;
-  }
-
+  PipelineResult result_body = typecheck_function_body(function.retval_type, function.body, function.num_statements);
+  if (is_success(result_body) == false) return result_body;
 
   //if (g.db.scope != 0) {
     //DeclarationResult result = db_add_function_definition(program_statement);
-  PipelineResult result = db_add_function_declaration(function);
-  if (is_success(result) == false) return result;
+  //PipelineResult result = db_add_function_declaration(function);
+  //if (is_success(result) == false) return result;
   //}
 
   return PIPELINE_SUCCESS;
@@ -4517,7 +4969,7 @@ PipelineResult typecheck_function_definition(FunctionDefinition &function) {
 
 PipelineResult db_add_external_function_declaration(ExternFunctionDeclaration &extern_function) {
   FunctionDefinitionDBEntry new_entry = {};
-  new_entry.scope = g.db.scope;
+  //new_entry.scope = g.db.scope;
   new_entry.extern_function = &extern_function;
 
   PipelineResult result = db_try_add_function(new_entry);
@@ -4536,19 +4988,16 @@ PipelineResult typecheck_extern_function_declaration(ExternFunctionDeclaration &
 
   //db_push_scope();
 
-  {
-    DBScope scope;
-    PipelineResult result_params = typecheck_function_params(function.params, function.num_params);
-    if (is_success(result_params) == false) return result_params;
+  PipelineResult result_params = typecheck_function_params(function.params, function.num_params);
+  if (is_success(result_params) == false) return result_params;
 
   //TypecheckResult result_body = typecheck_function_body(function.retval_type->type, function.body, function.num_statements);
   //if (is_success(result_body) == false) return result_body;
-  }
 
   //if (g.db.scope != 0) {
     //DeclarationResult result = db_add_function_definition(program_statement);
-    PipelineResult result = db_add_external_function_declaration(function);
-    if (is_success(result) == false) return result;
+    //PipelineResult result = db_add_external_function_declaration(function);
+    //if (is_success(result) == false) return result;
   //}
 
   return PIPELINE_SUCCESS;
@@ -4597,10 +5046,6 @@ PipelineResult typecheck_extern_function_declaration(ExternFunctionDeclaration &
 //
 //  return PIPELINE_SUCCESS;
 //}
-
-llvm::StringRef to_string_ref(const SubString &substring) {
-  return llvm::StringRef(substring.start, substring.length);
-}
 
 static bool isWhitespace(char c) {
   switch(c) {
@@ -4663,7 +5108,7 @@ bool is_numeric(const SubString &digits) {
 PipelineResult emit_llvm_type_definition(LLVMTypeDefinition &llvm_def) {
   SubString trimmed_content = substring_trim(llvm_def.raw_llvm);
 
-  TypeDefinition *type_def = db_lookup_type_by_identifier(llvm_def.identifier);
+  TypeDefinition *type_def = db_lookup_type_by_identifier(llvm_def.scope, llvm_def.identifier);
   assert(type_def->type == TYPE_LLVM);
   llvm::Type *&type = type_def->llvm_type;
   assert(type == NULL);
@@ -4725,7 +5170,8 @@ const int IS_PACKED = true;
 
 
 PipelineResult emit_struct_type_definition(StructDefinition &struct_def) {
-  TypeDefinition *type_def = db_lookup_type_by_identifier(struct_def.identifier);
+  //TypeDefinition *type_def = db_lookup_type_by_identifier(struct_def.identifier);
+  TypeDefinition *type_def = struct_def.definition;
   assert(type_def->type == TYPE_STRUCT);
   assert(type_def->llvm_type == NULL);
 
@@ -4785,7 +5231,10 @@ PipelineResult emit_array_type_declaration(ArrayTypeDeclaration &array_type, llv
     } else {
       llvm::Constant *constant;
       PipelineResult index_result = emit_compile_time_expression(*array_type.count_expression, constant);
-      if (is_success(index_result) == false) return make_error(UNKNOWN_LOCATION, "TODO");
+      if (index_result.result == RESULT_DEPENDANCY) return index_result;
+      if (is_success(index_result) == false) {
+        return make_error(UNKNOWN_LOCATION, "TODO");
+      }
 
       llvm::ConstantInt *constant_int = llvm::dyn_cast<llvm::ConstantInt>(constant);
       if (constant_int == NULL) {
@@ -4856,8 +5305,8 @@ PipelineResult emit_type_declaration(TypeDeclaration &type, llvm::Type *&llvm_ty
     //TypecheckResult result = db_lookup_type_definition(); TODO
     //LLVMTypeResult type_result = llvm_emit_base_type(type);
     //result = type_result.type;
-    TypeDefinition *definition = db_lookup_type_by_identifier(type.base_type.identifier);
-    if (definition == NULL) {
+    TypeDefinition *definition = db_lookup_type_by_identifier(type.scope, type.base_type.identifier);
+    if (definition == NULL || definition->llvm_type == NULL) {
       return make_type_dependancy(type.base_type.identifier);
     } else {
       llvm_type = definition->llvm_type;
@@ -5017,10 +5466,14 @@ PipelineResult emit_lvalue_identifier(VariableReference &variable, llvm::Value *
     value = variable.variable->llvm_value; 
     return EMIT_SUCCESS;
   } else if (variable.type == VRT_STATEMENT_EXPR) {
-    VaraibleDefinitionDBEntry *entry = db_lookup_variable(variable.identifier);
-    assert(entry->type == VT_STATEMENT_CALL_PARAM);
-    assert(entry->statement_call_param->type == SCP_EXPRESSION);
-    return emit_lvalue_expression(*entry->statement_call_param->expression, value);
+    VariableDefinitionDBEntry *entry = db_lookup_variable(variable.scope, variable.identifier);
+    assert(entry->type == VT_STATEMENT_ARG);
+    assert(entry->statement_arg->type == SCP_EXPRESSION);
+    return emit_lvalue_expression(*entry->statement_arg->expression, value);
+  } else if (variable.type == VRT_STATEMENT_CLAUSE) {
+    VariableDefinitionDBEntry *entry = db_lookup_variable(variable.scope, variable.identifier);
+    assert(entry->type == VT_STATEMENT_CLAUSE_BODY);
+    halt();
   } else {
     halt();
   }
@@ -5096,7 +5549,7 @@ PipelineResult emit_rvalue_member_identifier(FieldDereference &field_dereference
   return EMIT_SUCCESS;
 }
 
-PipelineResult emit_function_call_params(Expression *params, llvm::Value **values, int num_params) {
+PipelineResult emit_function_args(Expression *params, llvm::Value **values, int num_params) {
   for(int i = 0; i < num_params; ++i) {
     llvm::Value *value;
     PipelineResult result = emit_rvalue_expression(params[i], value);
@@ -5124,6 +5577,17 @@ PipelineResult emit_rvalue_pointer_add(Expression &pointer, Expression &integer,
 
 PipelineResult emit_rvalue_intrinsic_function_call(FunctionCall &call, llvm::Value *&value) {
   switch(call.intrinsic) {
+  case OP_UNSIGNED_TO_SIGNED: {
+    llvm::Value *rhs;
+    PipelineResult result = emit_rvalue_expression(call.params[0], rhs);
+    if (is_success(result) == false) return result;
+    value = rhs;
+    //llvm::Type  *dest_type;
+    //PipelineResult result_type = emit_type_declaration(*call.dest_type, dest_type);
+    //if (is_success(result_type) == false) return result_type;
+    //value = g.llvm.builder->CreateSExt(rhs, dest_type);
+    return EMIT_SUCCESS;
+  }
   case OP_EXTEND_INTEGER: {
     llvm::Value *rhs;
     PipelineResult result = emit_rvalue_expression(call.params[0], rhs);
@@ -5208,7 +5672,7 @@ llvm::Value *emit_rvalue_extern_function_call(FunctionCall &call) {
   } else {
     llvm::Value *param_expressions[MAX_PARAMS];
     assert(call.num_params < MAX_PARAMS);
-    emit_function_call_params(call.params, param_expressions, call.num_params);
+    emit_function_args(call.params, param_expressions, call.num_params);
 
     llvm::ArrayRef<llvm::Value *> ref_params = to_array_ref(param_expressions, call.num_params);
     retval = g.llvm.builder->CreateCall(llvm_function, ref_params);
@@ -5225,17 +5689,17 @@ PipelineResult emit_rvalue_function_call(FunctionCall &call, llvm::Value *&value
   if (call.function) {
     llvm_function = call.function->llvm_function;
     if (llvm_function == NULL) {
-      emit_function_declaration(*call.function);
-      llvm_function = call.function->llvm_function;
+      return make_function_dependancy(call.identifier);
+      //emit_function_definition(*call.function);
+      //llvm_function = call.function->llvm_function;
     }
   } else if (call.extern_function) {
     llvm_function = call.extern_function->llvm_function;
     if (llvm_function == NULL) {
-      emit_external_function_declaration(*call.extern_function);
-      llvm_function = call.extern_function->llvm_function;
+      //emit_external_function_declaration(*call.extern_function);
+      //llvm_function = call.extern_function->llvm_function;
+      return make_function_dependancy(call.identifier);
     }
-  } else {
-    halt();
   }
 
   assert(llvm_function);
@@ -5258,7 +5722,7 @@ PipelineResult emit_rvalue_function_call(FunctionCall &call, llvm::Value *&value
       PipelineResult result = CreateAlloca(to_substring("retval"), *retval_type, value);
       assert(is_success(result));
       param_expressions[0] = value;
-      PipelineResult result_params = emit_function_call_params(call.params, param_expressions+1, call.num_params);
+      PipelineResult result_params = emit_function_args(call.params, param_expressions+1, call.num_params);
       if (is_success(result_params) == false) return result_params;
 
       llvm::ArrayRef<llvm::Value *> ref_params = to_array_ref(param_expressions, call.num_params+1);
@@ -5272,7 +5736,7 @@ PipelineResult emit_rvalue_function_call(FunctionCall &call, llvm::Value *&value
     } else {
       llvm::Value *param_expressions[MAX_PARAMS];
       assert(call.num_params < MAX_PARAMS);
-      PipelineResult result = emit_function_call_params(call.params, param_expressions, call.num_params);
+      PipelineResult result = emit_function_args(call.params, param_expressions, call.num_params);
       if (is_success(result) == false) return result;
 
       llvm::ArrayRef<llvm::Value *> ref_params = to_array_ref(param_expressions, call.num_params);
@@ -5294,12 +5758,22 @@ PipelineResult emit_rvalue_float_literal(NumericLiteral &literal, llvm::Value *&
 }
 
 PipelineResult emit_rvalue_hex_literal(NumericLiteral &literal, llvm::Value *&value) {
-  TypeDeclaration *type = integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
+  TypeDeclaration *type;
+  PipelineResult result = typecheck_hex_literal(literal, type);
+  if (is_success(result) == false) return result;
+
   int num_bits = type_size(type);
   llvm::IntegerType *llvm_type = llvm::IntegerType::get(*g.llvm.context, num_bits);
   //assert(type->llvm_type == (llvm::Type *)llvm_type);
 
-  llvm::StringRef str = to_string_ref(literal.literal);
+  SubString literal_without_zeros = literal.literal;
+
+  while(literal_without_zeros.length > 1 && *literal_without_zeros.start == '0') {
+    literal_without_zeros.start++;
+    literal_without_zeros.length--;
+  }
+
+  llvm::StringRef str = to_string_ref(literal_without_zeros);
 
   const int RADIX = 16;
   value = llvm::ConstantInt::get(llvm_type, str, RADIX);
@@ -5307,7 +5781,11 @@ PipelineResult emit_rvalue_hex_literal(NumericLiteral &literal, llvm::Value *&va
 }
 
 PipelineResult emit_rvalue_integer_literal(NumericLiteral &literal, llvm::Value *&value) {
-  TypeDeclaration *type = integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
+  TypeDeclaration *type;
+  PipelineResult result = typecheck_integer_literal(literal, type);
+  if (is_success(result) == false) return result;
+
+  //TypeDeclaration *type = ...//  integer_type_lookup("i32"); //calc_integer_literal_type(integer_literal);
   int num_bits = type_size(type);
   llvm::IntegerType *llvm_type = llvm::IntegerType::get(*g.llvm.context, num_bits);
   //assert(type->llvm_type == (llvm::Type *)llvm_type);
@@ -5359,14 +5837,27 @@ PipelineResult emit_rvalue_string_literal(StringLiteral &literal, llvm::Value *&
 }
 
 PipelineResult emit_rvalue_identifier(VariableReference &varaible, llvm::Value *&value) {
-  llvm::Value *lvalue;
-  PipelineResult result = emit_lvalue_identifier(varaible, lvalue);
-  if (lvalue == 0) {
-    int i = 0; ++i;
+  if (varaible.type == VRT_STATEMENT_EXPR) {
+    VariableDefinitionDBEntry *entry = db_lookup_variable(varaible.scope, varaible.identifier);
+    assert(entry);
+    if (entry->type == VT_STATEMENT_PARAM) {
+      //assert(entry->statement_param->type == SCP_EXPRESSION);
+      entry = db_lookup_variable(varaible.scope->parent, entry->statement_param->identifier);
+      assert(entry);
+    }
+    assert(entry->type == VT_STATEMENT_ARG);
+    assert(entry->statement_arg->type == SCP_EXPRESSION);
+    return emit_rvalue_expression(*entry->statement_arg->expression, value);
+  } else {
+    llvm::Value *lvalue;
+    PipelineResult result = emit_lvalue_identifier(varaible, lvalue);
+    if (lvalue == 0) {
+      int i = 0; ++i;
+    }
+    if (is_success(result) == false) return result;
+    value = CreateLoad(lvalue);
+    return EMIT_SUCCESS;
   }
-  if (is_success(result) == false) return result;
-  value = CreateLoad(lvalue);
-  return EMIT_SUCCESS;
 }
 
 PipelineResult emit_rvalue_expression(Expression &expr, llvm::Value *&value) {
@@ -5422,8 +5913,9 @@ PipelineResult emit_variable_initalization(VariableDefinition &variable) {
 
 PipelineResult emit_local_variable_definition(VariableDefinition &variable) {
   //DeclarationResult result = db_add_variable_definition(variable);
-  PipelineResult result = db_add_variable_declaration(variable);
-  if (is_success(result) == false) return result;
+  //PipelineResult result = db_add_variable_declaration(variable);
+  //if (is_success(result) == false) return result;
+
   return emit_variable_initalization(variable);
 }
 
@@ -5431,6 +5923,7 @@ PipelineResult emit_global_variable_initialization(VariableDefinition &variable)
   //TypeDef *type = variable.type->type;
   llvm::Type *llvm_type;
   PipelineResult result = emit_type_declaration(*variable.type, llvm_type);
+  assert(is_success(result));
 
   llvm::Constant *constant;
 
@@ -5510,20 +6003,68 @@ PipelineResult emit_assignment_statement(AssignmentStatement &statement) {
   return EMIT_SUCCESS;
 }
 
-PipelineResult emit_return_statement(ReturnStatement &return_statement, llvm::Value *retval_param) {
+//PipelineResult CreateFunction(llvm::StringRef &name, llvm::Function *function, ::BasicBlock *&retval_block) {
+//  function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, g.llvm.module);
+//  retval_block = llvm::BasicBlock::Create(g.llvm.context, "retval");
+//  return PIPELINE_SUCCESS;
+//}
+
+PipelineResult emit_return_statement(ReturnStatement &return_statement, llvm::Function *function, llvm::Value *retval_param, llvm::BasicBlock *retval_block, llvm::Value *&retval_real) {
+
+  retval_real = NULL;
+
   if (retval_param) {
     llvm::Value *retval;
     PipelineResult result = emit_rvalue_expression(*return_statement.retval, retval);
     if (is_success(result) == false) return result;
     CreateStore(retval, retval_param);
-    g.llvm.builder->CreateRetVoid();
+    //g.llvm.builder->CreateRetVoid();
     //g.llvm.module->dump();
   } else {
-    llvm::Value *retval;
-    PipelineResult result = emit_rvalue_expression(*return_statement.retval, retval);
+    PipelineResult result = emit_rvalue_expression(*return_statement.retval, retval_real);
     if (is_success(result) == false) return result;
-    g.llvm.builder->CreateRet(retval);
+    //g.llvm.builder->CreateRet(retval);
+
   }
+
+  g.llvm.builder->CreateBr(retval_block);
+
+  llvm::BasicBlock *block = llvm::BasicBlock::Create(*g.llvm.context, "post_return", function);
+  g.llvm.builder->SetInsertPoint(block);
+
+  return PIPELINE_SUCCESS;
+}
+
+PipelineResult emit_return_point(llvm::Function *function, TypeDeclaration *retval_type, llvm::BasicBlock *block, llvm::Value *retval_real) {
+  //block->insertInto(function);
+
+  g.llvm.builder->CreateBr(block);
+  //if (retval_real == NULL && is_void(retval_type)) {
+  //  g.llvm.builder->CreateBr(block);
+  //}
+
+  function->getBasicBlockList().push_back(block);
+  g.llvm.builder->SetInsertPoint(block);
+
+  if (retval_real) {
+    g.llvm.builder->CreateRet(retval_real);
+  } else {
+    g.llvm.builder->CreateRetVoid();
+  }
+
+  //if (retval_param) {
+  //  llvm::Value *retval;
+  //  PipelineResult result = emit_rvalue_expression(*return_statement.retval, retval);
+  //  if (is_success(result) == false) return result;
+  //  CreateStore(retval, retval_param);
+  //  g.llvm.builder->CreateRetVoid();
+  //  //g.llvm.module->dump();
+  //} else {
+  //  llvm::Value *retval;
+  //  PipelineResult result = emit_rvalue_expression(*return_statement.retval, retval);
+  //  if (is_success(result) == false) return result;
+  //  g.llvm.builder->CreateRet(retval);
+  //}
 
 
   return EMIT_SUCCESS;
@@ -5608,7 +6149,7 @@ void replace_number_symbols(std::string &line, int scope_id) {
   str_replace(line, "#", num_str);
 }
 
-int lines_replace_tokens(Lines &lines, int scope_id) {
+int lines_replace_tokens(SymbolScope *scope, Lines &lines, int scope_id) {
   int temp_n = (scope_id << 16) + 0;
   for(int i = 0; i < (int)lines.size();) {
     auto &line = lines[i];
@@ -5623,7 +6164,7 @@ int lines_replace_tokens(Lines &lines, int scope_id) {
     switch(replacement) {
     case LLVM_REPLACEMENT_ASSIGNMENT: {
       //VariableDefinition *variable = db_lookup_variable(token_substr);
-      VaraibleDefinitionDBEntry *entry = db_lookup_variable(token_substr);
+      VariableDefinitionDBEntry *entry = db_lookup_variable(scope, token_substr);
       assert(entry->type == VT_VARIABLE);
       VariableDefinition *variable = entry->variable;
       llvm::Type *type = variable->llvm_value->getType()->getContainedType(0);
@@ -5639,11 +6180,11 @@ int lines_replace_tokens(Lines &lines, int scope_id) {
                                       } break;
     case LLVM_REPLACEMENT_FIRST_EXPRESSION: 
     case LLVM_REPLACEMENT_EXPRESSION: {
-      VaraibleDefinitionDBEntry *entry = db_lookup_variable(token_substr);
+      VariableDefinitionDBEntry *entry = db_lookup_variable(scope, token_substr);
 
-      if (entry->type == VT_STATEMENT_CALL_PARAM) {
-        //assert(entry->statement_call_param->type == SCP_IDENTIFIER); TODO
-        std::string replacement = to_cstring(entry->statement_call_param->expression->variable.identifier);
+      if (entry->type == VT_STATEMENT_ARG) {
+        //assert(entry->statement_arg->type == SCP_IDENTIFIER); TODO
+        std::string replacement = to_cstring(entry->statement_arg->expression->variable.identifier);
         std::string new_line        = string_format("%s%s%s", old_lhs.c_str(), replacement.c_str(), old_rhs.c_str());
         lines.erase(lines.begin() + i);
         lines.insert(lines.begin() + i, new_line);
@@ -5735,12 +6276,12 @@ static void lines_to_buffer(const Lines &lines, char *buffer, int buffer_size) {
   }
 }
 
-void replace_inline_llvm_bindings(SubString &raw_llvm, char replaced_llvm_buffer[1024], int scope_id) 
+void replace_inline_llvm_bindings(SymbolScope *scope, SubString &raw_llvm, char replaced_llvm_buffer[1024], int scope_id) 
 {
   //GGSubString lines[MAX_LLVM_LINES];
   Lines lines;
   substring_to_lines(raw_llvm, lines);
-  lines_replace_tokens(lines, scope_id);
+  lines_replace_tokens(scope, lines, scope_id);
   lines_to_buffer(lines, replaced_llvm_buffer, 1024);
 }
 
@@ -5766,7 +6307,8 @@ static bool ParseAssembly2(llvm::MemoryBuffer *F, llvm::Module &M, llvm::SMDiagn
 
 PipelineResult emit_inline_llvm(llvm::Function *function, LLVMStatement &llvm_statement) {
   char replaced_llvm_buffer[1024];
-  replace_inline_llvm_bindings(llvm_statement.raw_llvm, replaced_llvm_buffer, g.db.scope_id);
+  //halt(); // SCOPEID
+  replace_inline_llvm_bindings(llvm_statement.scope, llvm_statement.raw_llvm, replaced_llvm_buffer, (int)g.db.scope_bound);
 
   llvm::StringRef llvmAssembly(replaced_llvm_buffer);
   llvm::MemoryBuffer *memory = llvm::MemoryBuffer::getMemBuffer(llvmAssembly, "<string>", true);
@@ -5793,6 +6335,9 @@ PipelineResult emit_function_declaration(FunctionDefinition &function) {
   llvm::Type *retval_type;
   PipelineResult result = emit_type_declaration(*function.retval_type, retval_type);
   if (is_success(result) == false) return result;
+  if (retval_type == NULL) {
+    int i = 0; ++i;
+  }
 
   llvm::FunctionType *functionType;
 
@@ -5856,8 +6401,7 @@ PipelineResult emit_function_declaration(FunctionDefinition &function) {
   return PIPELINE_SUCCESS;
 }
 
-PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param)
-{
+PipelineResult emit_function_statement(llvm::Function *function, FunctionStatement &statement, llvm::Value *retval_param, llvm::BasicBlock *retval_block, llvm::Value *&retval_value) {
   switch(statement.type) {
   case FS_VARIABLE: {
     PipelineResult result = emit_local_variable_definition(statement.varaible);
@@ -5872,24 +6416,39 @@ PipelineResult emit_function_statement(llvm::Function *function, FunctionStateme
     }
   } break;
   case FS_STATEMENT_CALL: {
-    PipelineResult result = emit_statement_call(function, statement.statement_call, retval_param);
+    PipelineResult result = emit_statement_call(function, statement.statement_call, retval_param, retval_block, retval_value);
     if (is_success(result) == false) {
       return result;
     }
   } break;
   case FS_RETURN: {
-    PipelineResult result = emit_return_statement(statement.return_statement, retval_param);
+    PipelineResult result = emit_return_statement(statement.return_statement, function, retval_param, retval_block, retval_value);
     if (is_success(result) == false) {
       return result;
     }
   } break;
   case FS_EXPRESSION: {
     //assert(subtoken.num_subtokens == 1);
-    llvm::Value *unused;
-    PipelineResult result = emit_rvalue_expression(*statement.expression, unused);
-    if (is_success(result) == false) {
-      return result;
+
+    if (statement.expression->type == EXPR_VARIABLE && statement.expression->variable.type == VRT_STATEMENT_CLAUSE) {
+      VariableDefinitionDBEntry *entry = db_lookup_variable(statement.expression->variable.scope, statement.expression->variable.identifier);
+      assert(entry);
+      assert(entry->type == VT_STATEMENT_CLAUSE_BODY);
+      for(int i = 0; i < entry->statement_num_body; ++i) {
+        PipelineResult result = emit_function_statement(function, entry->statement_body[i], retval_param, retval_block, retval_value);
+        if (is_success(result) == false) {
+          return result;
+        }
+      }
+    } else {
+      llvm::Value *unused;
+      PipelineResult result = emit_rvalue_expression(*statement.expression, unused);
+      if (is_success(result) == false) {
+        return result;
+      }
     }
+
+
   } break;
   case FS_LLVM: {
     PipelineResult result = emit_inline_llvm(function, statement.llvm);
@@ -5897,9 +6456,9 @@ PipelineResult emit_function_statement(llvm::Function *function, FunctionStateme
       return result;
     }
   } break;
-  case FS_YIELD: {
-    halt();
-  } break;
+  //case FS_YIELD: {
+  //  halt();
+  //} break;
   default: 
     halt();
   }
@@ -5907,64 +6466,45 @@ PipelineResult emit_function_statement(llvm::Function *function, FunctionStateme
   return PIPELINE_SUCCESS;
 }
 
-bool variable_exists(const SubString &identifier) {
-  return db_lookup_variable(identifier) != NULL;
+bool variable_exists(SymbolScope *scope, const SubString &identifier) {
+  return db_lookup_variable(scope, identifier) != NULL;
 }
 
 PipelineResult emit_function_definition(FunctionDefinition &function) {
   //db_push_scope();
 
-  {
-    DBScope scope;
-
-    if (function.llvm_function == NULL) {
-      PipelineResult result = emit_function_declaration(function);
-      if (is_success(result) == false) {
-        return result;
-      }
+  if (function.llvm_function == NULL) {
+    PipelineResult result = emit_function_declaration(function);
+    if (is_success(result) == false) {
+      return result;
     }
+  }
+  //else {
+  //  halt();
+  //}
 
-    llvm::BasicBlock *entry = llvm::BasicBlock::Create(*g.llvm.context, "", function.llvm_function);
-    g.llvm.builder->SetInsertPoint(entry);
 
-    llvm::Value *retval_param = NULL;
-    if (is_structure(function.retval_type)) {
-      llvm::Function::arg_iterator arg_iterator = function.llvm_function->arg_begin();
-      for(int i = 0; i < function.num_params+1; ++i, arg_iterator++) {
-        if (i == 0) {
-          llvm::Argument *AI = arg_iterator;
-          retval_param = AI;
-        } else {
-          assert(function.params[i-1].type == PD_VARIABLE);
-          VariableDefinition &param = function.params[i-1].variable;
 
-          if (variable_exists(function.params[i-1].variable.identifier)) {
-            return make_emit_error("Duplicate variable %s", to_cstring(param.identifier).c_str());
-          }
+  llvm::BasicBlock *retval_block = llvm::BasicBlock::Create(*g.llvm.context, "retval");
+  llvm::BasicBlock *entry = llvm::BasicBlock::Create(*g.llvm.context, "entry", function.llvm_function);
+  g.llvm.builder->SetInsertPoint(entry);
+  llvm::Value *retval_value = NULL;
 
-          TypeDeclaration *type = param.type;
-          llvm::Argument *AI = arg_iterator;
-          llvm::Value *alloca;
-          PipelineResult result = CreateAlloca(param.identifier, *type, alloca);
-          if (is_success(result) == false) {
-            return result;
-          }
-          CreateStore(AI, alloca);
-          param.llvm_value = alloca;
 
-          PipelineResult result_add = db_add_variable_declaration(param);
-          if (is_success(result_add) == false) return result_add;
-        }
-      }
-    } else {
-      llvm::Function::arg_iterator arg_iterator = function.llvm_function->arg_begin();
-      for(int i = 0; i < function.num_params; ++i, arg_iterator++) {
-        assert(function.params[i].type == PD_VARIABLE);
-        VariableDefinition &param = function.params[i].variable;
+  llvm::Value *retval_param = NULL;
+  if (is_structure(function.retval_type)) {
+    llvm::Function::arg_iterator arg_iterator = function.llvm_function->arg_begin();
+    for(int i = 0; i < function.num_params+1; ++i, arg_iterator++) {
+      if (i == 0) {
+        llvm::Argument *AI = arg_iterator;
+        retval_param = AI;
+      } else {
+        assert(function.params[i-1].type == PD_VARIABLE);
+        VariableDefinition &param = function.params[i-1].variable;
 
-        if (variable_exists(function.params[i].variable.identifier)) {
-          return make_emit_error("Duplicate variable %s", to_cstring(param.identifier).c_str());
-        }
+        //if (variable_exists(function.params[i-1].variable.identifier)) {
+        //  return make_emit_error("Duplicate variable %s", to_cstring(param.identifier).c_str());
+        //}
 
         TypeDeclaration *type = param.type;
         llvm::Argument *AI = arg_iterator;
@@ -5976,26 +6516,61 @@ PipelineResult emit_function_definition(FunctionDefinition &function) {
         CreateStore(AI, alloca);
         param.llvm_value = alloca;
 
-        PipelineResult result_add = db_add_variable_declaration(param);
-        if (is_success(result_add) == false) return result_add;
+        //PipelineResult result_add = db_add_variable_declaration(param);
+        //if (is_success(result_add) == false) return result_add;
       }
     }
+  } else {
+    llvm::Function::arg_iterator arg_iterator = function.llvm_function->arg_begin();
+    for(int i = 0; i < function.num_params; ++i, arg_iterator++) {
+      assert(function.params[i].type == PD_VARIABLE);
+      VariableDefinition &param = function.params[i].variable;
 
-    for(int i = 0; i < function.num_statements; ++i) {
-      FunctionStatement &statement = function.body[i];
-      PipelineResult result = emit_function_statement(function.llvm_function, statement, retval_param);
-      if (is_success(result) == false) return result;
+      //if (variable_exists(function.params[i].variable.identifier)) {
+      //  return make_emit_error("Duplicate variable %s", to_cstring(param.identifier).c_str());
+      //}
+
+      TypeDeclaration *type = param.type;
+      llvm::Argument *AI = arg_iterator;
+      llvm::Value *alloca;
+      PipelineResult result = CreateAlloca(param.identifier, *type, alloca);
+      if (is_success(result) == false) {
+        return result;
+      }
+      CreateStore(AI, alloca);
+      param.llvm_value = alloca;
+
+      //PipelineResult result_add = db_add_variable_declaration(param);
+      //if (is_success(result_add) == false) return result_add;
     }
   }
 
-  if (is_void(function.retval_type)) {
-    g.llvm.builder->CreateRetVoid();
+  for(int i = 0; i < function.num_statements; ++i) {
+    FunctionStatement &statement = function.body[i];
+    PipelineResult result = emit_function_statement(function.llvm_function, statement, retval_param, retval_block, retval_value);
+    if (is_success(result) == false) {
+      function.llvm_function->removeFromParent();
+      delete function.llvm_function;
+      function.llvm_function = NULL;
+      return result;
+    }
   }
+
+  PipelineResult result = emit_return_point(function.llvm_function, function.retval_type, retval_block, retval_value);
+  if (is_success(result) == false) {
+    function.llvm_function->removeFromParent();
+    delete function.llvm_function;
+    function.llvm_function = NULL;
+    return result;
+  }
+
+  //if (is_void(function.retval_type)) {
+  //  g.llvm.builder->CreateRetVoid();
+  //}
 
   //function.llvm_function->Verify(()
   if (llvm::verifyFunction(*function.llvm_function)) {
     g.llvm.module->dump();
-    //printf("bad function\n");
     return make_error(UNKNOWN_LOCATION, "bad function");
   } else {
     printf("emit function %s\n", to_cstring(function.identifier).c_str());
@@ -6009,49 +6584,45 @@ PipelineResult emit_external_function_declaration(ExternFunctionDeclaration &fun
   //  return EMIT_SUCCESS;
   //}
 
+  llvm::Type *retval_type;
+  PipelineResult result = emit_type_declaration(*function.retval_type, retval_type);
+  if (is_success(result) == false) return result;
+
+  llvm::FunctionType *functionType;
+  if (function.num_params == 0) 
   {
-    DBScope scope;
-    llvm::Type *retval_type;
-    PipelineResult result = emit_type_declaration(*function.retval_type, retval_type);
-    if (is_success(result) == false) return result;
+    functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
+  }
+  else
+  {
+    llvm::Type *param_types[MAX_PARAMS];
+    assert(function.num_params <= MAX_PARAMS);
 
-    llvm::FunctionType *functionType;
-    if (function.num_params == 0) 
-    {
-      functionType = llvm::FunctionType::get(retval_type, FIXED_ARGS);
-    }
-    else
-    {
-      llvm::Type *param_types[MAX_PARAMS];
-      assert(function.num_params <= MAX_PARAMS);
-
-      if (function.params[function.num_params-1].type == PD_VARARGS) {
-        PipelineResult result = get_function_param_llvm_types(function.params, param_types, function.num_params-1);
-        if (is_success(result) == false) return result;
-        llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, function.num_params-1);
-        functionType = llvm::FunctionType::get(retval_type, args, VAR_ARGS);
-      } else {
-        PipelineResult result = get_function_param_llvm_types(function.params, param_types, function.num_params);
-        if (is_success(result) == false) return result;
-        llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, function.num_params);
-        functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
-      }
-
-      //get_function_param_llvm_types(function.params, param_types, function.num_params);
-      //llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, function.num_params);
-      //functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
+    if (function.params[function.num_params-1].type == PD_VARARGS) {
+      PipelineResult result = get_function_param_llvm_types(function.params, param_types, function.num_params-1);
+      if (is_success(result) == false) return result;
+      llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, function.num_params-1);
+      functionType = llvm::FunctionType::get(retval_type, args, VAR_ARGS);
+    } else {
+      PipelineResult result = get_function_param_llvm_types(function.params, param_types, function.num_params);
+      if (is_success(result) == false) return result;
+      llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, function.num_params);
+      functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
     }
 
-    printf("emit extern function %s\n", to_cstring(function.identifier).c_str());
-
-    llvm::StringRef name = to_string_ref(function.identifier);
-    function.llvm_function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, g.llvm.module);
-    if (function.dll_import)
-    {
-      function.llvm_function->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLImportStorageClass);
-    }
+    //get_function_param_llvm_types(function.params, param_types, function.num_params);
+    //llvm::ArrayRef<llvm::Type *> args = to_array_ref(param_types, function.num_params);
+    //functionType = llvm::FunctionType::get(retval_type, args, FIXED_ARGS);
   }
 
+  printf("emit extern function %s\n", to_cstring(function.identifier).c_str());
+
+  llvm::StringRef name = to_string_ref(function.identifier);
+  function.llvm_function = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, g.llvm.module);
+  if (function.dll_import)
+  {
+    function.llvm_function->setDLLStorageClass(llvm::GlobalValue::DLLStorageClassTypes::DLLImportStorageClass);
+  }
 
   return EMIT_SUCCESS;
 }
@@ -6208,6 +6779,7 @@ DigestResult digest_variable_definition(Token *variable_declaration, VariableDef
     variable.initial_value = expressions_alloc(1);
     DigestResult result = digest_default_value_expression(*variable.initial_value);
     if (is_success(result) == false) return result;
+
   } else if (num_subtokens == 3) {
     Token *tok_type, *tok_identifier, *tok_initial_value;
     expand_tokens(variable_declaration, tok_type, tok_identifier, tok_initial_value);
@@ -6221,15 +6793,65 @@ DigestResult digest_variable_definition(Token *variable_declaration, VariableDef
     variable.initial_value = expressions_alloc(1);
     DigestResult result = digest_expression(tok_initial_value, *variable.initial_value);
     if (is_success(result) == false) return result;
+
   } else {
     halt();
   }
 
+  db_add_variable_declaration(variable);
   return DIGEST_SUCCESS;
 }
 
 DigestResult digest_field_definition(Token *field_definition, VariableDefinition &field_def) {
   return digest_variable_definition(field_definition, field_def);
+}
+
+bool type_exists(SymbolScope *scope, SubString &identifier) {
+  TypeDefinition *type = db_lookup_type_by_identifier(scope, identifier);
+  if (type == NULL) return false;
+  return true;
+}
+
+PipelineResult db_add_llvm_type_declaration(LLVMTypeDefinition &definition, TypeDefinition *&new_definition) {
+  if (type_exists(g.db.scope_current, definition.identifier)) {
+    return make_error(UNKNOWN_LOCATION, "duplicated type %s", to_cstring(definition.identifier).c_str());
+  }
+
+  TypeDefinitionDBEntry new_entry;
+  //new_entry.scope = g.db.scope;
+  new_definition = (TypeDefinition *)calloc(1, sizeof(TypeDefinition));
+  new_entry.type = new_definition;
+  new_entry.type->type = TYPE_LLVM;
+  new_entry.type->llvm_type_definition = &definition;
+  new_entry.type->decl = (TypeDeclaration *)calloc(1, sizeof(TypeDeclaration));
+  new_entry.type->decl->scope = g.db.scope_current;
+  new_entry.type->decl->kind = TYPE_BASE;
+  new_entry.type->decl->base_type.identifier = definition.identifier;
+  g.db.scope_current->types.push_back(new_entry);
+  //db_add_type(type.identifier);
+
+  return PIPELINE_SUCCESS;
+}
+
+PipelineResult db_add_struct_declaration(StructDefinition &definition, TypeDefinition *&new_definition) {
+  if (type_exists(g.db.scope_current, definition.identifier)) {
+    return make_error(UNKNOWN_LOCATION, "duplicated type %s", to_cstring(definition.identifier).c_str());
+  }
+
+  TypeDefinitionDBEntry new_entry = {};
+  //new_entry.scope = g.db.scope;
+  new_definition = (TypeDefinition *)calloc(1, sizeof(TypeDefinition));
+  new_entry.type = new_definition;
+  new_entry.type->type = TYPE_STRUCT;
+  new_entry.type->struct_definition = &definition;
+  new_entry.type->decl = (TypeDeclaration *)calloc(1, sizeof(TypeDeclaration));
+  new_entry.type->decl->scope = g.db.scope_current;
+  new_entry.type->decl->kind = TYPE_BASE;
+  new_entry.type->decl->base_type.identifier = definition.identifier;
+  g.db.scope_current->types.push_back(new_entry);
+  //db_add_type(type.identifier);
+
+  return PIPELINE_SUCCESS;
 }
 
 DigestResult digest_struct_definition(Token *struct_declaration, ProgramStatement &statement) {
@@ -6242,12 +6864,17 @@ DigestResult digest_struct_definition(Token *struct_declaration, ProgramStatemen
   statement.struct_def.num_fields = count_subtokens(tok_fields);
   statement.struct_def.fields = fields_alloc(statement.struct_def.num_fields);
 
+  DigestResult result = db_add_struct_declaration(statement.struct_def, statement.struct_def.definition);
+  if (is_success(result) == false) return result;
+
+  DBScopeDigest scope;
   int i = 0;
   for(Token *field_definition = tok_fields->start; field_definition != NULL; field_definition = field_definition->next) {
     VariableDefinition &field_def = statement.struct_def.fields[i++];
     DigestResult result = digest_field_definition(field_definition, field_def);
     if (is_success(result) == false) return result;
   }
+
 
   return DIGEST_SUCCESS;
 }
@@ -6258,6 +6885,11 @@ DigestResult digest_llvm_type_definition(Token *llvm_type_declaration, ProgramSt
     expand_tokens(llvm_type_declaration, type_identifier, raw_llvm);
     statement.llvm_type.identifier = type_identifier->substring;
     statement.llvm_type.raw_llvm = raw_llvm->substring;
+    statement.llvm_type.scope = g.db.scope_current;
+
+    TypeDefinition *unused;
+    DigestResult result = db_add_llvm_type_declaration(statement.llvm_type, unused);
+    if (is_success(result) == false) return result;
 
     return DIGEST_SUCCESS;
 }
@@ -6269,8 +6901,9 @@ DigestResult digest_binary_expression(Token *expression, Expression &expr) {
   expr.type = EXPR_FUNCTION_CALL;
   expr.function_call.op = op->type;
   expr.function_call.identifier = op_to_substring(expr.function_call.op);
-  expr.function_call.params = call_params_alloc(2);
+  expr.function_call.params = args_alloc(2);
   expr.function_call.num_params = 2;
+  expr.function_call.scope = g.db.scope_current;
 
   DigestResult lhs_result = digest_expression(lhs, expr.function_call.params[0]);
   if (is_success(lhs_result) == false) return lhs_result;
@@ -6288,8 +6921,9 @@ DigestResult digest_unary_expression(Token *expression, Expression &expr) {
   expr.type = EXPR_FUNCTION_CALL;
   expr.function_call.op = op->type;
   expr.function_call.identifier = op_to_substring(expr.function_call.op);
-  expr.function_call.params = call_params_alloc(1);
+  expr.function_call.params = args_alloc(1);
   expr.function_call.num_params = 1;
+  expr.function_call.scope = g.db.scope_current;
 
   DigestResult lhs_result = digest_expression(lhs, expr.function_call.params[0]);
   if (is_success(lhs_result) == false) return lhs_result;
@@ -6304,8 +6938,9 @@ DigestResult digest_postfix_inc(Token *expression, Expression &expr) {
   expr.type = EXPR_FUNCTION_CALL;
   expr.function_call.op = TOKEN_OP_POSTFIX_INC;
   expr.function_call.identifier = op_to_substring(expr.function_call.op);
-  expr.function_call.params = call_params_alloc(1);
+  expr.function_call.params = args_alloc(1);
   expr.function_call.num_params = 1;
+  expr.function_call.scope = g.db.scope_current;
 
   DigestResult lhs_result = digest_expression(lhs, expr.function_call.params[0]);
   if (is_success(lhs_result) == false) return lhs_result;
@@ -6320,8 +6955,9 @@ DigestResult digest_postfix_dec(Token *expression, Expression &expr) {
   expr.type = EXPR_FUNCTION_CALL;
   expr.function_call.op = TOKEN_OP_POSTFIX_DEC;
   expr.function_call.identifier = op_to_substring(expr.function_call.op);
-  expr.function_call.params = call_params_alloc(1);
+  expr.function_call.params = args_alloc(1);
   expr.function_call.num_params = 1;
+  expr.function_call.scope = g.db.scope_current;
 
   DigestResult lhs_result = digest_expression(lhs, expr.function_call.params[0]);
   if (is_success(lhs_result) == false) return lhs_result;
@@ -6335,8 +6971,9 @@ DigestResult digest_array_index(Token *expression, Expression &expr) {
 
   expr.type = EXPR_FUNCTION_CALL;
   expr.function_call.op = TOKEN_OP_ARRAY_INDEX;
-  expr.function_call.params = call_params_alloc(2);
+  expr.function_call.params = args_alloc(2);
   expr.function_call.num_params = 2;
+  expr.function_call.scope = g.db.scope_current;
 
   DigestResult array_result = digest_expression(array, expr.function_call.params[0]);
   if (is_success(array_result) == false) return array_result;
@@ -6348,18 +6985,19 @@ DigestResult digest_array_index(Token *expression, Expression &expr) {
 }
 
 DigestResult digest_function_call(Token *expression, Expression &expr) {
-  Token *function_identifier, *function_call_params;
-  expand_tokens(expression, function_identifier, function_call_params);
+  Token *function_identifier, *function_args;
+  expand_tokens(expression, function_identifier, function_args);
 
   expr.type = EXPR_FUNCTION_CALL;
   expr.function_call.op = TOKEN_NONE;
-  expr.function_call.num_params = count_subtokens(function_call_params);
-  expr.function_call.params = call_params_alloc(expr.function_call.num_params);
+  expr.function_call.num_params = count_subtokens(function_args);
+  expr.function_call.params = args_alloc(expr.function_call.num_params);
   expr.function_call.identifier = function_identifier->substring;
+  expr.function_call.scope = g.db.scope_current;
 
   int i = 0;
-  for(Token *call_param = function_call_params->start; call_param != NULL; call_param = call_param->next) {
-    DigestResult result = digest_expression(call_param, expr.function_call.params[i++]);
+  for(Token *arg = function_args->start; arg != NULL; arg = arg->next) {
+    DigestResult result = digest_expression(arg, expr.function_call.params[i++]);
     if (is_success(result) == false) return result;
   }
 
@@ -6373,7 +7011,7 @@ DigestResult digest_member(Token *expression, Expression &expr) {
   expr.type = EXPR_FIELD_DEREFERENCE;
   expr.field_dereference.field_identifier = field_identifier->substring;
 
-  expr.field_dereference.object = call_params_alloc(1);
+  expr.field_dereference.object = args_alloc(1);
   DigestResult obj_result = digest_expression(object, *expr.field_dereference.object);
   if (is_success(obj_result) == false) return obj_result;
 
@@ -6409,6 +7047,7 @@ DigestResult digest_identifier(Token *expression, Expression &expr) {
   expr.type = EXPR_VARIABLE;
   expr.variable.identifier = expression->substring;
   expr.variable.variable = NULL;
+  expr.variable.scope = g.db.scope_current;
   return DIGEST_SUCCESS;
 }
 
@@ -6456,11 +7095,11 @@ DigestResult digest_assignment_statement(Token *assignment_statement, FunctionSt
   statement.type = FS_ASSIGNMENT;
   statement.assignment.op = to_assignment_type(op->type);
 
-  statement.assignment.lhs = call_params_alloc(1);
+  statement.assignment.lhs = args_alloc(1);
   DigestResult lhs_result = digest_expression(lhs, *statement.assignment.lhs);
   if (is_success(lhs_result) == false) return lhs_result;
 
-  statement.assignment.rhs = call_params_alloc(1);
+  statement.assignment.rhs = args_alloc(1);
   DigestResult rhs_result = digest_expression(rhs, *statement.assignment.rhs);
   if (is_success(rhs_result) == false) return rhs_result;
 
@@ -6474,7 +7113,7 @@ DigestResult digest_return_statement(Token *assignment_statement, FunctionStatem
   statement.type = FS_RETURN;
   statement.return_statement.retval = expressions_alloc(1);
   DigestResult result = digest_expression(tok_expr, *statement.return_statement.retval);
-  if (!is_success(result)) return result;
+  if (is_success(result) == false) return result;
 
   return DIGEST_SUCCESS;
 }
@@ -6485,20 +7124,22 @@ DigestResult digest_inline_llvm(Token *inline_llvm, FunctionStatement &statement
 
   statement.type = FS_LLVM;
   statement.llvm.raw_llvm = raw_llvm->substring;
+  statement.llvm.scope = g.db.scope_current;
 
   return DIGEST_SUCCESS;
 }
 
-StatementCallParam *alloc_statement_call_params(int num_params) {
-  return (StatementCallParam *)calloc(num_params, sizeof(StatementCallParam));
+StatementArg *alloc_statement_args(int num_params) {
+  return (StatementArg *)calloc(num_params, sizeof(StatementArg));
 }
 
-DigestResult digest_statement_call_param(Token *tok_param, StatementCallParam &param) {
+DigestResult digest_statement_arg(Token *tok_param, StatementArg &param) {
   switch(tok_param->type) {
   //case TOKEN_IDENTIFIER:
   //  param.type = SCP_IDENTIFIER;
   //  param.identifier = tok_param->substring;
   //  break;
+  case TOKEN_IDENTIFIER:
   default:
     param.type = SCP_EXPRESSION;
     param.identifier = tok_param->substring;
@@ -6519,11 +7160,15 @@ DigestResult digest_statement_call(Token *tok_statement, FunctionStatement &stat
   statement.type = FS_STATEMENT_CALL;
   statement.statement_call.identifier = tok_identifier->substring;
   statement.statement_call.num_params = count_subtokens(tok_params);
-  statement.statement_call.params = alloc_statement_call_params(statement.statement_call.num_params);
+  statement.statement_call.params = alloc_statement_args(statement.statement_call.num_params);
+  statement.statement_call.scope = g.db.scope_current;
+
+  DBScopeDigest scope;
+
   int i = 0;
   for(Token *tok_param = tok_params->start; tok_param != NULL; tok_param = tok_param->next) {
-    StatementCallParam &param = statement.statement_call.params[i++];
-    DigestResult param_result = digest_statement_call_param(tok_param, param);
+    StatementArg &param = statement.statement_call.params[i++];
+    DigestResult param_result = digest_statement_arg(tok_param, param);
     if (is_success(param_result) == false) return param_result;
   }
 
@@ -6539,12 +7184,14 @@ DigestResult digest_statement_call(Token *tok_statement, FunctionStatement &stat
   return DIGEST_SUCCESS;
 }
 
-DigestResult digest_yield_statement(Token *tok_function_statement, FunctionStatement &fn_statement) {
-  fn_statement.type = FS_YIELD;
-  return PIPELINE_SUCCESS;
-}
+//DigestResult digest_yield_statement(Token *tok_function_statement, FunctionStatement &fn_statement) {
+//  fn_statement.type = FS_YIELD;
+//  return PIPELINE_SUCCESS;
+//}
 
 DigestResult digest_function_statement(Token *tok_function_statement, FunctionStatement &fn_statement) {
+
+  //fn_statement.scope = g.db.scope_current;
   switch(tok_function_statement->type) {
   case TOKEN_VARIABLE_DEFINITION:
     fn_statement.type = FS_VARIABLE;
@@ -6566,8 +7213,10 @@ DigestResult digest_function_statement(Token *tok_function_statement, FunctionSt
   //case TOKEN_LLVM_TYPE_DEFINITION:
   //case TOKEN_STRUCT_DEFINITION:
   // ...
-  case TOKEN_YIELD_STATEMENT:
-    return digest_yield_statement(tok_function_statement, fn_statement);
+  //case Block:
+  // dBscope++;
+  //case TOKEN_YIELD_STATEMENT:
+  //  return digest_yield_statement(tok_function_statement, fn_statement);
   default: 
     halt();
   }
@@ -6601,15 +7250,48 @@ DigestResult digest_statement_param_definition(Token *tok_param, StatementParam 
   if (is_success(result) == false) return result;
   
   param.identifier = tok_identifier->substring;
+
+  db_add_statement_param(param);
+
+  return DIGEST_SUCCESS;
+}
+
+StatementClause *statement_clauses_alloc(int num_clauses) {
+  return (StatementClause *)calloc(num_clauses, sizeof(StatementClause));
+}
+
+DigestResult digest_statement_clauses(Token *tok_statement_clauses, StatementDefinition &statement) {
+  assert(tok_statement_clauses->type == TOKEN_STATEMENT_CLAUSE);
+  statement.num_statement_clauses = count_subtokens(tok_statement_clauses);
+
+  if (statement.num_statement_clauses == 0) {
+    return DIGEST_SUCCESS;
+  }
+
+  statement.statement_clauses = statement_clauses_alloc(1);
+  assert(statement.num_statement_clauses == 1);
+  statement.statement_clauses[0].identifier = tok_statement_clauses->start->substring;
+
+  db_add_statement_clause(statement.statement_clauses[0]);
+
   return DIGEST_SUCCESS;
 }
 
 DigestResult digest_statement_definition(Token *tok_statement, ProgramStatement &statement) {
-  Token *tok_identifier, *tok_params, *tok_body;
-  expand_tokens(tok_statement, tok_identifier, tok_params, tok_body);
+  Token *tok_identifier, *tok_params, *tok_body, *tok_clauses;
+  expand_tokens(tok_statement, tok_identifier, tok_params, tok_clauses, tok_body);
 
   statement.type = PS_STATEMENT;
   statement.statement.identifier = tok_identifier->substring;
+
+  db_add_statement_declaration(statement.statement);
+  statement.scope = g.db.scope_current;
+
+  DBScopeDigest scope;
+
+  // TODO: multi-statements
+  DigestResult clause_result = digest_statement_clauses(tok_clauses, statement.statement);
+  if (is_success(clause_result) == false) return clause_result;
 
   statement.statement.num_statement_params = count_subtokens(tok_params);
   statement.statement.statement_params = statement_params_alloc(statement.statement.num_statement_params);
@@ -6619,9 +7301,6 @@ DigestResult digest_statement_definition(Token *tok_statement, ProgramStatement 
     DigestResult result = digest_statement_param_definition(tok_param, param);
     if (is_success(result) == false) return result;
   }
-
-  // TODO: multi-statements
-  statement.statement.num_statement_yield_params = 0;
 
   statement.statement.num_body_statements = count_subtokens(tok_body);
   statement.statement.body = function_body_alloc(statement.statement.num_body_statements);
@@ -6658,6 +7337,9 @@ DigestResult digest_function_definition(Token *function_definition, ProgramState
   }
 
   assert(statement.function.identifier.length > 0);
+
+  db_add_function_declaration(statement.function);
+  DBScopeDigest scope;
 
   statement.function.num_params = count_subtokens(tok_params);
   statement.function.params = params_alloc(statement.function.num_params);
@@ -6713,6 +7395,9 @@ DigestResult digest_extern_function_declaration(Token *extern_function_declarati
 
   statement.extern_function.identifier = tok_identifier->substring;
 
+  db_add_external_function_declaration(statement.extern_function);
+
+  DBScopeDigest scope;
   statement.extern_function.num_params = count_subtokens(tok_params);
   statement.extern_function.params = params_alloc(statement.extern_function.num_params);
   int i = 0;
@@ -6789,6 +7474,7 @@ DigestResult digest_program(ParserState &parser, Token *program_token, Program &
       cur_statement.type = PS_IMPORT;
       cur_statement.import.file      = program_statement->start->substring;
       cur_statement.import.parser    = &parser;
+      cur_statement.import.scope     = g.db.scope_current;
       //cur_statement.import.
       break;
     case TOKEN_LINK_LIBRARY_STATEMENT: {
@@ -6808,7 +7494,7 @@ DigestResult digest_program(ParserState &parser, Token *program_token, Program &
 struct ScopeDB {
   ScopeDB *parent;
   Table<TypeDefinitionDBEntry> types;
-  Table<VaraibleDefinitionDBEntry> variables;
+  Table<VariableDefinitionDBEntry> variables;
   Table<FunctionDefinitionDBEntry> functions;
 };
 
@@ -6957,37 +7643,6 @@ PipelineResult pipelined_emit(ProgramStatement &statement, CompilationProject &p
   return PIPELINE_SUCCESS;
 }
 
-
-PipelineResult emit_llvm_type_declaration(LLVMTypeDefinition &definition) {
-  TypeDefinitionDBEntry new_entry;
-  new_entry.scope = g.db.scope;
-  new_entry.type = (TypeDefinition *)calloc(1, sizeof(TypeDefinition));
-  new_entry.type->type = TYPE_LLVM;
-  new_entry.type->llvm_type_definition = &definition;
-  new_entry.type->decl = (TypeDeclaration *)calloc(1, sizeof(TypeDeclaration));
-  new_entry.type->decl->kind = TYPE_BASE;
-  new_entry.type->decl->base_type.identifier = definition.identifier;
-  g.db.types.push_back(new_entry);
-  //db_add_type(type.identifier);
-
-  return PIPELINE_SUCCESS;
-}
-
-PipelineResult emit_struct_declaration(StructDefinition &definition) {
-  TypeDefinitionDBEntry new_entry = {};
-  new_entry.scope = g.db.scope;
-  new_entry.type = (TypeDefinition *)calloc(1, sizeof(TypeDefinition));
-  new_entry.type->type = TYPE_STRUCT;
-  new_entry.type->struct_definition = &definition;
-  new_entry.type->decl = (TypeDeclaration *)calloc(1, sizeof(TypeDeclaration));
-  new_entry.type->decl->kind = TYPE_BASE;
-  new_entry.type->decl->base_type.identifier = definition.identifier;
-  g.db.types.push_back(new_entry);
-  //db_add_type(type.identifier);
-
-  return PIPELINE_SUCCESS;
-}
-
 PipelineResult emit_variable_declaration(VariableDefinition &definition) {
   PipelineResult result = db_add_variable_declaration(definition);
   if (is_success(result) == false) return result;
@@ -6997,17 +7652,17 @@ PipelineResult emit_variable_declaration(VariableDefinition &definition) {
 PipelineResult pipelined_declaration(ProgramStatement &statement) {
   switch(statement.type) {
   case PS_STATEMENT:
-    return emit_statement_declaration(statement.statement);
+    return PIPELINE_SUCCESS; //return emit_statement_declaration(statement.statement);
   case PS_FUNCTION:
     return emit_function_declaration(statement.function);
   case PS_EXTERN_FUNCTION:
     return emit_external_function_declaration(statement.extern_function);
   case PS_LLVM_TYPE:
-    return emit_llvm_type_declaration(statement.llvm_type);
+    return PIPELINE_SUCCESS; //emit_llvm_type_declaration(statement.llvm_type);
   case PS_STRUCT:
-    return emit_struct_declaration(statement.struct_def);
+    return PIPELINE_SUCCESS; //emit_struct_declaration(statement.struct_def);
   case PS_VARIABLE:
-    return emit_variable_declaration(statement.varaible);
+    return PIPELINE_SUCCESS; //return emit_variable_declaration(statement.varaible);
   case PS_IMPORT:
     break;
   case PS_LINK_LIBRARY:
@@ -7067,8 +7722,8 @@ bool resolves_dependancy(CompilationDependancy &dependancy, ProgramStatement &st
     if (statement.type == PS_VARIABLE && substring_cmp(statement.varaible.identifier, dependancy.identifier)) return true;
     else return false;
   case DEPENDANCY_TYPE:
-    if (statement.type == PS_LLVM_TYPE && substring_cmp(statement.struct_def.identifier, dependancy.identifier)) return true;
-    else if (statement.type == PS_STRUCT && substring_cmp(statement.llvm_type.identifier, dependancy.identifier)) return true;
+    if (statement.type == PS_LLVM_TYPE && substring_cmp(statement.llvm_type.identifier, dependancy.identifier)) return true;
+    else if (statement.type == PS_STRUCT && substring_cmp(statement.struct_def.identifier, dependancy.identifier)) return true;
     else return false;
   default:
     halt();
@@ -7161,24 +7816,18 @@ std::string get_current_directory() {
    return std::string(cwd) + '\\';
 }
 
-bool type_exists(SubString &identifier) {
-  TypeDefinition *type = db_lookup_type_by_identifier(identifier);
-  if (type == NULL) return false;
-  return true;
-}
-
-bool function_exists(SubString &identifier) {
+bool function_exists(SymbolScope *scope, SubString &identifier) {
   return false;
 }
 
-bool is_defined(CompilationDependancy &dependancy) {
+bool is_defined(SymbolScope *scope, CompilationDependancy &dependancy) {
   switch(dependancy.type) {
   case DEPENDANCY_TYPE:
-    return type_exists(dependancy.identifier);
+    return type_exists(scope, dependancy.identifier);
   case DEPENDANCY_FUNCTION:
-    return function_exists(dependancy.identifier);
+    return function_exists(scope, dependancy.identifier);
   case DEPENDANCY_VARIABLE:
-    return variable_exists(dependancy.identifier);
+    return variable_exists(scope, dependancy.identifier);
   default:
     halt();
   }
@@ -7191,6 +7840,9 @@ PipelineResult compile_pipelined(const char* source_file, const char *dest_file)
   CompilationSet active_set;
   CompilationSet defered_set;
 
+  DBScopeDigest scope;
+  g.db.scope_head = g.db.scope_current;
+
   std::string current_directory = get_current_directory();
   PipelineResult result = compile_set_try_add_file(project, active_set, current_directory, to_substring(source_file));
   if (is_success(result) == false) return result;
@@ -7200,12 +7852,12 @@ PipelineResult compile_pipelined(const char* source_file, const char *dest_file)
     active_set.units.pop_back();
 
     PipelineResult result = resume_pipelined_compilation(project, *unit.statement, unit.stage, active_set, defered_set);
-    if (!is_success(result)) return result;
+    if (is_success(result) == false) return result;
   }
 
   if (!defered_set.units.empty()) {
     CompilationDependancy &dependancy = defered_set.units.front().dependancy;
-    if(is_defined(dependancy)) {
+    if(is_defined(dependancy.scope, dependancy)) {
       return make_error(UNKNOWN_LOCATION, "cyclic dependancy");
     } else {
       return make_error(UNKNOWN_LOCATION, "unknown dependancy: %s", to_cstring(dependancy.identifier).c_str());
@@ -7234,5 +7886,4 @@ CompileResult compile_program(std::string source_file, std::string exe_file) {
 bool is_success(const CompileResult &result) {
   return (result.result != RESULT_ERROR);
 }
-
 
